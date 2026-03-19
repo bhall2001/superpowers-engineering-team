@@ -1,0 +1,19 @@
+{
+  "name": "set",
+  "version": "0.1.0",
+  "description": "Superpowers Engineering Team — premium AI engineering workflow with parallel agent teams, TDD, and self-improving learning loops",
+  "author": {
+    "name": "Bob Hall"
+  },
+  "repository": "https://github.com/bobhall/superpowers-engineering-team",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "agent-teams",
+    "tdd",
+    "code-review",
+    "compound-learning",
+    "superpowers",
+    "compound-teams"
+  ]
+}

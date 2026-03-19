@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "superpowers-engineering-team",
+  "owner": {
+    "name": "Bob Hall"
+  },
+  "metadata": {
+    "description": "SET — a premium AI engineering workflow combining Superpowers design + Compound Teams parallel execution + self-improving learning loops",
+    "version": "0.1.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "set",
+      "source": "./plugins/set",
+      "description": "Superpowers Engineering Team: Design → Plan → Build → Review → Learn with parallel agent teams, TDD, specialist routing, and two-level self-improving feedback loops",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bob Hall"
+      }
+    }
+  ]
+}
