@@ -44,13 +44,13 @@ SET requires two Claude Code plugins:
 ### Option A: Automated Install Script
 
 ```bash
-curl -sL https://raw.githubusercontent.com/bobhall/superpowers-engineering-team/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
 Or clone and run:
 
 ```bash
-git clone https://github.com/bobhall/superpowers-engineering-team.git
+git clone https://github.com/bhall2001/superpowers-engineering-team.git
 cd superpowers-engineering-team
 bash install.sh
 ```
@@ -58,7 +58,7 @@ bash install.sh
 ### Option B: Claude Code Plugin Marketplace
 
 ```
-/plugin marketplace add bobhall/superpowers-engineering-team
+/plugin marketplace add bhall2001/superpowers-engineering-team
 /plugin install superpowers-engineering-team
 ```
 

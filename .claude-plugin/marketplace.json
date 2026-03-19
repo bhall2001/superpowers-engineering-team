@@ -11,7 +11,7 @@
   },
   "plugins": [
     {
-      "name": "set",
+      "name": "superpowers-engineering-team",
       "source": "./plugins/set",
       "description": "Superpowers Engineering Team: Design → Plan → Build → Review → Learn with parallel agent teams, TDD, specialist routing, and two-level self-improving feedback loops",
       "version": "0.1.0",

@@ -592,13 +592,80 @@ You are the team lead. Execute a plan using Compound Teams' Agent Team infrastru
 4. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
 5. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
 
-## Step 1: Create the Team
+## Step 1: Create Isolated Worktree
+
+Before spawning the team, create an isolated workspace so all build work happens on a dedicated branch without affecting the current working tree.
+
+### 1a: Select worktree directory
+
+Follow this priority:
+1. If `.worktrees/` exists → use it
+2. If `worktrees/` exists → use it
+3. If CLAUDE.md specifies a worktree directory → use it
+4. Otherwise → ask the user
+
+### 1b: Verify directory is git-ignored (project-local only)
+
+```bash
+git check-ignore -q .worktrees 2>/dev/null
+```
+
+If NOT ignored: add to `.gitignore` and commit before proceeding.
+
+### 1c: Create worktree
+
+```bash
+git worktree add {worktree-dir}/{feature-name} -b feat/{feature-name}
+cd {worktree-dir}/{feature-name}
+```
+
+### 1d: Run project setup
+
+Auto-detect and run:
+```bash
+# Node.js
+if [ -f package.json ]; then npm install || pnpm install || yarn install; fi
+
+# Python
+if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+if [ -f pyproject.toml ]; then poetry install || uv sync; fi
+
+# Go
+if [ -f go.mod ]; then go mod download; fi
+
+# Rust
+if [ -f Cargo.toml ]; then cargo build; fi
+```
+
+Use the package manager specified in CLAUDE.md if one is documented.
+
+### 1e: Verify clean baseline
+
+Run the test suite from CLAUDE.md "Build Commands":
+
+```bash
+# Run tests — must pass before any implementation begins
+```
+
+- **If tests pass**: report ready, proceed to Step 2
+- **If tests fail**: report failures, ask the user whether to proceed or investigate
+
+### 1f: Report
+
+```
+Worktree ready at {full-path}
+Branch: feat/{feature-name}
+Tests passing ({N} tests, 0 failures)
+Ready to spawn team.
+```
+
+## Step 2: Create the Team
 
 ```
 Teammate({ operation: "spawnTeam", team_name: "{feature-name}" })
 ```
 
-## Step 2: Create Tasks from the Plan
+## Step 3: Create Tasks from the Plan
 
 For each task in the plan:
 
@@ -613,7 +680,7 @@ TaskCreate({
 
 **Critical:** Include the TDD steps and self-review checklist in every task description. Builders need these in context.
 
-## Step 3: Spawn Teammates
+## Step 4: Spawn Teammates
 
 ### Using Project Agents
 
@@ -754,7 +821,7 @@ RULES:
 - If a builder pushes back on a finding, escalate to team lead — don't back down
 ```
 
-## Step 4: Monitor and Coordinate
+## Step 5: Monitor and Coordinate
 
 While teammates work:
 - Check your inbox regularly for messages
@@ -764,7 +831,7 @@ While teammates work:
 - Track overall progress via TaskList()
 - If QA flags spec compliance issues: verify they're real before creating fix tasks
 
-## Step 5: Wrap Up
+## Step 6: Wrap Up
 
 When all tasks are complete AND QA confirms both stages passed:
 
@@ -775,8 +842,10 @@ When all tasks are complete AND QA confirms both stages passed:
 2. Wait for acknowledgments
 3. Clean up: `Teammate({ operation: "cleanup" })`
 4. Run the full test suite yourself one final time
-5. Report results to user
+5. Report results to user, including the worktree location
 6. Suggest: "Run `/set-review` for a final holistic review, then `/set-learn` to capture learnings"
+
+**Note:** Do NOT remove the worktree at this point. `/set-review` will examine the changes in it, and `/set-review`'s finishing step will offer the user options (merge, PR, keep, or discard) which handles worktree cleanup.
 
 ## Emergency: Cost Control
 
@@ -1117,6 +1186,69 @@ This is what makes SET compound: **the system improves itself with use — both 
 SETEOF
 info "Installed /set-learn"
 
+# --- /set-update ---
+cat > "$COMMANDS_DIR/set-update.md" << 'SETEOF'
+---
+description: "Update SET and all its dependencies (Superpowers, Compound Teams) to the latest versions. Run periodically to get improvements and bug fixes."
+---
+
+# SET Update — Update the Full Stack
+
+Update SET and both of its prerequisite plugins to the latest versions.
+
+## Process
+
+### 1. Update SET
+
+```
+/plugin update superpowers-engineering-team
+```
+
+If this fails, try removing and reinstalling:
+```
+/plugin uninstall superpowers-engineering-team
+/plugin install superpowers-engineering-team
+```
+
+### 2. Update Superpowers
+
+```
+/plugin update superpowers@claude-plugins-official
+```
+
+### 3. Update Compound Teams
+
+```
+/plugin update compound-teams@compound-teams-marketplace
+```
+
+### 4. Verify
+
+After all updates complete, verify the installation:
+
+```bash
+echo "=== SET commands ==="
+ls ~/.claude/commands/set-*.md 2>/dev/null
+
+echo "=== Superpowers ==="
+ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "OK" || echo "NOT FOUND"
+
+echo "=== Compound Teams ==="
+ls ~/.claude/plugins/cache/*/compound-teams/ 2>/dev/null && echo "OK" || echo "NOT FOUND"
+
+echo "=== Agent Teams enabled ==="
+cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "NOT FOUND"
+```
+
+### 5. Report
+
+Tell the user:
+- Which plugins were updated successfully
+- Any that failed (with suggested fix)
+- If any SET commands changed, briefly note what's new
+SETEOF
+info "Installed /set-update"
+
 # ---------------------------------------------------------------------------
 # Step 5: Verify
 # ---------------------------------------------------------------------------
@@ -1149,7 +1281,7 @@ else
 fi
 
 # Check commands
-for cmd in set-init set-design set-plan set-build set-review set-learn; do
+for cmd in set-init set-design set-plan set-build set-review set-learn set-update; do
   if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
     info "Command: /$cmd"
   else
