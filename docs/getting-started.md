@@ -36,7 +36,7 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 
 ```
 /plugin marketplace add bhall2001/superpowers-engineering-team
-/plugin install superpowers-engineering-team
+/plugin install set
 ```
 
 ### Option C: Manual
