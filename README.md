@@ -59,7 +59,7 @@ bash install.sh
 
 ```
 /plugin marketplace add bhall2001/superpowers-engineering-team
-/plugin install superpowers-engineering-team
+/plugin install set
 ```
 
 Then install the prerequisites if you don't have them:

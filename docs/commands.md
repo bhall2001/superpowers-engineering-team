@@ -127,7 +127,7 @@ Each agent gets updates specific to its performance. Cross-agent learnings go to
 Updates all three components to latest versions:
 
 ```
-/plugin update superpowers-engineering-team
+/plugin update set
 /plugin update superpowers@claude-plugins-official
 /plugin update compound-teams@compound-teams-marketplace
 ```

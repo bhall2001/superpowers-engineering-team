@@ -16,7 +16,7 @@
 - Final phase renamed from `/set-self-feedback` to `/set-learn`
 - `/set-build` now creates isolated worktree before spawning agents (previously manual)
 - Team size scaling based on task count (1+QA, 2+QA, 3+QA)
-- Plugin name: `superpowers-engineering-team` (update command: `/plugin update superpowers-engineering-team`)
+- Plugin name: `set` (update command: `/plugin update set`)
 
 ## [0.1.0] — Initial Release
 
