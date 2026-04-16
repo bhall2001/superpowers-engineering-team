@@ -32,56 +32,32 @@ Agents that repeatedly make the same mistake get that mistake added to their ins
 
 **TDD Ralph Loops.** Every builder writes failing tests first, implements minimal code to pass, then refactors — looping until all checks (tests, lint, typecheck, self-review) pass. Max 5 retries per unique error. Escalation after 3 attempts.
 
-## Prerequisites
-
-SET requires two Claude Code plugins:
-
-- [Superpowers](https://github.com/obra/superpowers) — design and brainstorming framework
-- [Compound Teams](https://github.com/tbdng/compound-teams-plugin) — parallel agent execution engine
-
 ## Install
 
-### Option A: Automated Install Script
+**Step 1** — Run the install script:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-Or clone and run:
+This registers the plugin marketplaces, enables Agent Teams, and installs the SET commands.
 
-```bash
-git clone https://github.com/bhall2001/superpowers-engineering-team.git
-cd superpowers-engineering-team
-bash install.sh
-```
-
-### Option B: Claude Code Plugin Marketplace
+**Step 2** — Open Claude Code and install the two required plugins:
 
 ```
-/plugin marketplace add bhall2001/superpowers-engineering-team
-/plugin install superpowers-engineering-team
-```
-
-Then install the prerequisites if you don't have them:
-
-```
-/plugin marketplace add anthropics/claude-plugins-official
 /plugin install superpowers@claude-plugins-official
-
-/plugin marketplace add https://github.com/tbdng/compound-teams-plugin.git
 /plugin install compound-teams@compound-teams-marketplace
 ```
 
-### Option C: Manual
-
-Copy the command files from `plugins/set/commands/` to `~/.claude/commands/`.
+Plugin installation requires Claude Code's interactive environment and cannot be done from the install script.
 
 ## Getting Started
 
-1. Install SET (see above)
-2. Open your project in Claude Code
-3. Run `/set-init` — detects your stack, scaffolds domain specialists, configures CLAUDE.md
-4. Run `/set-design <feature idea>` — starts the pipeline
+1. Run the install script (see above)
+2. Open Claude Code and install the two required plugins (see above)
+3. Open your project in Claude Code
+4. Run `/set-init` — detects your stack, scaffolds domain specialists, configures CLAUDE.md
+5. Run `/set-design <feature idea>` — starts the pipeline
 
 ## Commands
 

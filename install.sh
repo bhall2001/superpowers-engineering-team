@@ -1201,13 +1201,13 @@ Update SET and both of its prerequisite plugins to the latest versions.
 ### 1. Update SET
 
 ```
-/plugin update superpowers-engineering-team
+/plugin update set
 ```
 
 If this fails, try removing and reinstalling:
 ```
-/plugin uninstall superpowers-engineering-team
-/plugin install superpowers-engineering-team
+/plugin uninstall set
+/plugin install set
 ```
 
 ### 2. Update Superpowers
