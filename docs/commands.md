@@ -55,6 +55,14 @@ Executes the plan using an Agent Team with enhanced TDD and QA discipline.
 ### Step 1: Isolated Worktree
 Creates a `feat/{feature-name}` branch in an isolated worktree. Runs project setup. Verifies tests pass before any implementation begins.
 
+**Disabling worktrees:** If `git worktree` isn't viable on your system, you can skip worktree creation and build on the current branch:
+
+- Per-run: `/set-build --no-worktree`
+- Per-run override (force on): `/set-build --worktree`
+- Per-project default: add `SET: no-worktree` to CLAUDE.md
+
+Precedence: CLI flag > CLAUDE.md > default (enabled). In no-worktree mode, project setup and baseline tests still run, but on the current branch with no `cd`.
+
 ### Step 2–4: Team Execution
 Spawns specialist agents (matched from `.claude/agents/`) and QA. Builders follow the TDD Ralph Loop. QA performs two-stage review.
 
@@ -72,7 +80,7 @@ Spawns specialist agents (matched from `.claude/agents/`) and QA. Builders follo
 ### Wrap Up
 Shuts down agents. Reports worktree location. Suggests `/set-review`.
 
-**Note:** Worktree is preserved for `/set-review` to examine.
+**Note:** Worktree is preserved for `/set-review` to examine. In no-worktree mode, `/set-review` operates against the current branch instead.
 
 **Next step:** `/set-review`
 
