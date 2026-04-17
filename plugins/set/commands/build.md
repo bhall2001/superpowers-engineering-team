@@ -14,6 +14,18 @@ You are the team lead. Execute a plan using Compound Teams' Agent Team infrastru
 4. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
 5. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
 
+## Resolve Worktree Mode
+
+Determine whether to create an isolated git worktree for this run. Precedence (first match wins):
+
+1. **CLI flag in `$ARGUMENTS`** — `--no-worktree` disables; `--worktree` forces enable. CLI always overrides CLAUDE.md.
+2. **CLAUDE.md setting** — a line matching `SET: no-worktree` (case-insensitive) disables worktrees for this project.
+3. **Default** — worktrees enabled.
+
+If **disabled**: skip Step 1 entirely. Still run 1d (project setup) and 1e (baseline tests) from the current working tree on the CURRENT branch. Do NOT create a new branch, do NOT `cd` anywhere. Report: `Worktree mode: DISABLED — building on current branch {branch-name}`. Then proceed to Step 2.
+
+If **enabled**: proceed with Step 1 as written.
+
 ## Step 1: Create Isolated Worktree
 
 Before spawning the team, create an isolated workspace so all build work happens on a dedicated branch without affecting the current working tree.
@@ -264,10 +276,10 @@ When all tasks are complete AND QA confirms both stages passed:
 2. Wait for acknowledgments
 3. Clean up: `Teammate({ operation: "cleanup" })`
 4. Run the full test suite yourself one final time
-5. Report results to user, including the worktree location
+5. Report results to user. If a worktree was created, include its location; otherwise include the current branch name.
 6. Suggest: "Run `/set-review` for a final holistic review, then `/set-learn` to capture learnings"
 
-**Note:** Do NOT remove the worktree at this point. `/set-review` will examine the changes in it, and `/set-review`'s finishing step will offer the user options (merge, PR, keep, or discard) which handles worktree cleanup.
+**Note:** If a worktree was created, do NOT remove it at this point. `/set-review` will examine the changes in it, and `/set-review`'s finishing step will offer the user options (merge, PR, keep, or discard) which handles worktree cleanup. In no-worktree mode, `/set-review` operates against the build branch directly and the finishing options apply to that branch.
 
 ## Emergency: Cost Control
 
