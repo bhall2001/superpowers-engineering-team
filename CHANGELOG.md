@@ -16,7 +16,9 @@
 - Final phase renamed from `/set-self-feedback` to `/set-learn`
 - `/set-build` now creates isolated worktree before spawning agents (previously manual)
 - Team size scaling based on task count (1+QA, 2+QA, 3+QA)
-- Plugin name: `set` (update command: `/plugin update set`)
+- SET is not in an official Claude marketplace — install and update both go through `install.sh` only
+- `/set-update` now re-runs the installer to pull latest SET commands (was previously `/plugin update set`, which failed)
+- Docs updated to remove the plugin-marketplace install path for now
 
 ## [0.1.0] — Initial Release
 

@@ -132,10 +132,13 @@ Each agent gets updates specific to its performance. Cross-agent learnings go to
 
 **Maintenance**
 
-Updates all three components to latest versions:
+Updates all three components to latest versions. SET is not in an official Claude marketplace — update by re-running the installer.
+
+```bash
+curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
+```
 
 ```
-/plugin update set
 /plugin update superpowers@claude-plugins-official
 /plugin update compound-teams@compound-teams-marketplace
 ```

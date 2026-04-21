@@ -26,22 +26,13 @@ Compound Teams requires Claude Code's experimental Agent Teams feature. Run `/se
 
 ## Install SET
 
-### Option A: Script
+SET is not in an official Claude marketplace. Install via the script:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-### Option B: Plugin Marketplace
-
-```
-/plugin marketplace add bhall2001/superpowers-engineering-team
-/plugin install set
-```
-
-### Option C: Manual
-
-Copy all files from `plugins/set/commands/` to `~/.claude/commands/`.
+The script registers prerequisite marketplaces, enables Agent Teams, and installs SET commands into `~/.claude/commands/`.
 
 ## First Use
 
