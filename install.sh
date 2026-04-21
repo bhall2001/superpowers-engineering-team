@@ -1250,18 +1250,16 @@ description: "Update SET and all its dependencies (Superpowers, Compound Teams) 
 
 Update SET and both of its prerequisite plugins to the latest versions.
 
+SET is NOT in an official Claude marketplace. It is installed via `install.sh`. Update by re-running the installer — it overwrites the command files in `~/.claude/commands/` with the latest from the repo.
+
 ## Process
 
 ### 1. Update SET
 
-```
-/plugin update set
-```
+Re-run the installer to pull latest commands:
 
-If this fails, try removing and reinstalling:
-```
-/plugin uninstall set
-/plugin install set
+```bash
+curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
 ### 2. Update Superpowers

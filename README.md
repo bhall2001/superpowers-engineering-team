@@ -34,22 +34,20 @@ Agents that repeatedly make the same mistake get that mistake added to their ins
 
 ## Install
 
-**Step 1** — Run the install script:
+SET is not in an official Claude plugin marketplace. Install via the script:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-This registers the plugin marketplaces, enables Agent Teams, and installs the SET commands.
+Registers the prerequisite marketplaces, enables Agent Teams, and installs SET commands directly into `~/.claude/commands/`.
 
-**Step 2** — Open Claude Code and install the two required plugins:
+Then open Claude Code and install the two prerequisite plugins:
 
 ```
 /plugin install superpowers@claude-plugins-official
 /plugin install compound-teams@compound-teams-marketplace
 ```
-
-Plugin installation requires Claude Code's interactive environment and cannot be done from the install script.
 
 ## Getting Started
 

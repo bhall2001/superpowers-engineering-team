@@ -22,12 +22,10 @@ This is a plugin distribution, not a compiled app. All "code" is markdown comman
 
 ## Installation
 
-```bash
-# Script install (installs SET + Superpowers + Compound Teams)
-bash install.sh
+SET is NOT in an official Claude marketplace. Install via script only (the plugin-marketplace path is not supported for now):
 
-# Or via plugin marketplace
-/plugin install set
+```bash
+bash install.sh
 ```
 
 Requires env var `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` for Agent Teams support.
