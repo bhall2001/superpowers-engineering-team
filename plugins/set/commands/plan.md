@@ -26,7 +26,8 @@ Read the Superpowers design spec. If none exists, tell the user to run `/set-des
 ### 2. Research the Codebase
 
 - Read CLAUDE.md for conventions and build commands
-- Read `.claude/set/learnings.md` (if it exists) for accumulated "What Works", "What Failed", and "Recurring Bugs" — factor these into task decomposition and approach choice
+- Read `.claude/set/taxonomy.md` (if it exists) — list of learning domains used by this project. You'll tag each task with the relevant shards.
+- Scan `.claude/set/learnings/*.md` (if it exists) for accumulated "What Works", "What Failed", and "Recurring Bugs" across domains — factor these into task decomposition and approach choice. If only a legacy `.claude/set/learnings.md` exists, read it too (it will be auto-split on next `/set-learn`).
 - Explore directory structure and find related code
 - Identify utilities, patterns, and abstractions to reuse
 - Check git log for recent changes in relevant areas
@@ -55,6 +56,7 @@ High-level strategy. Why this over alternatives.
 
 ### Task 1: {name}
 - **Specialist**: {agent name from `.claude/agents/` or "generic" if none fits}
+- **Shards**: {comma-separated domain names from `.claude/set/taxonomy.md` — the learning shards relevant to this task. Empty list if none apply or taxonomy is empty.}
 - **What**: Clear deliverable
 - **Files**: Specific paths to create/modify
 - **Tests**: What tests to write and exact commands to run them
@@ -72,7 +74,7 @@ High-level strategy. Why this over alternatives.
 - [ ] All acceptance criteria met — nothing missing
 - [ ] No extra features beyond what was specified
 - [ ] Tests cover happy path AND edge cases
-- [ ] Follows project conventions from CLAUDE.md and `.claude/set/learnings.md`
+- [ ] Follows project conventions from CLAUDE.md and the learning shards injected for this task
 - [ ] No hardcoded values, missing validation, or security issues
 
 ### Task 2: {name}
@@ -90,6 +92,8 @@ High-level strategy. Why this over alternatives.
 **Self-review checklist in every task:** Each task includes the checklist. Builders must check every box before marking complete. This catches spec drift before QA.
 
 **Specialist assignment:** Every task gets a `Specialist` field. If `.claude/agents/` has a matching specialist (e.g., a DB agent for schema tasks, a UI agent for component tasks), use that agent's name. If no specialist fits, use "generic". During `/set-build`, the team lead uses these tags to spawn the right specialist agents and route tasks to them.
+
+**Shard tagging:** Every task gets a `Shards` field listing the domain names from `.claude/set/taxonomy.md` whose learnings apply to this task. During `/set-build`, the team lead loads those shard files and injects them as context for the task. Be generous — it's better to include a borderline-relevant shard than omit a relevant one. Empty list is fine when no shards apply (e.g. first-ever task in a fresh project, or purely mechanical scaffolding). If the taxonomy is empty, use `[]` for all tasks.
 
 **Exact commands:** Include exact test/lint/typecheck commands, expected outputs, and file paths. Builders should never have to guess.
 

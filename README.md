@@ -21,7 +21,7 @@ SET combines [Superpowers](https://github.com/obra/superpowers) (structured desi
 ## What Makes SET Different
 
 **Two-level self-improving learning loop.** After each cycle, `/set-learn` extracts learnings at two levels:
-- **Project level** (CLAUDE.md) — patterns, failures, and recurring bugs that benefit all agents
+- **Project level** (sharded by free-form domain in `.claude/set/learnings/`) — patterns, failures, and recurring bugs. `/set-build` injects only the shards relevant to each task, keeping per-task context small while total learnings grow without bound.
 - **Agent level** (.claude/agents/*.md) — domain-specific lessons that make each specialist smarter at its job
 
 Agents that repeatedly make the same mistake get that mistake added to their instructions. The system improves itself with use.
@@ -74,11 +74,35 @@ Then open Claude Code and install the two prerequisite plugins:
 After each build/review cycle, run `/set-learn`. It:
 
 1. Analyzes the full arc — design through review
-2. Extracts project-level learnings (what worked, what failed, recurring bugs) → appends to CLAUDE.md
-3. Evaluates each agent's performance (QA rejections, review findings, Ralph Loop struggles) → proposes updates to agent .md files
-4. Archives the completed plan
+2. Extracts project-level learnings (what worked, what failed, recurring bugs) and classifies each against the project's free-form domain taxonomy (`.claude/set/taxonomy.md`) → writes to the appropriate shard(s) in `.claude/set/learnings/`
+3. Routes the rare cross-cutting, universally-applicable learning to CLAUDE.md
+4. Evaluates each agent's performance (QA rejections, review findings, Ralph Loop struggles) → proposes updates to agent .md files
+5. Archives the completed plan
 
-Next session, Claude reads the updated CLAUDE.md and evolved agent definitions at startup. Each cycle makes the next one faster and more accurate.
+`/set-plan` tags each task with the shard domains it touches. `/set-build` loads only those shards into each task's context — a DB task doesn't see UI learnings, and vice versa. This keeps context lean as the learning base grows.
+
+Next session, Claude reads CLAUDE.md, relevant shards per task, and evolved agent definitions. Each cycle makes the next one faster and more accurate.
+
+## Optional: Serena MCP Integration
+
+SET can optionally use [Serena MCP](https://github.com/oraios/serena) as a semantic index over your learning shards. Shards remain the source of truth; Serena adds recall.
+
+**What it adds:**
+- **Semantic retrieval per task.** `/set-build` queries Serena with each task's description and injects the top-5 most relevant memories alongside the statically-selected shards. Catches learnings the shard-tagging missed.
+- **Cross-domain matching.** A learning filed under `db` may still surface for an `api` task if it's semantically relevant — without duplicating it across shards.
+- **LSP-backed symbol tools** that Serena brings along are usable by builder/review agents.
+
+**How it works:**
+- Shards are authoritative. `/set-learn` mirrors each learning to `.serena/memories/` with domain tags in frontmatter.
+- If Serena is uninstalled or the call fails, SET falls back to shards unchanged — nothing breaks.
+- You can enable/disable at any time: `/set-init` prompts on fresh projects; `/set-learn` and `/set-build` detect Serena lazily for existing projects (prompted once, persisted); `/set-update` lets you re-toggle.
+
+**When it's worth it:**
+- Your learning base has grown past what static domain tagging catches cleanly
+- You want cross-project memory (Serena's memories can be shared across projects)
+- You already use Serena for its symbol tools and want the integration
+
+Not needed for smaller projects — sharding alone handles most scale.
 
 ## Current Status
 

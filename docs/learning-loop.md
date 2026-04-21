@@ -4,29 +4,37 @@ SET's self-improving learning loop is what separates it from a one-shot AI workf
 
 ## Two Levels of Learning
 
-### Project Level → `.claude/set/learnings.md`
+### Project Level → Sharded `.claude/set/learnings/{domain}.md`
 
-Dated patterns, failures, and recurring bugs that benefit all agents are written to `.claude/set/learnings.md`. This file is read explicitly by `/set-plan`, `/set-build` (team lead, builders, QA), and `/set-review` (all four reviewer lenses) so every cycle benefits from accumulated learnings.
+Dated patterns, failures, and recurring bugs are sharded by domain into `.claude/set/learnings/{domain}.md` files. The domain taxonomy is free-form per project and lives in `.claude/set/taxonomy.md`.
 
-Learnings live in their own file — not `CLAUDE.md` — so `CLAUDE.md` stays small and fast to load while learnings can grow freely across cycles.
+`/set-plan` tags each task with the shards relevant to that task. `/set-build` loads ONLY those shards into the task context — a builder working on a DB task doesn't see UI learnings, and vice versa. This keeps per-task context small while letting total learnings grow without bound.
+
+`/set-review` loads shards whose domains intersect the diff under review.
 
 **What gets captured:**
 - Patterns that worked well (repeat these)
 - Approaches that failed (avoid these)
 - Recurring bugs (watch for these)
 
-Build commands and architecture changes go to `CLAUDE.md` — those are structural, not accumulating history.
+Build commands and architecture changes go to `CLAUDE.md` — those are structural, not accumulating history. A small number of **cross-cutting, universally-applicable** learnings (e.g., "NEVER log user PII") also go in `CLAUDE.md` so every task sees them.
 
-**Example `.claude/set/learnings.md` additions after a cycle:**
+**Example shard content (`.claude/set/learnings/api.md`):**
 ```markdown
+---
+domain: api
+description: Endpoint shape, validation, rate limiting, error responses
+---
+
+# api Learnings
+
 ## What Works
-[2025-06-15] Rate limiting middleware: always wrap export/download endpoints
+[2026-04-15] Rate limiting middleware: always wrap export/download endpoints
 
 ## What Failed
-[2025-06-15] Drizzle-kit requires interactive input — use custom migration scripts
 
 ## Recurring Bugs
-[2025-06-15] Large queries without LIMIT cause timeouts — always paginate
+[2026-04-15] Large queries without LIMIT cause timeouts — always paginate
 ```
 
 ### Agent Level → `.claude/agents/*.md`
@@ -39,12 +47,11 @@ Domain-specific lessons are written directly into each specialist's definition f
 - Patterns this agent handled well
 - New conventions relevant to this agent's domain
 
-**Example agent update:**
-```markdown
-## Common Mistakes to Avoid
-[2025-06-15] Never skip rate limiting on endpoints that serve large data exports
-[2025-06-22] Use `prepare: false` on all postgres() connections — breaks on serverless otherwise
-```
+## Optional Semantic Index → Serena MCP
+
+If Serena MCP is installed and enabled during `/set-init` (or toggled on later via `/set-update`), `/set-learn` additionally mirrors each learning to `.serena/memories/` with domain tags in frontmatter. During `/set-build`, the team lead queries Serena for the top-5 semantically-relevant memories per task and injects them alongside the statically-selected shards.
+
+Shards remain the source of truth — Serena is an index. If Serena is uninstalled or fails, SET continues working against the shards unchanged.
 
 ## What `/set-learn` Analyzes
 
@@ -57,40 +64,48 @@ To generate learnings, `/set-learn` looks at:
 5. **Patterns done well** — things that went smoothly and should be repeated
 6. **Git history** — what was actually built vs. what was planned
 
+## Classification and Duplication
+
+Each new learning is classified against the taxonomy. Learnings that span multiple domains are **duplicated into each relevant shard** — a note about "validating API input before writing to the DB" goes into both `api.md` and `db.md`, since either specialist may need it.
+
+If no existing domain fits, `/set-learn` proposes a new domain + description for user approval before adding it to `taxonomy.md`. There is no cap on domain count.
+
 ## Cross-Agent vs. Agent-Specific
 
-If a learning applies to all agents, it goes to `.claude/set/learnings.md`.
-If it's specific to a domain (e.g., database queries, React patterns), it goes to that specialist's `.md` file.
+If a learning applies to every agent universally (e.g., "never modify code outside task scope"), it belongs in `CLAUDE.md` or in a `conventions` shard if one exists.
 
-**Cross-agent → `.claude/set/learnings.md`:**
-```
-"Always add TODO comments with ticket numbers on workarounds"
-```
-
-**Agent-specific → `db-drizzle.md`:**
-```
-"Use .returning() on INSERT when you need the created record's ID"
-```
+If it's specific to a domain, it goes to that specialist's agent `.md` file.
 
 ## How Sub-Agents See Learnings
 
-Sub-agents spawned by Compound Teams (builders, QA, reviewers) don't auto-inherit the main session's loaded context. Every SET command's prompt explicitly instructs the sub-agent to read `.claude/set/learnings.md` before working. This is the same explicit-read pattern that already makes `CLAUDE.md` conventions flow into sub-agents.
+Sub-agents spawned by Compound Teams (builders, QA, reviewers) don't auto-inherit the main session's loaded context. In SET's design:
 
-Moving learnings to `.claude/set/learnings.md` does **not** reduce what agents see — they still read it every cycle. It only shrinks what every `CLAUDE.md` auto-load has to carry.
+- **Builders** receive shard content inline in their task description — the team lead loads and injects the per-task shards at `TaskCreate` time. Builders do not fetch shards themselves.
+- **QA** reads the shards referenced in each task's `Shards` field when reviewing.
+- **Reviewers** (`/set-review`) load shards whose domain intersects the diff.
+
+## First-Run Migration
+
+If a legacy monolithic `.claude/set/learnings.md` is present when `/set-learn` runs, it is auto-split:
+
+1. Claude proposes a taxonomy from existing entries
+2. User approves or edits the taxonomy
+3. Each entry is classified and written into the appropriate shard(s)
+4. The legacy file is deleted
 
 ## Cumulative Improvement
 
 The learning loop compounds over time. After 10 cycles:
 
-- `.claude/set/learnings.md` has a rich set of dated, actionable entries from real work
-- Each specialist agent has a `Common Mistakes to Avoid` section that reflects actual failures
-- New cycles start with all of this context explicitly loaded by the commands that need it
+- `.claude/set/learnings/` has rich, domain-scoped shards with dated, actionable entries
+- Each specialist agent has accumulated `Common Mistakes to Avoid` sections
+- New cycles start with exactly the right context for each task, not a giant blob
 
-The team gets smarter without anyone having to manually write documentation.
+The team gets smarter without anyone having to manually write documentation — and without inflating every task's context window.
 
 ## Future: Compaction
 
-As `.claude/set/learnings.md` grows, a future `/set-compact-learnings` command will dedupe, merge, and archive stale entries into `.claude/set/learnings-archive/` — keeping the active file focused without losing history.
+As shards grow, a future `/set-compact-learnings` command will dedupe, merge, and archive stale entries into `.claude/set/learnings-archive/` — per-shard — without losing history.
 
 ## Plan Archiving
 

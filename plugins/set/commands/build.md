@@ -8,11 +8,30 @@ You are the team lead. Execute a plan using Compound Teams' Agent Team infrastru
 
 ## Before Starting
 
+### 0. Resolve Serena State (Lazy Detection)
+
+Before anything else, reconcile Serena configuration. This handles users who installed Serena *after* running `/set-init`.
+
+1. Read `.claude/set/config.json` (create as `{}` if missing).
+2. If `serena_enabled` is **present** (true or false), skip the rest of this step — the user has already decided.
+3. If the key is **missing**, detect Serena:
+   ```bash
+   ls .serena/ 2>/dev/null
+   grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+   ```
+   - **Detected** → prompt ONCE: "Serena MCP detected. Enable semantic learning retrieval during `/set-build`? [y/N]". Persist the answer to `config.json`. If yes, `mkdir -p .serena/memories`.
+   - **Not detected** → write `serena_enabled: false` silently.
+
+User can re-toggle later via `/set-update`.
+
+### Subsequent Steps
+
 1. Look for a plan in `.claude/plans/`. If none exists, tell the user to run `/set-plan` first.
 2. Read the plan thoroughly. Also read the linked design spec if referenced.
-3. Read CLAUDE.md — especially Build Commands and conventions. Also read `.claude/set/learnings.md` if it exists — accumulated patterns from prior cycles.
-4. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
-5. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
+3. Read CLAUDE.md — especially Build Commands and conventions.
+4. Read `.claude/set/config.json` to determine if Serena is enabled (`serena_enabled`). Read `.claude/set/taxonomy.md` to know the valid shard domains. Do NOT load all shard contents up front — shards are loaded per-task in Step 4 below.
+5. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
+6. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
 
 ## Resolve Worktree Mode
 
@@ -99,20 +118,58 @@ Ready to spawn team.
 Teammate({ operation: "spawnTeam", team_name: "{feature-name}" })
 ```
 
-## Step 3: Create Tasks from the Plan
+## Step 3: Create Tasks from the Plan (with Shard Injection)
 
 For each task in the plan:
+
+### 3a: Load shards for the task
+
+Read the task's `Shards` field. For each domain listed:
+- Read `.claude/set/learnings/{domain}.md`
+- Collect its contents (strip frontmatter, keep sections)
+
+If `Shards` is empty, skip shard loading.
+
+### 3b: Query Serena (if enabled)
+
+If `serena_enabled: true` in `.claude/set/config.json`, query Serena for semantically relevant memories:
+
+- Query: the task's `What` + `Done when` text (raw task description, not a summary — richer signal for retrieval)
+- Tool: Serena's memory search (`mcp__serena__find_memory` or equivalent — use whatever Serena exposes)
+- **Cap results at top 5** by relevance
+- Dedupe against shards already loaded in 3a (skip any memory whose `source:` frontmatter points to a shard file already loaded)
+
+If Serena call fails or times out: log a warning and continue without it. Never block the build on Serena.
+
+### 3c: Build the task description
+
+Assemble the task description passed to `TaskCreate`:
+
+```
+{full task description from plan, INCLUDING TDD Steps and Self-Review Checklist}
+
+---
+## Relevant Learnings (from shards: {comma-separated domains})
+
+{concatenated shard file contents — What Works / What Failed / Recurring Bugs sections}
+
+{if Serena enabled and returned results:}
+## Additional Semantic Matches (from Serena)
+{top-5 deduped memory contents}
+```
+
+### 3d: Create the task
 
 ```
 TaskCreate({
   subject: "{task name from plan}",
-  description: "{full task description INCLUDING the TDD Steps and Self-Review Checklist from the plan}",
+  description: "{description assembled in 3c}",
   activeForm: "{what in-progress looks like}",
   blockedBy: ["{task IDs this depends on}"]
 })
 ```
 
-**Critical:** Include the TDD steps and self-review checklist in every task description. Builders need these in context.
+**Critical:** Include the TDD steps, self-review checklist, AND shard context in every task description. Builders need these in context — they do NOT re-read shards themselves, since a task-scoped subset is cheaper than loading everything.
 
 ## Step 4: Spawn Teammates
 
@@ -160,7 +217,7 @@ WORKFLOW — TDD RALPH LOOP:
 1. Run TaskList() — find a pending, unblocked task with no owner
 2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
 3. Start it: TaskUpdate({ taskId, status: "in_progress" })
-4. Read CLAUDE.md for conventions. Read `.claude/set/learnings.md` (if present) for accumulated patterns — prior "What Works", "What Failed", and "Recurring Bugs". Apply what's relevant before coding.
+4. Read CLAUDE.md for conventions. The task description already includes the relevant learning shards ("Relevant Learnings" section) and any Serena matches — apply them before coding. Do NOT load `.claude/set/learnings/*.md` yourself; the team lead scoped them to this task.
 
 5. WRITE FAILING TESTS FIRST (TDD Red Phase):
    - Follow the "TDD Steps" section in the task description
@@ -185,7 +242,7 @@ WORKFLOW — TDD RALPH LOOP:
     - Did I implement exactly what was specified? Nothing missing?
     - Did I add anything beyond what was specified? Remove it if so.
     - Do my tests cover the happy path AND at least one edge case?
-    - Does my code follow the project conventions from CLAUDE.md and accumulated patterns in `.claude/set/learnings.md`?
+    - Does my code follow the project conventions from CLAUDE.md and the learning shards in my task description?
     - Any hardcoded values, missing validation, or security issues?
 
     If ANY check fails: fix it, rerun tests, re-check.
@@ -213,7 +270,8 @@ You perform TWO review stages on each completed task — spec compliance first, 
 
 READ FIRST (once, at start of shift):
 - CLAUDE.md — conventions and build commands
-- `.claude/set/learnings.md` (if it exists) — accumulated patterns and recurring bugs to check for
+- `.claude/set/taxonomy.md` (if it exists) — so you know what domains exist
+- For each task you review: the shards referenced in the task's `Shards` field (read `.claude/set/learnings/{domain}.md`) — you need these to verify compliance with accumulated patterns
 
 WORKFLOW:
 1. Monitor TaskList() — wait for builder tasks to reach "completed"
@@ -238,7 +296,7 @@ WORKFLOW:
    g. Review code quality:
       - Test quality: do tests actually verify behavior, or are they trivial/tautological?
       - Edge cases: null inputs, empty states, boundary values, error paths
-      - Architecture: does the code follow project patterns from CLAUDE.md and `.claude/set/learnings.md`?
+      - Architecture: does the code follow project patterns from CLAUDE.md and the task's learning shards?
       - Security: injection, XSS, hardcoded secrets, missing validation
       - DRY: any duplicated logic that should use existing utilities?
    h. If quality issues found:

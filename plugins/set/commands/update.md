@@ -30,7 +30,22 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 /plugin update compound-teams@compound-teams-marketplace
 ```
 
-### 4. Verify
+### 4. Re-check Serena MCP
+
+SET optionally mirrors learnings to Serena for semantic retrieval during `/set-build`. If Serena was installed (or removed) since the last init, update `.claude/set/config.json`.
+
+```bash
+# Detect Serena
+ls .serena/ 2>/dev/null
+grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+```
+
+Read `.claude/set/config.json` (create it if missing). Current state:
+- Serena detected + `serena_enabled: true` → nothing to do
+- Serena detected + `serena_enabled: false/missing` → prompt: "Serena MCP detected. Enable semantic learning retrieval? [y/N]". If yes, set `serena_enabled: true` and `mkdir -p .serena/memories`.
+- Serena NOT detected + `serena_enabled: true` → warn user Serena is enabled in config but not installed. Ask whether to disable or keep waiting for reinstall.
+
+### 5. Verify
 
 After all updates complete, verify the installation:
 
@@ -48,9 +63,10 @@ echo "=== Agent Teams enabled ==="
 cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "NOT FOUND"
 ```
 
-### 5. Report
+### 6. Report
 
 Tell the user:
 - Which plugins were updated successfully
 - Any that failed (with suggested fix)
 - If any SET commands changed, briefly note what's new
+- Serena MCP status (enabled / disabled / not detected)

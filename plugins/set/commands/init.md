@@ -51,7 +51,46 @@ git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 
 **Report findings to the user before proceeding.**
 
-## Step 3: Enable Agent Teams
+## Step 3: Detect Serena MCP (Optional Semantic Learning Index)
+
+SET uses sharded learning files as the source of truth. If Serena MCP is available, SET can additionally mirror learnings into `.serena/memories/` for semantic retrieval during `/set-build`. Shards remain authoritative — Serena is an index.
+
+### 3a: Detect Serena
+
+Check whether Serena MCP is available:
+
+```bash
+# Serena installs as an MCP server — look for its config
+ls ~/.claude/mcp_servers.json ~/.config/claude/mcp_servers.json 2>/dev/null | head -1
+grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+
+# Or its project dir
+ls .serena/ 2>/dev/null
+```
+
+If `.serena/` exists OR a `serena` entry shows up in MCP config, report: "Serena MCP detected."
+
+### 3b: Prompt the user
+
+If Serena is detected, ask:
+
+> "Serena MCP detected. Enable Serena for semantic learning retrieval during `/set-build`? Shards stay the source of truth; Serena provides additional recall. [y/N]"
+
+If Serena is NOT detected, skip the prompt. SET works fine without it.
+
+### 3c: Write config
+
+Create `.claude/set/config.json` (create dir if needed). Merge with existing if present — do NOT overwrite other keys.
+
+```json
+{
+  "serena_enabled": true
+}
+```
+
+Set `serena_enabled` to the user's choice (or `false` / omit if Serena not detected). If `.serena/` doesn't exist but user opted in, create it: `mkdir -p .serena/memories`.
+
+## Step 4: Enable Agent Teams
 
 Check `.claude/settings.json`:
 - If it **doesn't exist**: create it with `{ "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }`
@@ -60,7 +99,7 @@ Check `.claude/settings.json`:
 
 **Show the user the change before writing.**
 
-## Step 4: Detect Project Stack
+## Step 5: Detect Project Stack
 
 ```bash
 echo "=== Language ==="
@@ -99,9 +138,9 @@ ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -3
 
 Report: "I detected [languages], [framework], [test runner], [linter], [type checker], [database], [API layer]."
 
-Record these detections — they drive agent scaffolding in Step 6 and build commands in Step 5.
+Record these detections — they drive agent scaffolding in Step 7 and build commands in Step 6.
 
-## Step 5: Augment CLAUDE.md
+## Step 6: Augment CLAUDE.md
 
 **NEVER overwrite existing CLAUDE.md.** Check if SET sections already exist.
 
@@ -137,18 +176,18 @@ This project uses the Superpowers Engineering Team workflow:
 <!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
 - [List agents created in Step 6]
 
-<!-- Dated, accumulating learnings live in .claude/set/learnings.md (not here). Keeps CLAUDE.md small and fast to load. Every SET command reads the learnings file explicitly. -->
+<!-- Dated, accumulating learnings live in sharded `.claude/set/learnings/{domain}.md` files (not here). `/set-build` scopes shards per task to keep context small. Taxonomy is in `.claude/set/taxonomy.md`. -->
 ```
 
 Replace `[DETECTED_*]` placeholders with actual commands from Step 4.
 
 **Show the user exactly what will be appended. Get confirmation before writing.**
 
-## Step 6: Scaffold Domain Specialist Agents
+## Step 7: Scaffold Domain Specialist Agents
 
 This is SET's key differentiator over Compound Teams. The plan phase tags tasks with specialists, and the build phase routes tasks to the right agent. But this only works if `.claude/agents/` has agent definitions.
 
-### 6a: Check for existing agents
+### 7a: Check for existing agents
 
 ```bash
 ls .claude/agents/ 2>/dev/null
@@ -156,7 +195,7 @@ ls .claude/agents/ 2>/dev/null
 
 If agents already exist, read each one and report what domains are covered. Identify gaps based on the stack detected in Step 4.
 
-### 6b: Determine which specialists to scaffold
+### 7b: Determine which specialists to scaffold
 
 Based on the detected stack, propose agents from this menu:
 
@@ -170,7 +209,7 @@ Based on the detected stack, propose agents from this menu:
 
 Only propose agents for domains actually present in the project. Do NOT scaffold agents for domains that don't exist.
 
-### 6c: Write agent files
+### 7c: Write agent files
 
 For each proposed agent, create a starter file in `.claude/agents/`. Each agent file follows this structure:
 
@@ -197,38 +236,37 @@ sonnet
 ```
 
 **Important:**
-- Read CLAUDE.md, `.claude/set/learnings.md` (if it exists), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
+- Read CLAUDE.md, any existing shards in `.claude/set/learnings/` (or legacy `.claude/set/learnings.md` if present), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
 - If an agent for this domain already exists, do NOT overwrite it. Report that it's already covered.
 - Show the user each agent file before writing. Get confirmation.
 
-### 6d: Suggest the user customize
+### 7d: Suggest the user customize
 
 After scaffolding, tell the user: "These are starter agents based on your detected stack. Review and customize them — the more project-specific knowledge you add, the better SET routes tasks and the higher quality the output."
 
-## Step 7: Create Directory Structure and Learnings File
+## Step 8: Create Directory Structure and Learnings Files
 
 ```bash
 mkdir -p .claude/plans/archive
 mkdir -p .claude/set
+mkdir -p .claude/set/learnings
 mkdir -p .claude/set/learnings-archive
 mkdir -p docs/superpowers/specs
 ```
 
-Create `.claude/set/learnings.md` if it does not already exist (NEVER overwrite):
+Create `.claude/set/taxonomy.md` if it does not already exist (NEVER overwrite). Start empty — `/set-learn` populates it on first run by proposing domains from accumulated content:
 
 ```markdown
-# SET Learned Patterns
+# Learning Taxonomy
 
-Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles. Grows via `/set-learn`.
+Free-form list of domains used to shard learnings in `.claude/set/learnings/`. Populated and maintained by `/set-learn`. Format: one domain per line, `- name: short description`.
 
-## What Works
-
-## What Failed
-
-## Recurring Bugs
+<!-- populated on first /set-learn run -->
 ```
 
-## Step 8: Summary
+**Legacy `.claude/set/learnings.md` handling**: do NOT create or touch this file. If a pre-existing one is found, leave it — `/set-learn` will auto-split it into the `learnings/` shards on its next run.
+
+## Step 9: Summary
 
 ```
 SET initialized!
@@ -253,12 +291,16 @@ Domain specialists scaffolded:
 Directories created:
   .claude/plans/                  — Implementation plans
   .claude/plans/archive/          — Completed plans
-  .claude/set/                    — SET state (learnings, future compaction)
+  .claude/set/                    — SET state
+  .claude/set/learnings/          — Sharded, domain-scoped learnings
   .claude/set/learnings-archive/  — Archived/compacted learnings
   docs/superpowers/specs/         — Design specifications
 
 Files created:
-  .claude/set/learnings.md        — Accumulated dated learnings (read by /set-plan, /set-build, /set-review)
+  .claude/set/taxonomy.md         — Learning domain taxonomy (populated on first /set-learn)
+  .claude/set/config.json         — SET config (includes serena_enabled)
+
+Serena MCP: [enabled / disabled / not detected]
 
 CLAUDE.md augmented with:
   - SET pipeline reference
