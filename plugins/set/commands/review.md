@@ -38,7 +38,7 @@ Review the git diff (main...HEAD) against the design spec and implementation pla
 READ FIRST:
 - Design spec: {path to spec in docs/superpowers/specs/}
 - Implementation plan: {path to plan in .claude/plans/}
-- `.claude/set/learnings.md` (if it exists) — prior patterns and failures that may indicate risk areas
+- `.claude/set/taxonomy.md` (if it exists) and relevant shards under `.claude/set/learnings/` — prior patterns and failures that may indicate risk areas. Load shards whose domain intersects with the diff's scope.
 
 VERIFY:
 - Every requirement in the design spec has been implemented
@@ -60,7 +60,7 @@ Message team-lead with findings.
 ```
 Review the git diff (main...HEAD) for security issues.
 
-READ FIRST: `.claude/set/learnings.md` if it exists — check "Recurring Bugs" for any security-related patterns previously documented.
+READ FIRST: scan `.claude/set/learnings/*.md` — especially any security / validation / auth related shards — for "Recurring Bugs" patterns previously documented. Legacy `.claude/set/learnings.md` if present.
 
 CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth patterns, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal.
 
@@ -71,7 +71,7 @@ If nothing found, confirm the changes look secure.
 ### Architecture Reviewer Prompt:
 
 ```
-Review the git diff (main...HEAD) for architectural quality. Read CLAUDE.md first for project conventions, and `.claude/set/learnings.md` (if it exists) for accumulated "What Works" / "What Failed" patterns.
+Review the git diff (main...HEAD) for architectural quality. Read CLAUDE.md first for project conventions, and the shards under `.claude/set/learnings/` whose domains intersect the diff (use `.claude/set/taxonomy.md` as the index) for accumulated "What Works" / "What Failed" patterns.
 
 CHECK: Pattern consistency, separation of concerns, SOLID violations, DRY without over-abstraction, dependency direction, testability, performance at scale, error handling consistency.
 
@@ -84,7 +84,7 @@ Also note things done WELL — good patterns worth documenting.
 ```
 Review the git diff (main...HEAD) for correctness. Also run the test suite.
 
-READ FIRST: `.claude/set/learnings.md` if it exists — "Recurring Bugs" lists prior error patterns worth verifying against.
+READ FIRST: the shards under `.claude/set/learnings/` whose domains intersect the diff — "Recurring Bugs" sections list prior error patterns worth verifying against.
 
 CHECK: Test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup (connections closed, listeners removed).
 
@@ -110,7 +110,7 @@ Collect all findings. Present unified review:
 ### Suggestions (nice to have)
 - ...
 
-### Good Patterns (add to `.claude/set/learnings.md` via /set-learn)
+### Good Patterns (add to the relevant shard under `.claude/set/learnings/` via /set-learn)
 - ...
 ```
 

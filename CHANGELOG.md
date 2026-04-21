@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added — Sharded Learnings + Optional Serena MCP
+- Learnings now sharded by free-form domain into `.claude/set/learnings/{domain}.md`. `/set-plan` tags each task with relevant shards; `/set-build` injects only those shards into each task's context. Keeps per-task context small while total learnings grow without bound.
+- `.claude/set/taxonomy.md` — project-specific, free-form domain list maintained by `/set-learn`.
+- Cross-domain learnings duplicate into each relevant shard (both agents need full context).
+- Optional Serena MCP integration: when enabled, `/set-learn` mirrors learnings to `.serena/memories/` w/ domain frontmatter. `/set-build` queries Serena top-5 per task using raw task description; deduped against loaded shards. Shards stay source of truth — Serena is an index.
+- Lazy Serena detection in `/set-learn` and `/set-build`: if `config.json` has no `serena_enabled` key, Serena is detected on first run; if found, user is prompted once and answer is persisted. Handles users who install Serena after `/set-init`.
+- `/set-update` re-detects Serena and prompts to toggle.
+
+### Changed
+- Legacy monolithic `.claude/set/learnings.md` is auto-split on first `/set-learn` run after upgrade: `/set-learn` proposes a taxonomy, user approves, entries are classified into shards, legacy file is deleted.
+- `/set-review` loads shards whose domains intersect the diff, not a single flat file.
+- `CLAUDE.md` now holds only cross-cutting, universally-applicable learnings (rare) plus structural facts. The vast majority of learnings route to shards.
+
+### Migration Notes (for existing users)
+- Run `/set-update` to pick up the new command files.
+- On your next `/set-learn`, you'll be prompted to approve a taxonomy and the legacy `learnings.md` will be split automatically.
+- If you use Serena MCP, you'll be prompted to enable integration on next `/set-learn` or `/set-build`. You can change your mind later via `/set-update`.
+
 ### Added
 - `/set-init` — one-time project initialization, stack detection, specialist agent scaffolding
 - `/set-update` — update SET + Superpowers + Compound Teams to latest versions

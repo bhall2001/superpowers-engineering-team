@@ -201,7 +201,46 @@ git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 
 **Report findings to the user before proceeding.**
 
-## Step 3: Enable Agent Teams
+## Step 3: Detect Serena MCP (Optional Semantic Learning Index)
+
+SET uses sharded learning files as the source of truth. If Serena MCP is available, SET can additionally mirror learnings into `.serena/memories/` for semantic retrieval during `/set-build`. Shards remain authoritative — Serena is an index.
+
+### 3a: Detect Serena
+
+Check whether Serena MCP is available:
+
+```bash
+# Serena installs as an MCP server — look for its config
+ls ~/.claude/mcp_servers.json ~/.config/claude/mcp_servers.json 2>/dev/null | head -1
+grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+
+# Or its project dir
+ls .serena/ 2>/dev/null
+```
+
+If `.serena/` exists OR a `serena` entry shows up in MCP config, report: "Serena MCP detected."
+
+### 3b: Prompt the user
+
+If Serena is detected, ask:
+
+> "Serena MCP detected. Enable Serena for semantic learning retrieval during `/set-build`? Shards stay the source of truth; Serena provides additional recall. [y/N]"
+
+If Serena is NOT detected, skip the prompt. SET works fine without it.
+
+### 3c: Write config
+
+Create `.claude/set/config.json` (create dir if needed). Merge with existing if present — do NOT overwrite other keys.
+
+```json
+{
+  "serena_enabled": true
+}
+```
+
+Set `serena_enabled` to the user's choice (or `false` / omit if Serena not detected). If `.serena/` doesn't exist but user opted in, create it: `mkdir -p .serena/memories`.
+
+## Step 4: Enable Agent Teams
 
 Check `.claude/settings.json`:
 - If it **doesn't exist**: create it with `{ "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }`
@@ -210,7 +249,7 @@ Check `.claude/settings.json`:
 
 **Show the user the change before writing.**
 
-## Step 4: Detect Project Stack
+## Step 5: Detect Project Stack
 
 ```bash
 echo "=== Language ==="
@@ -249,9 +288,9 @@ ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -3
 
 Report: "I detected [languages], [framework], [test runner], [linter], [type checker], [database], [API layer]."
 
-Record these detections — they drive agent scaffolding in Step 6 and build commands in Step 5.
+Record these detections — they drive agent scaffolding in Step 7 and build commands in Step 6.
 
-## Step 5: Augment CLAUDE.md
+## Step 6: Augment CLAUDE.md
 
 **NEVER overwrite existing CLAUDE.md.** Check if SET sections already exist.
 
@@ -287,18 +326,18 @@ This project uses the Superpowers Engineering Team workflow:
 <!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
 - [List agents created in Step 6]
 
-<!-- Dated, accumulating learnings live in .claude/set/learnings.md (not here). Keeps CLAUDE.md small and fast to load. Every SET command reads the learnings file explicitly. -->
+<!-- Dated, accumulating learnings live in sharded `.claude/set/learnings/{domain}.md` files (not here). `/set-build` scopes shards per task to keep context small. Taxonomy is in `.claude/set/taxonomy.md`. -->
 ```
 
 Replace `[DETECTED_*]` placeholders with actual commands from Step 4.
 
 **Show the user exactly what will be appended. Get confirmation before writing.**
 
-## Step 6: Scaffold Domain Specialist Agents
+## Step 7: Scaffold Domain Specialist Agents
 
 This is SET's key differentiator over Compound Teams. The plan phase tags tasks with specialists, and the build phase routes tasks to the right agent. But this only works if `.claude/agents/` has agent definitions.
 
-### 6a: Check for existing agents
+### 7a: Check for existing agents
 
 ```bash
 ls .claude/agents/ 2>/dev/null
@@ -306,7 +345,7 @@ ls .claude/agents/ 2>/dev/null
 
 If agents already exist, read each one and report what domains are covered. Identify gaps based on the stack detected in Step 4.
 
-### 6b: Determine which specialists to scaffold
+### 7b: Determine which specialists to scaffold
 
 Based on the detected stack, propose agents from this menu:
 
@@ -320,7 +359,7 @@ Based on the detected stack, propose agents from this menu:
 
 Only propose agents for domains actually present in the project. Do NOT scaffold agents for domains that don't exist.
 
-### 6c: Write agent files
+### 7c: Write agent files
 
 For each proposed agent, create a starter file in `.claude/agents/`. Each agent file follows this structure:
 
@@ -347,38 +386,37 @@ sonnet
 ```
 
 **Important:**
-- Read CLAUDE.md, `.claude/set/learnings.md` (if it exists), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
+- Read CLAUDE.md, any existing shards in `.claude/set/learnings/` (or legacy `.claude/set/learnings.md` if present), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
 - If an agent for this domain already exists, do NOT overwrite it. Report that it's already covered.
 - Show the user each agent file before writing. Get confirmation.
 
-### 6d: Suggest the user customize
+### 7d: Suggest the user customize
 
 After scaffolding, tell the user: "These are starter agents based on your detected stack. Review and customize them — the more project-specific knowledge you add, the better SET routes tasks and the higher quality the output."
 
-## Step 7: Create Directory Structure and Learnings File
+## Step 8: Create Directory Structure and Learnings Files
 
 ```bash
 mkdir -p .claude/plans/archive
 mkdir -p .claude/set
+mkdir -p .claude/set/learnings
 mkdir -p .claude/set/learnings-archive
 mkdir -p docs/superpowers/specs
 ```
 
-Create `.claude/set/learnings.md` if it does not already exist (NEVER overwrite):
+Create `.claude/set/taxonomy.md` if it does not already exist (NEVER overwrite). Start empty — `/set-learn` populates it on first run by proposing domains from accumulated content:
 
 ```markdown
-# SET Learned Patterns
+# Learning Taxonomy
 
-Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles. Grows via `/set-learn`.
+Free-form list of domains used to shard learnings in `.claude/set/learnings/`. Populated and maintained by `/set-learn`. Format: one domain per line, `- name: short description`.
 
-## What Works
-
-## What Failed
-
-## Recurring Bugs
+<!-- populated on first /set-learn run -->
 ```
 
-## Step 8: Summary
+**Legacy `.claude/set/learnings.md` handling**: do NOT create or touch this file. If a pre-existing one is found, leave it — `/set-learn` will auto-split it into the `learnings/` shards on its next run.
+
+## Step 9: Summary
 
 ```
 SET initialized!
@@ -403,12 +441,16 @@ Domain specialists scaffolded:
 Directories created:
   .claude/plans/                  — Implementation plans
   .claude/plans/archive/          — Completed plans
-  .claude/set/                    — SET state (learnings, future compaction)
+  .claude/set/                    — SET state
+  .claude/set/learnings/          — Sharded, domain-scoped learnings
   .claude/set/learnings-archive/  — Archived/compacted learnings
   docs/superpowers/specs/         — Design specifications
 
 Files created:
-  .claude/set/learnings.md        — Accumulated dated learnings (read by /set-plan, /set-build, /set-review)
+  .claude/set/taxonomy.md         — Learning domain taxonomy (populated on first /set-learn)
+  .claude/set/config.json         — SET config (includes serena_enabled)
+
+Serena MCP: [enabled / disabled / not detected]
 
 CLAUDE.md augmented with:
   - SET pipeline reference
@@ -499,7 +541,8 @@ Read the Superpowers design spec. If none exists, tell the user to run `/set-des
 ### 2. Research the Codebase
 
 - Read CLAUDE.md for conventions and build commands
-- Read `.claude/set/learnings.md` (if it exists) for accumulated "What Works", "What Failed", and "Recurring Bugs" — factor these into task decomposition and approach choice
+- Read `.claude/set/taxonomy.md` (if it exists) — list of learning domains used by this project. You'll tag each task with the relevant shards.
+- Scan `.claude/set/learnings/*.md` (if it exists) for accumulated "What Works", "What Failed", and "Recurring Bugs" across domains — factor these into task decomposition and approach choice. If only a legacy `.claude/set/learnings.md` exists, read it too (it will be auto-split on next `/set-learn`).
 - Explore directory structure and find related code
 - Identify utilities, patterns, and abstractions to reuse
 - Check git log for recent changes in relevant areas
@@ -528,6 +571,7 @@ High-level strategy. Why this over alternatives.
 
 ### Task 1: {name}
 - **Specialist**: {agent name from `.claude/agents/` or "generic" if none fits}
+- **Shards**: {comma-separated domain names from `.claude/set/taxonomy.md` — the learning shards relevant to this task. Empty list if none apply or taxonomy is empty.}
 - **What**: Clear deliverable
 - **Files**: Specific paths to create/modify
 - **Tests**: What tests to write and exact commands to run them
@@ -545,7 +589,7 @@ High-level strategy. Why this over alternatives.
 - [ ] All acceptance criteria met — nothing missing
 - [ ] No extra features beyond what was specified
 - [ ] Tests cover happy path AND edge cases
-- [ ] Follows project conventions from CLAUDE.md and `.claude/set/learnings.md`
+- [ ] Follows project conventions from CLAUDE.md and the learning shards injected for this task
 - [ ] No hardcoded values, missing validation, or security issues
 
 ### Task 2: {name}
@@ -563,6 +607,8 @@ High-level strategy. Why this over alternatives.
 **Self-review checklist in every task:** Each task includes the checklist. Builders must check every box before marking complete. This catches spec drift before QA.
 
 **Specialist assignment:** Every task gets a `Specialist` field. If `.claude/agents/` has a matching specialist (e.g., a DB agent for schema tasks, a UI agent for component tasks), use that agent's name. If no specialist fits, use "generic". During `/set-build`, the team lead uses these tags to spawn the right specialist agents and route tasks to them.
+
+**Shard tagging:** Every task gets a `Shards` field listing the domain names from `.claude/set/taxonomy.md` whose learnings apply to this task. During `/set-build`, the team lead loads those shard files and injects them as context for the task. Be generous — it's better to include a borderline-relevant shard than omit a relevant one. Empty list is fine when no shards apply (e.g. first-ever task in a fresh project, or purely mechanical scaffolding). If the taxonomy is empty, use `[]` for all tasks.
 
 **Exact commands:** Include exact test/lint/typecheck commands, expected outputs, and file paths. Builders should never have to guess.
 
@@ -600,11 +646,30 @@ You are the team lead. Execute a plan using Compound Teams' Agent Team infrastru
 
 ## Before Starting
 
+### 0. Resolve Serena State (Lazy Detection)
+
+Before anything else, reconcile Serena configuration. This handles users who installed Serena *after* running `/set-init`.
+
+1. Read `.claude/set/config.json` (create as `{}` if missing).
+2. If `serena_enabled` is **present** (true or false), skip the rest of this step — the user has already decided.
+3. If the key is **missing**, detect Serena:
+   ```bash
+   ls .serena/ 2>/dev/null
+   grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+   ```
+   - **Detected** → prompt ONCE: "Serena MCP detected. Enable semantic learning retrieval during `/set-build`? [y/N]". Persist the answer to `config.json`. If yes, `mkdir -p .serena/memories`.
+   - **Not detected** → write `serena_enabled: false` silently.
+
+User can re-toggle later via `/set-update`.
+
+### Subsequent Steps
+
 1. Look for a plan in `.claude/plans/`. If none exists, tell the user to run `/set-plan` first.
 2. Read the plan thoroughly. Also read the linked design spec if referenced.
-3. Read CLAUDE.md — especially Build Commands and conventions. Also read `.claude/set/learnings.md` if it exists — accumulated patterns from prior cycles.
-4. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
-5. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
+3. Read CLAUDE.md — especially Build Commands and conventions.
+4. Read `.claude/set/config.json` to determine if Serena is enabled (`serena_enabled`). Read `.claude/set/taxonomy.md` to know the valid shard domains. Do NOT load all shard contents up front — shards are loaded per-task in Step 4 below.
+5. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
+6. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
 
 ## Resolve Worktree Mode
 
@@ -691,20 +756,58 @@ Ready to spawn team.
 Teammate({ operation: "spawnTeam", team_name: "{feature-name}" })
 ```
 
-## Step 3: Create Tasks from the Plan
+## Step 3: Create Tasks from the Plan (with Shard Injection)
 
 For each task in the plan:
+
+### 3a: Load shards for the task
+
+Read the task's `Shards` field. For each domain listed:
+- Read `.claude/set/learnings/{domain}.md`
+- Collect its contents (strip frontmatter, keep sections)
+
+If `Shards` is empty, skip shard loading.
+
+### 3b: Query Serena (if enabled)
+
+If `serena_enabled: true` in `.claude/set/config.json`, query Serena for semantically relevant memories:
+
+- Query: the task's `What` + `Done when` text (raw task description, not a summary — richer signal for retrieval)
+- Tool: Serena's memory search (`mcp__serena__find_memory` or equivalent — use whatever Serena exposes)
+- **Cap results at top 5** by relevance
+- Dedupe against shards already loaded in 3a (skip any memory whose `source:` frontmatter points to a shard file already loaded)
+
+If Serena call fails or times out: log a warning and continue without it. Never block the build on Serena.
+
+### 3c: Build the task description
+
+Assemble the task description passed to `TaskCreate`:
+
+```
+{full task description from plan, INCLUDING TDD Steps and Self-Review Checklist}
+
+---
+## Relevant Learnings (from shards: {comma-separated domains})
+
+{concatenated shard file contents — What Works / What Failed / Recurring Bugs sections}
+
+{if Serena enabled and returned results:}
+## Additional Semantic Matches (from Serena)
+{top-5 deduped memory contents}
+```
+
+### 3d: Create the task
 
 ```
 TaskCreate({
   subject: "{task name from plan}",
-  description: "{full task description INCLUDING the TDD Steps and Self-Review Checklist from the plan}",
+  description: "{description assembled in 3c}",
   activeForm: "{what in-progress looks like}",
   blockedBy: ["{task IDs this depends on}"]
 })
 ```
 
-**Critical:** Include the TDD steps and self-review checklist in every task description. Builders need these in context.
+**Critical:** Include the TDD steps, self-review checklist, AND shard context in every task description. Builders need these in context — they do NOT re-read shards themselves, since a task-scoped subset is cheaper than loading everything.
 
 ## Step 4: Spawn Teammates
 
@@ -752,7 +855,7 @@ WORKFLOW — TDD RALPH LOOP:
 1. Run TaskList() — find a pending, unblocked task with no owner
 2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
 3. Start it: TaskUpdate({ taskId, status: "in_progress" })
-4. Read CLAUDE.md for conventions. Read `.claude/set/learnings.md` (if present) for accumulated patterns — prior "What Works", "What Failed", and "Recurring Bugs". Apply what's relevant before coding.
+4. Read CLAUDE.md for conventions. The task description already includes the relevant learning shards ("Relevant Learnings" section) and any Serena matches — apply them before coding. Do NOT load `.claude/set/learnings/*.md` yourself; the team lead scoped them to this task.
 
 5. WRITE FAILING TESTS FIRST (TDD Red Phase):
    - Follow the "TDD Steps" section in the task description
@@ -777,7 +880,7 @@ WORKFLOW — TDD RALPH LOOP:
     - Did I implement exactly what was specified? Nothing missing?
     - Did I add anything beyond what was specified? Remove it if so.
     - Do my tests cover the happy path AND at least one edge case?
-    - Does my code follow the project conventions from CLAUDE.md and accumulated patterns in `.claude/set/learnings.md`?
+    - Does my code follow the project conventions from CLAUDE.md and the learning shards in my task description?
     - Any hardcoded values, missing validation, or security issues?
 
     If ANY check fails: fix it, rerun tests, re-check.
@@ -805,7 +908,8 @@ You perform TWO review stages on each completed task — spec compliance first, 
 
 READ FIRST (once, at start of shift):
 - CLAUDE.md — conventions and build commands
-- `.claude/set/learnings.md` (if it exists) — accumulated patterns and recurring bugs to check for
+- `.claude/set/taxonomy.md` (if it exists) — so you know what domains exist
+- For each task you review: the shards referenced in the task's `Shards` field (read `.claude/set/learnings/{domain}.md`) — you need these to verify compliance with accumulated patterns
 
 WORKFLOW:
 1. Monitor TaskList() — wait for builder tasks to reach "completed"
@@ -830,7 +934,7 @@ WORKFLOW:
    g. Review code quality:
       - Test quality: do tests actually verify behavior, or are they trivial/tautological?
       - Edge cases: null inputs, empty states, boundary values, error paths
-      - Architecture: does the code follow project patterns from CLAUDE.md and `.claude/set/learnings.md`?
+      - Architecture: does the code follow project patterns from CLAUDE.md and the task's learning shards?
       - Security: injection, XSS, hardcoded secrets, missing validation
       - DRY: any duplicated logic that should use existing utilities?
    h. If quality issues found:
@@ -928,7 +1032,7 @@ Review the git diff (main...HEAD) against the design spec and implementation pla
 READ FIRST:
 - Design spec: {path to spec in docs/superpowers/specs/}
 - Implementation plan: {path to plan in .claude/plans/}
-- `.claude/set/learnings.md` (if it exists) — prior patterns and failures that may indicate risk areas
+- `.claude/set/taxonomy.md` (if it exists) and relevant shards under `.claude/set/learnings/` — prior patterns and failures that may indicate risk areas. Load shards whose domain intersects with the diff's scope.
 
 VERIFY:
 - Every requirement in the design spec has been implemented
@@ -950,7 +1054,7 @@ Message team-lead with findings.
 ```
 Review the git diff (main...HEAD) for security issues.
 
-READ FIRST: `.claude/set/learnings.md` if it exists — check "Recurring Bugs" for any security-related patterns previously documented.
+READ FIRST: scan `.claude/set/learnings/*.md` — especially any security / validation / auth related shards — for "Recurring Bugs" patterns previously documented. Legacy `.claude/set/learnings.md` if present.
 
 CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth patterns, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal.
 
@@ -961,7 +1065,7 @@ If nothing found, confirm the changes look secure.
 ### Architecture Reviewer Prompt:
 
 ```
-Review the git diff (main...HEAD) for architectural quality. Read CLAUDE.md first for project conventions, and `.claude/set/learnings.md` (if it exists) for accumulated "What Works" / "What Failed" patterns.
+Review the git diff (main...HEAD) for architectural quality. Read CLAUDE.md first for project conventions, and the shards under `.claude/set/learnings/` whose domains intersect the diff (use `.claude/set/taxonomy.md` as the index) for accumulated "What Works" / "What Failed" patterns.
 
 CHECK: Pattern consistency, separation of concerns, SOLID violations, DRY without over-abstraction, dependency direction, testability, performance at scale, error handling consistency.
 
@@ -974,7 +1078,7 @@ Also note things done WELL — good patterns worth documenting.
 ```
 Review the git diff (main...HEAD) for correctness. Also run the test suite.
 
-READ FIRST: `.claude/set/learnings.md` if it exists — "Recurring Bugs" lists prior error patterns worth verifying against.
+READ FIRST: the shards under `.claude/set/learnings/` whose domains intersect the diff — "Recurring Bugs" sections list prior error patterns worth verifying against.
 
 CHECK: Test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup (connections closed, listeners removed).
 
@@ -1000,7 +1104,7 @@ Collect all findings. Present unified review:
 ### Suggestions (nice to have)
 - ...
 
-### Good Patterns (add to `.claude/set/learnings.md` via /set-learn)
+### Good Patterns (add to the relevant shard under `.claude/set/learnings/` via /set-learn)
 - ...
 ```
 
@@ -1047,6 +1151,22 @@ User provides: `/set-learn $ARGUMENTS`
 `$ARGUMENTS` is optional — a feature name or context hint. If empty, analyze the most recent build/review cycle.
 
 ## Process
+
+### 0. Resolve Serena State (Lazy Detection)
+
+Before anything else, reconcile Serena configuration. This handles users who installed Serena *after* running `/set-init`.
+
+1. Read `.claude/set/config.json` (create it as `{}` if missing).
+2. If the `serena_enabled` key is **present** (either `true` or `false`), skip the rest of this step. The user has already decided.
+3. If the key is **missing**, detect Serena:
+   ```bash
+   ls .serena/ 2>/dev/null
+   grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+   ```
+   - **Detected** → prompt the user ONCE: "Serena MCP detected. Enable semantic learning retrieval? Shards remain the source of truth; Serena provides additional recall during `/set-build`. [y/N]". Write the answer to `config.json` as `serena_enabled: true/false`. If yes, `mkdir -p .serena/memories`.
+   - **Not detected** → write `serena_enabled: false` silently. No prompt.
+
+Once set, the user can re-toggle later via `/set-update`.
 
 ### 1. Gather Context
 
@@ -1100,27 +1220,67 @@ Examine the full arc — design through review — not just the final code. Look
 - Were the acceptance criteria specific enough for QA to verify?
 - Did the review phase catch things that should have been caught earlier?
 
-### 3. Update `.claude/set/learnings.md` — Learned Patterns
+### 3. Update Sharded Learnings in `.claude/set/learnings/`
 
-Project-level dated learnings live in `.claude/set/learnings.md`, NOT in `CLAUDE.md`. This keeps `CLAUDE.md` small and fast to load while letting the learnings file grow over cycles. Every SET command that needs learnings reads this file explicitly — so sub-agents (builders, QA, reviewers) still get the benefit.
+Project-level dated learnings are sharded by domain into `.claude/set/learnings/{domain}.md` files, NOT stored in `CLAUDE.md` and NOT stored as a single monolithic `learnings.md`. Sharding keeps per-task context small — `/set-build` only loads the shards relevant to each task.
 
-**If the file does not exist**, create it with this skeleton:
+The domain taxonomy is **free-form** (project-specific) and lives in `.claude/set/taxonomy.md`.
 
-```markdown
-# SET Learned Patterns
+#### 3a: Migrate monolithic `learnings.md` if present (first-run only)
 
-Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles.
+If `.claude/set/learnings.md` exists, auto-split it:
 
-## What Works
+1. Read the full file
+2. Propose a taxonomy (5-15 domains is typical but no cap) by grouping entries by topic. Use project-specific names — `security`, `scheduling-algorithm`, `pg-drizzle`, `react-components`, etc. Not generic categories.
+3. Show the proposed taxonomy to the user:
+   > "Proposed taxonomy from existing learnings:
+   > - {domain1}: {short description}
+   > - {domain2}: {short description}
+   > ...
+   > Approve, edit, or reject."
+4. After approval, write `.claude/set/taxonomy.md` with the approved list:
+   ```markdown
+   # Learning Taxonomy
 
-## What Failed
+   Free-form domains for sharded learnings in `.claude/set/learnings/`.
 
-## Recurring Bugs
-```
+   - {domain1}: {short description}
+   - {domain2}: {short description}
+   ```
+5. For each entry in the old `learnings.md`, classify it into one or more domains (duplicate if cross-domain — see 3c).
+6. Write each classified entry to `.claude/set/learnings/{domain}.md`. Each shard file begins with frontmatter:
+   ```markdown
+   ---
+   domain: {domain}
+   description: {short description from taxonomy}
+   ---
 
-**Any pre-existing `### Learned Patterns` section in `CLAUDE.md` is left in place by design** — do not migrate automatically. Only new entries from this cycle route to `.claude/set/learnings.md`. The user can migrate or prune the old content at their leisure.
+   # {Domain} Learnings
 
-Append entries to the appropriate section in `.claude/set/learnings.md`. Each entry MUST be:
+   ## What Works
+   ## What Failed
+   ## Recurring Bugs
+   ```
+7. Delete the old `.claude/set/learnings.md`. Tell the user it was split and deleted.
+
+#### 3b: Classify new learnings against the taxonomy
+
+For each new learning from this cycle:
+
+1. Read `.claude/set/taxonomy.md`. If it's empty (no migration and no prior runs), propose an initial taxonomy from this cycle's learnings (same approval flow as 3a step 3).
+2. Match the learning against domain names + descriptions. Pick the best-fit domain(s).
+3. If the learning spans multiple domains clearly, assign it to ALL relevant domains (see 3c — duplication is expected).
+4. If NO existing domain fits, propose a new domain name + description. Ask user to approve before adding to `taxonomy.md`. No cap on total domains.
+
+#### 3c: Duplicate cross-domain learnings
+
+Learnings that apply to multiple domains are **copied into each relevant shard**, not split. A learning about "validating user input on API routes that write to the DB" goes into BOTH `api.md` and `db.md` — each agent needs the full context.
+
+#### 3d: Write to shard files
+
+Append each learning to `.claude/set/learnings/{domain}.md` under the correct section (`## What Works` / `## What Failed` / `## Recurring Bugs`). Create the file with the frontmatter header if it doesn't exist.
+
+Each entry MUST be:
 
 - **Dated**: `[YYYY-MM-DD]`
 - **Specific**: reference actual files, functions, or error messages
@@ -1138,10 +1298,33 @@ to `assign_grouped_game_groups()` and union with `time_limited_fields`. Simpler 
 [2026-03-17] Be careful with shared fields.
 ```
 
-Place entries in the correct subsection:
-- `## What Works` — reinforced patterns
-- `## What Failed` — abandoned approaches with reasons
-- `## Recurring Bugs` — errors to prevent proactively
+#### 3e: Global-importance learnings → CLAUDE.md
+
+A learning that is **cross-cutting and critical enough that every agent on every task must always apply it** goes directly into `CLAUDE.md` instead of (or in addition to) a shard. Use judgment — the bar is high. Examples that qualify:
+
+- Project-wide security rules ("NEVER log user PII")
+- Absolute conventions that would cause silent bugs if missed
+
+The vast majority of learnings do NOT meet this bar and should live in shards only. When in doubt, shard.
+
+#### 3f: Mirror to Serena (if enabled)
+
+Read `.claude/set/config.json`. If `serena_enabled: true`:
+
+For each new learning, write a Serena memory:
+- Path: `.serena/memories/{slug}.md`
+- Slug: short kebab-case derived from the learning's key concept (e.g. `shared-field-high-run-exclusion`)
+- Frontmatter:
+  ```markdown
+  ---
+  domains: [{domain1}, {domain2}]
+  date: {YYYY-MM-DD}
+  source: .claude/set/learnings/{domain1}.md
+  ---
+  ```
+- Body: the full learning text
+
+Cross-domain learnings get ONE Serena memory with multiple `domains:` tags (no duplication in Serena — Serena can match on any tag). Shards remain the source of truth; Serena is an index. If Serena write fails for any reason, log a warning and continue — do not block the run.
 
 ### 4. Update Build Commands in CLAUDE.md (if needed)
 
@@ -1201,7 +1384,7 @@ For each agent with findings, propose specific additions to its `.md` file. Upda
 
 #### 6d: Cross-agent learnings
 
-If a finding applies to ALL agents (e.g., "never modify code outside task scope"), add it to `.claude/set/learnings.md` (under the appropriate section) instead of duplicating it across every agent file. Agent-specific learnings go in the agent file; universal learnings go in `.claude/set/learnings.md`.
+If a finding applies to ALL agents (e.g., "never modify code outside task scope"), it is universal — put it in `CLAUDE.md` (see 3e) or in a `conventions` shard if one exists in the taxonomy. Do NOT duplicate it across every agent file. Agent-specific learnings go in the agent file; universal learnings go in the appropriate shard or CLAUDE.md.
 
 ### 7. Archive Plan
 
@@ -1214,8 +1397,11 @@ mv .claude/plans/{feature}.md .claude/plans/archive/{feature}.md 2>/dev/null
 ### 8. Report to User
 
 Tell the user:
-- How many new learnings were added to `.claude/set/learnings.md` (and which sections)
-- Any updates to `CLAUDE.md` (Build Commands, Architecture) — these should be rare
+- How many new learnings were added, broken down by shard (`{domain}: N entries`)
+- Any new domains proposed and added to the taxonomy
+- Whether a migration from monolithic `learnings.md` happened this run
+- Any updates to `CLAUDE.md` (Build Commands, Architecture, global-importance learnings) — these should be rare
+- Whether Serena memories were mirrored (count)
 - Which agents were updated and what was added to each
 - Any patterns that contradict previous ones (update, don't duplicate)
 - Any process insights about SET itself (task sizing, specialist routing, etc.)
@@ -1227,13 +1413,14 @@ Tell the user:
 - **Remove stale entries.** If tech was removed or a pattern was superseded, delete the old entry.
 - **Keep entries concise.** Noise degrades signal for every agent that reads the file.
 - **Contradictions**: If a new learning contradicts an old one, update the old entry with a dated note explaining the change.
-- **No automatic rotation.** Let `.claude/set/learnings.md` grow. A future `/set-compact-learnings` command will handle consolidation and archival into `.claude/set/learnings-archive/`.
+- **No automatic rotation.** Let shard files grow. A future `/set-compact-learnings` command will handle consolidation and archival into `.claude/set/learnings-archive/`.
+- **Taxonomy maintenance.** If a domain goes stale (no entries for many cycles, superseded by a new domain), the user can prune it manually from `taxonomy.md` and delete the corresponding shard. `/set-learn` does not auto-prune.
 
 ## Why This Phase Matters
 
 The learning loop is SET's core differentiator. Without it, AI coding tools treat every session as independent — repeating mistakes, missing conventions, rediscovering patterns. With it, SET accumulates institutional knowledge at two levels:
 
-- **Project level** (`.claude/set/learnings.md`) — dated patterns, failures, and recurring bugs read by `/set-plan`, `/set-build`, and `/set-review` every cycle
+- **Project level** (`.claude/set/learnings/{domain}.md` shards, optionally indexed by Serena) — dated patterns, failures, and recurring bugs. `/set-build` loads only the shards relevant to each task; `/set-plan` and `/set-review` scan the taxonomy and pull shards as needed.
 - **Agent level** (`.claude/agents/*.md`) — domain-specific lessons passed as base context when each specialist is spawned
 
 This is what makes SET compound: **the system improves itself with use — both the project knowledge and the agents themselves.**
@@ -1274,7 +1461,22 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 /plugin update compound-teams@compound-teams-marketplace
 ```
 
-### 4. Verify
+### 4. Re-check Serena MCP
+
+SET optionally mirrors learnings to Serena for semantic retrieval during `/set-build`. If Serena was installed (or removed) since the last init, update `.claude/set/config.json`.
+
+```bash
+# Detect Serena
+ls .serena/ 2>/dev/null
+grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
+```
+
+Read `.claude/set/config.json` (create it if missing). Current state:
+- Serena detected + `serena_enabled: true` → nothing to do
+- Serena detected + `serena_enabled: false/missing` → prompt: "Serena MCP detected. Enable semantic learning retrieval? [y/N]". If yes, set `serena_enabled: true` and `mkdir -p .serena/memories`.
+- Serena NOT detected + `serena_enabled: true` → warn user Serena is enabled in config but not installed. Ask whether to disable or keep waiting for reinstall.
+
+### 5. Verify
 
 After all updates complete, verify the installation:
 
@@ -1292,12 +1494,13 @@ echo "=== Agent Teams enabled ==="
 cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "NOT FOUND"
 ```
 
-### 5. Report
+### 6. Report
 
 Tell the user:
 - Which plugins were updated successfully
 - Any that failed (with suggested fix)
 - If any SET commands changed, briefly note what's new
+- Serena MCP status (enabled / disabled / not detected)
 SETEOF
 info "Installed /set-update"
 
