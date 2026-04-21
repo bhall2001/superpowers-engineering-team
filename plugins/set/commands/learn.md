@@ -68,9 +68,27 @@ Examine the full arc — design through review — not just the final code. Look
 - Were the acceptance criteria specific enough for QA to verify?
 - Did the review phase catch things that should have been caught earlier?
 
-### 3. Update CLAUDE.md — Learned Patterns
+### 3. Update `.claude/set/learnings.md` — Learned Patterns
 
-Append entries to the "Learned Patterns" sections. Each entry MUST be:
+Project-level dated learnings live in `.claude/set/learnings.md`, NOT in `CLAUDE.md`. This keeps `CLAUDE.md` small and fast to load while letting the learnings file grow over cycles. Every SET command that needs learnings reads this file explicitly — so sub-agents (builders, QA, reviewers) still get the benefit.
+
+**If the file does not exist**, create it with this skeleton:
+
+```markdown
+# SET Learned Patterns
+
+Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles.
+
+## What Works
+
+## What Failed
+
+## Recurring Bugs
+```
+
+**Any pre-existing `### Learned Patterns` section in `CLAUDE.md` is left in place by design** — do not migrate automatically. Only new entries from this cycle route to `.claude/set/learnings.md`. The user can migrate or prune the old content at their leisure.
+
+Append entries to the appropriate section in `.claude/set/learnings.md`. Each entry MUST be:
 
 - **Dated**: `[YYYY-MM-DD]`
 - **Specific**: reference actual files, functions, or error messages
@@ -89,17 +107,17 @@ to `assign_grouped_game_groups()` and union with `time_limited_fields`. Simpler 
 ```
 
 Place entries in the correct subsection:
-- `#### What Works` — reinforced patterns
-- `#### What Failed` — abandoned approaches with reasons
-- `#### Recurring Bugs` — errors to prevent proactively
+- `## What Works` — reinforced patterns
+- `## What Failed` — abandoned approaches with reasons
+- `## Recurring Bugs` — errors to prevent proactively
 
-### 4. Update Build Commands (if needed)
+### 4. Update Build Commands in CLAUDE.md (if needed)
 
-If the test/lint/typecheck commands changed or new ones were discovered, update the "Build Commands" section.
+If the test/lint/typecheck commands changed or new ones were discovered, update the "Build Commands" section in `CLAUDE.md`. These are structural facts, not accumulating history, so they stay in `CLAUDE.md`.
 
-### 5. Update Architecture (if needed)
+### 5. Update Architecture in CLAUDE.md (if needed)
 
-If the project structure changed (new directories, new major modules), update accordingly.
+If the project structure changed (new directories, new major modules), update `CLAUDE.md` accordingly. Structural, not accumulating — stays in `CLAUDE.md`.
 
 ### 6. Evolve Agents
 
@@ -151,7 +169,7 @@ For each agent with findings, propose specific additions to its `.md` file. Upda
 
 #### 6d: Cross-agent learnings
 
-If a finding applies to ALL agents (e.g., "never modify code outside task scope"), add it to the Ralph Loop section in CLAUDE.md instead of duplicating it across every agent file. Agent-specific learnings go in the agent file; universal learnings go in CLAUDE.md.
+If a finding applies to ALL agents (e.g., "never modify code outside task scope"), add it to `.claude/set/learnings.md` (under the appropriate section) instead of duplicating it across every agent file. Agent-specific learnings go in the agent file; universal learnings go in `.claude/set/learnings.md`.
 
 ### 7. Archive Plan
 
@@ -164,7 +182,8 @@ mv .claude/plans/{feature}.md .claude/plans/archive/{feature}.md 2>/dev/null
 ### 8. Report to User
 
 Tell the user:
-- How many new learnings were added to CLAUDE.md (and which sections)
+- How many new learnings were added to `.claude/set/learnings.md` (and which sections)
+- Any updates to `CLAUDE.md` (Build Commands, Architecture) — these should be rare
 - Which agents were updated and what was added to each
 - Any patterns that contradict previous ones (update, don't duplicate)
 - Any process insights about SET itself (task sizing, specialist routing, etc.)
@@ -174,15 +193,15 @@ Tell the user:
 
 - **Don't duplicate entries.** Search existing learnings first — update if the learning evolved.
 - **Remove stale entries.** If tech was removed or a pattern was superseded, delete the old entry.
-- **Keep entries concise.** CLAUDE.md is read every session — noise degrades signal.
-- **If CLAUDE.md exceeds ~500 lines**, suggest splitting into topic files that CLAUDE.md references.
+- **Keep entries concise.** Noise degrades signal for every agent that reads the file.
 - **Contradictions**: If a new learning contradicts an old one, update the old entry with a dated note explaining the change.
+- **No automatic rotation.** Let `.claude/set/learnings.md` grow. A future `/set-compact-learnings` command will handle consolidation and archival into `.claude/set/learnings-archive/`.
 
 ## Why This Phase Matters
 
 The learning loop is SET's core differentiator. Without it, AI coding tools treat every session as independent — repeating mistakes, missing conventions, rediscovering patterns. With it, SET accumulates institutional knowledge at two levels:
 
-- **Project level** (CLAUDE.md) — patterns, failures, and recurring bugs that any agent benefits from
-- **Agent level** (.claude/agents/*.md) — domain-specific lessons that make each specialist smarter at its job
+- **Project level** (`.claude/set/learnings.md`) — dated patterns, failures, and recurring bugs read by `/set-plan`, `/set-build`, and `/set-review` every cycle
+- **Agent level** (`.claude/agents/*.md`) — domain-specific lessons passed as base context when each specialist is spawned
 
 This is what makes SET compound: **the system improves itself with use — both the project knowledge and the agents themselves.**

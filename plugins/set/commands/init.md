@@ -137,14 +137,7 @@ This project uses the Superpowers Engineering Team workflow:
 <!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
 - [List agents created in Step 6]
 
-### Learned Patterns
-<!-- Grows via /set-learn — each entry is dated and actionable -->
-
-#### What Works
-
-#### What Failed
-
-#### Recurring Bugs
+<!-- Dated, accumulating learnings live in .claude/set/learnings.md (not here). Keeps CLAUDE.md small and fast to load. Every SET command reads the learnings file explicitly. -->
 ```
 
 Replace `[DETECTED_*]` placeholders with actual commands from Step 4.
@@ -204,7 +197,7 @@ sonnet
 ```
 
 **Important:**
-- Read CLAUDE.md and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
+- Read CLAUDE.md, `.claude/set/learnings.md` (if it exists), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
 - If an agent for this domain already exists, do NOT overwrite it. Report that it's already covered.
 - Show the user each agent file before writing. Get confirmation.
 
@@ -212,11 +205,27 @@ sonnet
 
 After scaffolding, tell the user: "These are starter agents based on your detected stack. Review and customize them — the more project-specific knowledge you add, the better SET routes tasks and the higher quality the output."
 
-## Step 7: Create Directory Structure
+## Step 7: Create Directory Structure and Learnings File
 
 ```bash
 mkdir -p .claude/plans/archive
+mkdir -p .claude/set
+mkdir -p .claude/set/learnings-archive
 mkdir -p docs/superpowers/specs
+```
+
+Create `.claude/set/learnings.md` if it does not already exist (NEVER overwrite):
+
+```markdown
+# SET Learned Patterns
+
+Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles. Grows via `/set-learn`.
+
+## What Works
+
+## What Failed
+
+## Recurring Bugs
 ```
 
 ## Step 8: Summary
@@ -242,16 +251,20 @@ Domain specialists scaffolded:
   .claude/agents/architect.md           — [if created]
 
 Directories created:
-  .claude/plans/          — Implementation plans
-  .claude/plans/archive/  — Completed plans
-  docs/superpowers/specs/ — Design specifications
+  .claude/plans/                  — Implementation plans
+  .claude/plans/archive/          — Completed plans
+  .claude/set/                    — SET state (learnings, future compaction)
+  .claude/set/learnings-archive/  — Archived/compacted learnings
+  docs/superpowers/specs/         — Design specifications
+
+Files created:
+  .claude/set/learnings.md        — Accumulated dated learnings (read by /set-plan, /set-build, /set-review)
 
 CLAUDE.md augmented with:
   - SET pipeline reference
   - Ralph Loop (TDD variant)
   - Build commands
   - Domain specialists list
-  - Learned Patterns sections
 
 Next step: /set-design <your feature idea>
 ```

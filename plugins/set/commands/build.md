@@ -10,7 +10,7 @@ You are the team lead. Execute a plan using Compound Teams' Agent Team infrastru
 
 1. Look for a plan in `.claude/plans/`. If none exists, tell the user to run `/set-plan` first.
 2. Read the plan thoroughly. Also read the linked design spec if referenced.
-3. Read CLAUDE.md — especially Build Commands, conventions, and learned patterns.
+3. Read CLAUDE.md — especially Build Commands and conventions. Also read `.claude/set/learnings.md` if it exists — accumulated patterns from prior cycles.
 4. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
 5. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
 
@@ -160,7 +160,7 @@ WORKFLOW — TDD RALPH LOOP:
 1. Run TaskList() — find a pending, unblocked task with no owner
 2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
 3. Start it: TaskUpdate({ taskId, status: "in_progress" })
-4. Read CLAUDE.md for conventions and patterns before coding
+4. Read CLAUDE.md for conventions. Read `.claude/set/learnings.md` (if present) for accumulated patterns — prior "What Works", "What Failed", and "Recurring Bugs". Apply what's relevant before coding.
 
 5. WRITE FAILING TESTS FIRST (TDD Red Phase):
    - Follow the "TDD Steps" section in the task description
@@ -185,7 +185,7 @@ WORKFLOW — TDD RALPH LOOP:
     - Did I implement exactly what was specified? Nothing missing?
     - Did I add anything beyond what was specified? Remove it if so.
     - Do my tests cover the happy path AND at least one edge case?
-    - Does my code follow the project conventions from CLAUDE.md?
+    - Does my code follow the project conventions from CLAUDE.md and accumulated patterns in `.claude/set/learnings.md`?
     - Any hardcoded values, missing validation, or security issues?
 
     If ANY check fails: fix it, rerun tests, re-check.
@@ -211,6 +211,10 @@ You are QA on team "{feature-name}".
 
 You perform TWO review stages on each completed task — spec compliance first, then code quality. Both must pass.
 
+READ FIRST (once, at start of shift):
+- CLAUDE.md — conventions and build commands
+- `.claude/set/learnings.md` (if it exists) — accumulated patterns and recurring bugs to check for
+
 WORKFLOW:
 1. Monitor TaskList() — wait for builder tasks to reach "completed"
 2. For each completed task:
@@ -234,7 +238,7 @@ WORKFLOW:
    g. Review code quality:
       - Test quality: do tests actually verify behavior, or are they trivial/tautological?
       - Edge cases: null inputs, empty states, boundary values, error paths
-      - Architecture: does the code follow project patterns from CLAUDE.md?
+      - Architecture: does the code follow project patterns from CLAUDE.md and `.claude/set/learnings.md`?
       - Security: injection, XSS, hardcoded secrets, missing validation
       - DRY: any duplicated logic that should use existing utilities?
    h. If quality issues found:

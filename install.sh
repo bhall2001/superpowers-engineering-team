@@ -287,14 +287,7 @@ This project uses the Superpowers Engineering Team workflow:
 <!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
 - [List agents created in Step 6]
 
-### Learned Patterns
-<!-- Grows via /set-learn — each entry is dated and actionable -->
-
-#### What Works
-
-#### What Failed
-
-#### Recurring Bugs
+<!-- Dated, accumulating learnings live in .claude/set/learnings.md (not here). Keeps CLAUDE.md small and fast to load. Every SET command reads the learnings file explicitly. -->
 ```
 
 Replace `[DETECTED_*]` placeholders with actual commands from Step 4.
@@ -354,7 +347,7 @@ sonnet
 ```
 
 **Important:**
-- Read CLAUDE.md and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
+- Read CLAUDE.md, `.claude/set/learnings.md` (if it exists), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
 - If an agent for this domain already exists, do NOT overwrite it. Report that it's already covered.
 - Show the user each agent file before writing. Get confirmation.
 
@@ -362,11 +355,27 @@ sonnet
 
 After scaffolding, tell the user: "These are starter agents based on your detected stack. Review and customize them — the more project-specific knowledge you add, the better SET routes tasks and the higher quality the output."
 
-## Step 7: Create Directory Structure
+## Step 7: Create Directory Structure and Learnings File
 
 ```bash
 mkdir -p .claude/plans/archive
+mkdir -p .claude/set
+mkdir -p .claude/set/learnings-archive
 mkdir -p docs/superpowers/specs
+```
+
+Create `.claude/set/learnings.md` if it does not already exist (NEVER overwrite):
+
+```markdown
+# SET Learned Patterns
+
+Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles. Grows via `/set-learn`.
+
+## What Works
+
+## What Failed
+
+## Recurring Bugs
 ```
 
 ## Step 8: Summary
@@ -392,16 +401,20 @@ Domain specialists scaffolded:
   .claude/agents/architect.md           — [if created]
 
 Directories created:
-  .claude/plans/          — Implementation plans
-  .claude/plans/archive/  — Completed plans
-  docs/superpowers/specs/ — Design specifications
+  .claude/plans/                  — Implementation plans
+  .claude/plans/archive/          — Completed plans
+  .claude/set/                    — SET state (learnings, future compaction)
+  .claude/set/learnings-archive/  — Archived/compacted learnings
+  docs/superpowers/specs/         — Design specifications
+
+Files created:
+  .claude/set/learnings.md        — Accumulated dated learnings (read by /set-plan, /set-build, /set-review)
 
 CLAUDE.md augmented with:
   - SET pipeline reference
   - Ralph Loop (TDD variant)
   - Build commands
   - Domain specialists list
-  - Learned Patterns sections
 
 Next step: /set-design <your feature idea>
 ```
@@ -485,7 +498,8 @@ Read the Superpowers design spec. If none exists, tell the user to run `/set-des
 
 ### 2. Research the Codebase
 
-- Read CLAUDE.md for conventions, build commands, and learned patterns
+- Read CLAUDE.md for conventions and build commands
+- Read `.claude/set/learnings.md` (if it exists) for accumulated "What Works", "What Failed", and "Recurring Bugs" — factor these into task decomposition and approach choice
 - Explore directory structure and find related code
 - Identify utilities, patterns, and abstractions to reuse
 - Check git log for recent changes in relevant areas
@@ -531,7 +545,7 @@ High-level strategy. Why this over alternatives.
 - [ ] All acceptance criteria met — nothing missing
 - [ ] No extra features beyond what was specified
 - [ ] Tests cover happy path AND edge cases
-- [ ] Follows project conventions from CLAUDE.md
+- [ ] Follows project conventions from CLAUDE.md and `.claude/set/learnings.md`
 - [ ] No hardcoded values, missing validation, or security issues
 
 ### Task 2: {name}
@@ -588,7 +602,7 @@ You are the team lead. Execute a plan using Compound Teams' Agent Team infrastru
 
 1. Look for a plan in `.claude/plans/`. If none exists, tell the user to run `/set-plan` first.
 2. Read the plan thoroughly. Also read the linked design spec if referenced.
-3. Read CLAUDE.md — especially Build Commands, conventions, and learned patterns.
+3. Read CLAUDE.md — especially Build Commands and conventions. Also read `.claude/set/learnings.md` if it exists — accumulated patterns from prior cycles.
 4. **Scan for project agents** in `.claude/agents/`. Read each agent file to understand what domain it specializes in (e.g., database, UI, API/sync, QA, architecture). You'll use these to assign the right specialist to each task.
 5. Switch to **delegate mode** (Shift+Tab). You coordinate. You do NOT write code.
 
@@ -738,7 +752,7 @@ WORKFLOW — TDD RALPH LOOP:
 1. Run TaskList() — find a pending, unblocked task with no owner
 2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
 3. Start it: TaskUpdate({ taskId, status: "in_progress" })
-4. Read CLAUDE.md for conventions and patterns before coding
+4. Read CLAUDE.md for conventions. Read `.claude/set/learnings.md` (if present) for accumulated patterns — prior "What Works", "What Failed", and "Recurring Bugs". Apply what's relevant before coding.
 
 5. WRITE FAILING TESTS FIRST (TDD Red Phase):
    - Follow the "TDD Steps" section in the task description
@@ -763,7 +777,7 @@ WORKFLOW — TDD RALPH LOOP:
     - Did I implement exactly what was specified? Nothing missing?
     - Did I add anything beyond what was specified? Remove it if so.
     - Do my tests cover the happy path AND at least one edge case?
-    - Does my code follow the project conventions from CLAUDE.md?
+    - Does my code follow the project conventions from CLAUDE.md and accumulated patterns in `.claude/set/learnings.md`?
     - Any hardcoded values, missing validation, or security issues?
 
     If ANY check fails: fix it, rerun tests, re-check.
@@ -789,6 +803,10 @@ You are QA on team "{feature-name}".
 
 You perform TWO review stages on each completed task — spec compliance first, then code quality. Both must pass.
 
+READ FIRST (once, at start of shift):
+- CLAUDE.md — conventions and build commands
+- `.claude/set/learnings.md` (if it exists) — accumulated patterns and recurring bugs to check for
+
 WORKFLOW:
 1. Monitor TaskList() — wait for builder tasks to reach "completed"
 2. For each completed task:
@@ -812,7 +830,7 @@ WORKFLOW:
    g. Review code quality:
       - Test quality: do tests actually verify behavior, or are they trivial/tautological?
       - Edge cases: null inputs, empty states, boundary values, error paths
-      - Architecture: does the code follow project patterns from CLAUDE.md?
+      - Architecture: does the code follow project patterns from CLAUDE.md and `.claude/set/learnings.md`?
       - Security: injection, XSS, hardcoded secrets, missing validation
       - DRY: any duplicated logic that should use existing utilities?
    h. If quality issues found:
@@ -910,6 +928,7 @@ Review the git diff (main...HEAD) against the design spec and implementation pla
 READ FIRST:
 - Design spec: {path to spec in docs/superpowers/specs/}
 - Implementation plan: {path to plan in .claude/plans/}
+- `.claude/set/learnings.md` (if it exists) — prior patterns and failures that may indicate risk areas
 
 VERIFY:
 - Every requirement in the design spec has been implemented
@@ -931,6 +950,8 @@ Message team-lead with findings.
 ```
 Review the git diff (main...HEAD) for security issues.
 
+READ FIRST: `.claude/set/learnings.md` if it exists — check "Recurring Bugs" for any security-related patterns previously documented.
+
 CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth patterns, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal.
 
 Message team-lead with findings: file, line, severity (critical/high/medium/low), suggested fix.
@@ -940,7 +961,7 @@ If nothing found, confirm the changes look secure.
 ### Architecture Reviewer Prompt:
 
 ```
-Review the git diff (main...HEAD) for architectural quality. Read CLAUDE.md first for project conventions.
+Review the git diff (main...HEAD) for architectural quality. Read CLAUDE.md first for project conventions, and `.claude/set/learnings.md` (if it exists) for accumulated "What Works" / "What Failed" patterns.
 
 CHECK: Pattern consistency, separation of concerns, SOLID violations, DRY without over-abstraction, dependency direction, testability, performance at scale, error handling consistency.
 
@@ -952,6 +973,8 @@ Also note things done WELL — good patterns worth documenting.
 
 ```
 Review the git diff (main...HEAD) for correctness. Also run the test suite.
+
+READ FIRST: `.claude/set/learnings.md` if it exists — "Recurring Bugs" lists prior error patterns worth verifying against.
 
 CHECK: Test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup (connections closed, listeners removed).
 
@@ -977,7 +1000,7 @@ Collect all findings. Present unified review:
 ### Suggestions (nice to have)
 - ...
 
-### Good Patterns (add to CLAUDE.md via /set-learn)
+### Good Patterns (add to `.claude/set/learnings.md` via /set-learn)
 - ...
 ```
 
@@ -1077,9 +1100,27 @@ Examine the full arc — design through review — not just the final code. Look
 - Were the acceptance criteria specific enough for QA to verify?
 - Did the review phase catch things that should have been caught earlier?
 
-### 3. Update CLAUDE.md — Learned Patterns
+### 3. Update `.claude/set/learnings.md` — Learned Patterns
 
-Append entries to the "Learned Patterns" sections. Each entry MUST be:
+Project-level dated learnings live in `.claude/set/learnings.md`, NOT in `CLAUDE.md`. This keeps `CLAUDE.md` small and fast to load while letting the learnings file grow over cycles. Every SET command that needs learnings reads this file explicitly — so sub-agents (builders, QA, reviewers) still get the benefit.
+
+**If the file does not exist**, create it with this skeleton:
+
+```markdown
+# SET Learned Patterns
+
+Dated, actionable learnings accumulated across SET cycles. Read by `/set-plan`, `/set-build`, and `/set-review` so each cycle benefits from prior cycles.
+
+## What Works
+
+## What Failed
+
+## Recurring Bugs
+```
+
+**Any pre-existing `### Learned Patterns` section in `CLAUDE.md` is left in place by design** — do not migrate automatically. Only new entries from this cycle route to `.claude/set/learnings.md`. The user can migrate or prune the old content at their leisure.
+
+Append entries to the appropriate section in `.claude/set/learnings.md`. Each entry MUST be:
 
 - **Dated**: `[YYYY-MM-DD]`
 - **Specific**: reference actual files, functions, or error messages
@@ -1098,17 +1139,17 @@ to `assign_grouped_game_groups()` and union with `time_limited_fields`. Simpler 
 ```
 
 Place entries in the correct subsection:
-- `#### What Works` — reinforced patterns
-- `#### What Failed` — abandoned approaches with reasons
-- `#### Recurring Bugs` — errors to prevent proactively
+- `## What Works` — reinforced patterns
+- `## What Failed` — abandoned approaches with reasons
+- `## Recurring Bugs` — errors to prevent proactively
 
-### 4. Update Build Commands (if needed)
+### 4. Update Build Commands in CLAUDE.md (if needed)
 
-If the test/lint/typecheck commands changed or new ones were discovered, update the "Build Commands" section.
+If the test/lint/typecheck commands changed or new ones were discovered, update the "Build Commands" section in `CLAUDE.md`. These are structural facts, not accumulating history, so they stay in `CLAUDE.md`.
 
-### 5. Update Architecture (if needed)
+### 5. Update Architecture in CLAUDE.md (if needed)
 
-If the project structure changed (new directories, new major modules), update accordingly.
+If the project structure changed (new directories, new major modules), update `CLAUDE.md` accordingly. Structural, not accumulating — stays in `CLAUDE.md`.
 
 ### 6. Evolve Agents
 
@@ -1160,7 +1201,7 @@ For each agent with findings, propose specific additions to its `.md` file. Upda
 
 #### 6d: Cross-agent learnings
 
-If a finding applies to ALL agents (e.g., "never modify code outside task scope"), add it to the Ralph Loop section in CLAUDE.md instead of duplicating it across every agent file. Agent-specific learnings go in the agent file; universal learnings go in CLAUDE.md.
+If a finding applies to ALL agents (e.g., "never modify code outside task scope"), add it to `.claude/set/learnings.md` (under the appropriate section) instead of duplicating it across every agent file. Agent-specific learnings go in the agent file; universal learnings go in `.claude/set/learnings.md`.
 
 ### 7. Archive Plan
 
@@ -1173,7 +1214,8 @@ mv .claude/plans/{feature}.md .claude/plans/archive/{feature}.md 2>/dev/null
 ### 8. Report to User
 
 Tell the user:
-- How many new learnings were added to CLAUDE.md (and which sections)
+- How many new learnings were added to `.claude/set/learnings.md` (and which sections)
+- Any updates to `CLAUDE.md` (Build Commands, Architecture) — these should be rare
 - Which agents were updated and what was added to each
 - Any patterns that contradict previous ones (update, don't duplicate)
 - Any process insights about SET itself (task sizing, specialist routing, etc.)
@@ -1183,16 +1225,16 @@ Tell the user:
 
 - **Don't duplicate entries.** Search existing learnings first — update if the learning evolved.
 - **Remove stale entries.** If tech was removed or a pattern was superseded, delete the old entry.
-- **Keep entries concise.** CLAUDE.md is read every session — noise degrades signal.
-- **If CLAUDE.md exceeds ~500 lines**, suggest splitting into topic files that CLAUDE.md references.
+- **Keep entries concise.** Noise degrades signal for every agent that reads the file.
 - **Contradictions**: If a new learning contradicts an old one, update the old entry with a dated note explaining the change.
+- **No automatic rotation.** Let `.claude/set/learnings.md` grow. A future `/set-compact-learnings` command will handle consolidation and archival into `.claude/set/learnings-archive/`.
 
 ## Why This Phase Matters
 
 The learning loop is SET's core differentiator. Without it, AI coding tools treat every session as independent — repeating mistakes, missing conventions, rediscovering patterns. With it, SET accumulates institutional knowledge at two levels:
 
-- **Project level** (CLAUDE.md) — patterns, failures, and recurring bugs that any agent benefits from
-- **Agent level** (.claude/agents/*.md) — domain-specific lessons that make each specialist smarter at its job
+- **Project level** (`.claude/set/learnings.md`) — dated patterns, failures, and recurring bugs read by `/set-plan`, `/set-build`, and `/set-review` every cycle
+- **Agent level** (`.claude/agents/*.md`) — domain-specific lessons passed as base context when each specialist is spawned
 
 This is what makes SET compound: **the system improves itself with use — both the project knowledge and the agents themselves.**
 SETEOF
