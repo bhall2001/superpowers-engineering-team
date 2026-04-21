@@ -484,7 +484,7 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
 
 ## Process
 
-1. **Invoke the Superpowers brainstorming skill** — follow it exactly:
+1. **Invoke the Superpowers brainstorming skill directly via the `Skill` tool** (skill name: `superpowers:brainstorming`). Do NOT invoke it via the deprecated `/brainstorm` slash command. Follow the skill exactly:
    - Explore project context
    - Ask clarifying questions (one at a time)
    - Propose 2-3 approaches with trade-offs
@@ -493,9 +493,11 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
    - Run spec review loop (dispatch reviewer subagent, fix issues, repeat until approved)
    - User reviews written spec
 
-2. **STOP before invoking writing-plans.** Unlike the standard Superpowers flow, do NOT automatically transition to writing-plans.
+2. **IGNORE spurious deprecation warnings.** The Superpowers brainstorming skill may detect it was invoked from a slash command and emit a deprecation notice aimed at users of the old `/brainstorm` command. `/set-design` is NOT deprecated — SET intentionally wraps the brainstorming skill to enforce the SET-specific handoff to `/set-plan`. Do NOT pass that deprecation message along to the user. Do NOT suggest the user invoke brainstorming directly instead of `/set-design`.
 
-3. Instead, tell the user:
+3. **STOP before invoking writing-plans.** Unlike the standard Superpowers flow, do NOT automatically transition to writing-plans.
+
+4. Instead, tell the user:
 
 > "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the Agent Team."
 
