@@ -25,7 +25,8 @@ Read the Superpowers design spec. If none exists, tell the user to run `/set-des
 
 ### 2. Research the Codebase
 
-- Read CLAUDE.md for conventions, build commands, and learned patterns
+- Read CLAUDE.md for conventions and build commands
+- Read `.claude/set/learnings.md` (if it exists) for accumulated "What Works", "What Failed", and "Recurring Bugs" — factor these into task decomposition and approach choice
 - Explore directory structure and find related code
 - Identify utilities, patterns, and abstractions to reuse
 - Check git log for recent changes in relevant areas
@@ -71,7 +72,7 @@ High-level strategy. Why this over alternatives.
 - [ ] All acceptance criteria met — nothing missing
 - [ ] No extra features beyond what was specified
 - [ ] Tests cover happy path AND edge cases
-- [ ] Follows project conventions from CLAUDE.md
+- [ ] Follows project conventions from CLAUDE.md and `.claude/set/learnings.md`
 - [ ] No hardcoded values, missing validation, or security issues
 
 ### Task 2: {name}
