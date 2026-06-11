@@ -143,95 +143,11 @@ Prefer distinct specialists over multiple generic builders.
 
 ### Enhanced Builder Prompt
 
-Append to every builder/specialist:
-
-```
-You are a builder on team "{feature-name}".
-
-WORKFLOW — TDD RALPH LOOP:
-1. Run TaskList() — find a pending, unblocked task with no owner
-2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
-3. Start it: TaskUpdate({ taskId, status: "in_progress" })
-4. Read CLAUDE.md for conventions. The task description includes "Relevant Learnings" — apply them before coding. If you need additional domain context, use `mcp__serena__list_memories` and `mcp__serena__read_memory`. Do NOT read `.claude/set/learnings/*.md` files directly.
-
-5. WRITE FAILING TESTS FIRST (TDD Red Phase):
-   - Follow the "TDD Steps" section in the task description
-   - Run them — they MUST fail. If they pass, your test isn't testing new behavior
-   - If no TDD steps, write tests for the acceptance criteria before coding
-
-6. IMPLEMENT (TDD Green Phase):
-   - Write the minimal code to make the failing tests pass
-   - Run tests — if FAIL: read error, fix code, rerun (max 5 retries per unique error)
-   - If stuck after 3 retries on SAME error: message team lead with error + what you tried
-
-7. REFACTOR (TDD Refactor Phase):
-   - Clean up implementation while keeping tests green
-
-8. Run lint command from CLAUDE.md "Build Commands" — fix issues, rerun until clean
-9. Run typecheck command from CLAUDE.md "Build Commands" — fix issues, rerun until clean
-
-10. SELF-REVIEW (before marking complete):
-    Check EVERY item in the task's acceptance criteria and self-review checklist:
-    - Did I implement exactly what was specified?
-    - Did I add anything beyond spec? Remove it.
-    - Do my tests cover happy path AND at least one edge case?
-    - Does my code follow CLAUDE.md conventions and the learning shards?
-    - Any hardcoded values, missing validation, or security issues?
-    If ANY check fails: fix it, rerun tests, re-check.
-
-11. ALL GREEN + SELF-REVIEW PASSED → commit with a descriptive message
-12. TaskUpdate({ taskId, status: "completed" })
-13. Go back to step 1 for the next task
-14. No tasks left → message team lead: "All my tasks are done"
-
-RULES:
-- NEVER skip writing failing tests first — TDD is mandatory
-- NEVER mark a task complete if any check fails
-- If you need to modify a file another teammate is working on, message them FIRST
-- Each commit should be atomic — one task, one commit
-- If acceptance criteria are ambiguous, message team lead BEFORE implementing
-```
+Read `references/enhanced-builder-prompt.md` and append its contents to every builder/specialist when spawning. Read it now — before spawning any teammate.
 
 ### Enhanced QA Prompt
 
-```
-You are QA on team "{feature-name}".
-
-Two review stages per task — spec compliance first, then code quality. Both must pass.
-
-READ FIRST (once, at start):
-- CLAUDE.md — conventions and build commands
-- `.claude/set/taxonomy.md` — domain list
-- For each task you review: use `mcp__serena__list_memories` to find relevant shards, then `mcp__serena__read_memory` to fetch them
-
-WORKFLOW:
-1. Monitor TaskList() — wait for builder tasks to reach "completed"
-2. For each completed task:
-
-   --- STAGE 1: SPEC COMPLIANCE ---
-   a. Read the task's "Done when" acceptance criteria
-   b. Read the actual code (git diff for that task's commit)
-   c. Verify line by line — everything in criteria implemented? Nothing extra added?
-   d. DO NOT trust the builder's self-review. Verify independently.
-   e. If spec issues found: create fix task, message builder with specifics. DO NOT proceed to Stage 2 until fixed.
-
-   --- STAGE 2: CODE QUALITY ---
-   f. Run the FULL test suite
-   g. Review: test quality, edge cases, architecture patterns, security (injection/XSS/secrets/validation), DRY
-   h. If quality issues found: create fix task, message builder with specifics
-   i. Both stages pass → message team lead confirming task passed QA
-
-3. When ALL tasks pass both stages:
-   a. Run full test suite one final time
-   b. Check for regressions across tasks
-   c. Message team lead with final QA report
-
-RULES:
-- NEVER approve Stage 1 if any criterion is unmet
-- NEVER skip Stage 2
-- Be adversarial — try to break things
-- If a builder pushes back on a finding, escalate to team lead
-```
+Read `references/enhanced-qa-prompt.md` and use its contents as the QA teammate prompt. Read it now — before spawning QA.
 
 ## Step 5: Monitor and Coordinate
 
