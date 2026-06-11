@@ -42,3 +42,13 @@ Requires env var `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` for Agent Teams suppor
 ## When Editing Commands
 
 Each command in `plugins/set/commands/` is a self-contained prompt spec. Changes to one command's output format may affect downstream commands in the pipeline (e.g., `/set-plan` output feeds `/set-build`). Verify pipeline compatibility when modifying inter-command contracts.
+
+## SET Shared Definitions
+
+**Shard format:** `.claude/set/learnings/{domain}.md` — frontmatter with `domain:` + `description:`, then `## What Works` / `## What Failed` / `## Recurring Bugs` sections. Each entry dated `[YYYY-MM-DD]`.
+
+**Taxonomy:** `.claude/set/taxonomy.md` — one line per domain: `- name: short description`. Free-form, project-specific names.
+
+**Serena memories:** Runtime index of shard entries. Slugs are kebab-case key concepts. Frontmatter includes `domains:`, `date:`, `source:` fields. Written/read via `mcp__serena__*` tools. Shards are the source of truth; Serena is the index.
+
+**Serena requirement:** Serena MCP is a hard dependency. `install.sh` installs it. `/set-init` verifies it at project init time.
