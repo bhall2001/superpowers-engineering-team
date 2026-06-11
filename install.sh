@@ -70,6 +70,41 @@ if ! command -v jq &> /dev/null; then
 fi
 info "jq found: $(which jq)"
 
+# Check for uv (required for Serena)
+if ! command -v uv &> /dev/null; then
+  error "uv is required to install Serena."
+  error "Install it from https://docs.astral.sh/uv/ then re-run install.sh"
+  exit 1
+fi
+info "uv found: $(which uv)"
+
+# Install Serena MCP server
+bold ""
+bold "Step 0: Installing Serena MCP"
+bold "-----------------------------"
+if command -v serena &> /dev/null; then
+  info "Serena already installed: $(which serena)"
+else
+  info "Installing serena-agent via uv..."
+  if uv tool install serena-agent; then
+    info "Serena installed"
+  else
+    error "Failed to install serena-agent. Ensure Python 3.11+ is available and retry."
+    exit 1
+  fi
+fi
+
+# Write Serena MCP entry to ~/.claude/settings.json
+SERENA_BIN="$(command -v serena)"
+if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null 2>&1; then
+  info "Serena already configured in settings.json"
+else
+  jq --arg bin "$SERENA_BIN" \
+    '.mcpServers.serena = {"command": $bin, "args": ["start-mcp-server", "--context=claude-code"]}' \
+    "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  info "Serena written to $SETTINGS_FILE"
+fi
+
 # Ensure .claude directory exists
 mkdir -p "$CLAUDE_DIR"
 mkdir -p "$COMMANDS_DIR"
@@ -1537,6 +1572,13 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
+  info "Serena MCP: configured"
+else
+  error "Serena MCP: not configured in settings.json"
+  ERRORS=$((ERRORS + 1))
+fi
+
 # Check commands
 for cmd in set-init set-design set-plan set-build set-review set-learn set-update; do
   if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
@@ -1569,5 +1611,6 @@ warn "above did not succeed. In Claude Code, run:"
 warn "  /plugin install superpowers@claude-plugins-official"
 warn "  /plugin install compound-teams@compound-teams-marketplace"
 echo ""
+info "  Serena MCP:    ✓ installed and configured"
 info "To initialize a project, open it in Claude Code and run: /set-init"
 echo ""
