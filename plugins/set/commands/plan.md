@@ -1,5 +1,5 @@
 ---
-description: "Create a parallel-execution plan from a Superpowers design spec. Reformats for Agent Team builders with self-review loops. Second step: /set-design → /set-plan → /set-build → /set-review → /set-learn"
+description: "Converts an approved design spec into a parallel-execution implementation plan with TDD steps, specialist routing, and shard tagging for Agent Team builders. Use after /set-design produces a spec, when a user says 'create a plan', 'plan this out', or 'ready to plan'. Do NOT use before a design spec exists or when the user wants to jump straight to building."
 ---
 
 # SET Plan — Bridge Superpowers Design to Agent Team Plan

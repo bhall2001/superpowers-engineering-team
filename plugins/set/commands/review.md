@@ -1,5 +1,5 @@
 ---
-description: "Final holistic review combining Compound Teams multi-perspective review with Superpowers spec compliance. Fourth step: /set-design → /set-plan → /set-build → /set-review → /set-learn"
+description: "Runs a four-perspective review (spec compliance, security, architecture, correctness) on the current build using parallel reviewer agents. Use after /set-build completes, when a user says 'review the code', 'run a review', 'check the build', or 'ready for review'. Do NOT use mid-build or as a substitute for the builder's own self-review checklist."
 ---
 
 # SET Review — Multi-Perspective + Spec Compliance Review

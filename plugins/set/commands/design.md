@@ -1,5 +1,5 @@
 ---
-description: "Brainstorm and design a feature using Superpowers' collaborative design process. First step of the SET workflow: /set-design → /set-plan → /set-build → /set-review → /set-learn"
+description: "Brainstorms and produces a human-approved design spec for a new feature or change using the Superpowers collaborative design process. Use when a user says 'design a feature', 'let's brainstorm', 'I want to build X', or 'start a SET cycle'. Always the first step before /set-plan. Do NOT use when a design spec already exists and the user wants to move to planning or implementation."
 ---
 
 # SET Design — Superpowers Brainstorming + Design

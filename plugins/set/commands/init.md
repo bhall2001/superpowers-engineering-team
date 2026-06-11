@@ -1,5 +1,5 @@
 ---
-description: "Initialize a project for the SET workflow. Detects stack, scaffolds agents, augments CLAUDE.md, creates directories. Run once per project before /set-design."
+description: "Sets up a project for the SET workflow: detects stack, scaffolds domain specialist agents, augments CLAUDE.md, and creates required directories. Use when starting SET on a new project, when a user says 'initialize SET', 'set up SET', or 'prepare this project for SET'. Do NOT use when SET is already initialized in this project or when the user just wants to run a design/plan/build cycle."
 ---
 
 # SET Init — Project Initialization

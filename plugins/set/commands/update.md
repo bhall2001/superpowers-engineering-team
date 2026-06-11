@@ -1,5 +1,5 @@
 ---
-description: "Update SET and all its dependencies (Superpowers, Compound Teams) to the latest versions. Run periodically to get improvements and bug fixes."
+description: "Updates SET commands, Superpowers, Compound Teams, and Serena to their latest versions by re-running install.sh and plugin update commands. Use when a user says 'update SET', 'upgrade SET', 'get the latest SET', or 'SET is out of date'. Do NOT use to initialize a new project (use /set-init) or as part of a normal design/build cycle."
 ---
 
 # SET Update — Update the Full Stack

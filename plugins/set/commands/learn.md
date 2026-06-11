@@ -1,5 +1,5 @@
 ---
-description: "Extract learnings from the most recent SET cycle and update CLAUDE.md. The self-improving learning loop — each cycle makes the next one smarter. Final step: /set-design → /set-plan → /set-build → /set-review → /set-learn"
+description: "Extracts patterns, failures, and insights from the most recent SET cycle and persists them as sharded domain learnings and Serena memories, then evolves agent definitions. Use after /set-review completes, when a user says 'capture learnings', 'run learn', 'update the agents', or 'finish the cycle'. Do NOT use mid-build or when no build/review cycle has completed."
 ---
 
 # SET Learn — Extract, Learn, Improve

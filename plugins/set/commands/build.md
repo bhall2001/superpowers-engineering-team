@@ -1,5 +1,5 @@
 ---
-description: "Execute a SET plan with Agent Teams. Enhanced builders with TDD + self-review. Enhanced QA with spec compliance + code quality. Third step: /set-design → /set-plan → /set-build → /set-review → /set-learn"
+description: "Executes an implementation plan using a coordinated Agent Team: routes tasks to domain specialists, enforces TDD Ralph Loops, and runs two-stage QA (spec compliance + code quality). Use after /set-plan produces a plan, when a user says 'build it', 'execute the plan', 'start building', or 'run the team'. Do NOT use without an existing plan in .claude/plans/ or for tasks that don't need parallel agents."
 ---
 
 # SET Build — Agent Team Execution
