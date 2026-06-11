@@ -4,13 +4,11 @@ description: "Initialize a project for the SET workflow. Detects stack, scaffold
 
 # SET Init — Project Initialization
 
-You are the setup assistant for the Superpowers Engineering Team (SET) workflow. Initialize this project so that `/set-design → /set-plan → /set-build → /set-review → /set-learn` works out of the box.
+Initialize this project for the SET workflow.
 
 **Safety first:** NEVER overwrite existing files. Only append or create new. ALWAYS show changes to the user before writing. Get confirmation before each major step.
 
 ## Step 1: Check Prerequisites
-
-Verify both required plugins are installed:
 
 ```bash
 # Check for Superpowers
@@ -23,8 +21,6 @@ ls ~/.claude/plugins/cache/*/compound-teams/ 2>/dev/null && echo "Compound Teams
 If either is missing, tell the user how to install it and stop.
 
 ## Step 2: Audit Current State
-
-Before changing anything, understand what exists:
 
 ```bash
 echo "=== CLAUDE.md ==="
@@ -49,46 +45,22 @@ echo "=== Git status ==="
 git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 ```
 
-**Report findings to the user before proceeding.**
+Report findings to the user before proceeding.
 
-## Step 3: Detect Serena MCP (Optional Semantic Learning Index)
+## Step 3: Verify Serena MCP
 
-SET uses sharded learning files as the source of truth. If Serena MCP is available, SET can additionally mirror learnings into `.serena/memories/` for semantic retrieval during `/set-build`. Shards remain authoritative — Serena is an index.
+Serena is required. Verify it is available:
 
-### 3a: Detect Serena
-
-Check whether Serena MCP is available:
-
-```bash
-# Serena installs as an MCP server — look for its config
-ls ~/.claude/mcp_servers.json ~/.config/claude/mcp_servers.json 2>/dev/null | head -1
-grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
-
-# Or its project dir
-ls .serena/ 2>/dev/null
-```
-
-If `.serena/` exists OR a `serena` entry shows up in MCP config, report: "Serena MCP detected."
-
-### 3b: Prompt the user
-
-If Serena is detected, ask:
-
-> "Serena MCP detected. Enable Serena for semantic learning retrieval during `/set-build`? Shards stay the source of truth; Serena provides additional recall. [y/N]"
-
-If Serena is NOT detected, skip the prompt. SET works fine without it.
-
-### 3c: Write config
-
-Create `.claude/set/config.json` (create dir if needed). Merge with existing if present — do NOT overwrite other keys.
-
-```json
-{
-  "serena_enabled": true
-}
-```
-
-Set `serena_enabled` to the user's choice (or `false` / omit if Serena not detected). If `.serena/` doesn't exist but user opted in, create it: `mkdir -p .serena/memories`.
+1. Check that any `mcp__serena__*` tool is listed in your available tools.
+2. If NOT available, print the following and stop:
+   > "Serena MCP is required by SET. Run `bash install.sh` from the SET repository to install it, then restart Claude Code and try again."
+3. If available, initialize `.serena/project.yml` for this project (create `.serena/` if missing):
+   ```yaml
+   project_name: "{project-name-from-git-or-dirname}"
+   languages: []  # fill in your primary languages
+   ignore_all_files_in_gitignore: true
+   ```
+   Show the user the file before writing. Get confirmation.
 
 ## Step 4: Enable Agent Teams
 
@@ -97,7 +69,7 @@ Check `.claude/settings.json`:
 - If it **exists but lacks the flag**: add the flag, preserving all other settings
 - If it **already has the flag**: skip, tell user it's already enabled
 
-**Show the user the change before writing.**
+Show the user the change before writing.
 
 ## Step 5: Detect Project Stack
 
@@ -138,13 +110,11 @@ ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -3
 
 Report: "I detected [languages], [framework], [test runner], [linter], [type checker], [database], [API layer]."
 
-Record these detections — they drive agent scaffolding in Step 7 and build commands in Step 6.
-
 ## Step 6: Augment CLAUDE.md
 
-**NEVER overwrite existing CLAUDE.md.** Check if SET sections already exist.
+Append missing sections only. NEVER overwrite.
 
-If CLAUDE.md doesn't exist, create a minimal one. If it exists, **append only the missing sections**.
+If CLAUDE.md doesn't exist, create a minimal one. Append only the missing sections:
 
 ```markdown
 
@@ -174,18 +144,16 @@ This project uses the Superpowers Engineering Team workflow:
 
 ### Domain Specialists
 <!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
-- [List agents created in Step 6]
+- [List agents created in Step 7]
 
 <!-- Dated, accumulating learnings live in sharded `.claude/set/learnings/{domain}.md` files (not here). `/set-build` scopes shards per task to keep context small. Taxonomy is in `.claude/set/taxonomy.md`. -->
 ```
 
-Replace `[DETECTED_*]` placeholders with actual commands from Step 4.
+Replace `[DETECTED_*]` placeholders with actual commands from Step 5.
 
-**Show the user exactly what will be appended. Get confirmation before writing.**
+Show the user exactly what will be appended. Get confirmation before writing.
 
 ## Step 7: Scaffold Domain Specialist Agents
-
-This is SET's key differentiator over Compound Teams. The plan phase tags tasks with specialists, and the build phase routes tasks to the right agent. But this only works if `.claude/agents/` has agent definitions.
 
 ### 7a: Check for existing agents
 
@@ -193,11 +161,9 @@ This is SET's key differentiator over Compound Teams. The plan phase tags tasks 
 ls .claude/agents/ 2>/dev/null
 ```
 
-If agents already exist, read each one and report what domains are covered. Identify gaps based on the stack detected in Step 4.
+If agents exist, read each and report what domains are covered. Identify gaps based on detected stack.
 
 ### 7b: Determine which specialists to scaffold
-
-Based on the detected stack, propose agents from this menu:
 
 | Detected | Agent to scaffold | Covers |
 |---|---|---|
@@ -207,11 +173,11 @@ Based on the detected stack, propose agents from this menu:
 | Test runner detected | `qa-specialist.md` | Test strategy, edge cases, integration tests, spec compliance |
 | TypeScript or Python with types | `architect.md` | Type design, module boundaries, dependency direction |
 
-Only propose agents for domains actually present in the project. Do NOT scaffold agents for domains that don't exist.
+Only propose agents for domains actually present. Do NOT scaffold agents for absent domains.
 
 ### 7c: Write agent files
 
-For each proposed agent, create a starter file in `.claude/agents/`. Each agent file follows this structure:
+For each proposed agent, create a starter file in `.claude/agents/`:
 
 ```markdown
 # {Name} — {Domain} Specialist
@@ -235,16 +201,13 @@ sonnet
 - {Domain-specific conventions from CLAUDE.md or detected patterns}
 ```
 
-**Important:**
-- Read CLAUDE.md, any existing shards in `.claude/set/learnings/` (or legacy `.claude/set/learnings.md` if present), and the actual codebase to populate domain knowledge, key files, and conventions with real project-specific information — NOT generic placeholders.
-- If an agent for this domain already exists, do NOT overwrite it. Report that it's already covered.
-- Show the user each agent file before writing. Get confirmation.
+Read CLAUDE.md and any existing shards in `.claude/set/learnings/` to populate with real project-specific content — NOT generic placeholders. Show each file before writing. Get confirmation.
 
-### 7d: Suggest the user customize
+### 7d: Suggest customization
 
-After scaffolding, tell the user: "These are starter agents based on your detected stack. Review and customize them — the more project-specific knowledge you add, the better SET routes tasks and the higher quality the output."
+Tell the user: "These are starter agents based on your detected stack. Review and customize them — the more project-specific knowledge you add, the better SET routes tasks."
 
-## Step 8: Create Directory Structure and Learnings Files
+## Step 8: Create Directory Structure
 
 ```bash
 mkdir -p .claude/plans/archive
@@ -254,7 +217,7 @@ mkdir -p .claude/set/learnings-archive
 mkdir -p docs/superpowers/specs
 ```
 
-Create `.claude/set/taxonomy.md` if it does not already exist (NEVER overwrite). Start empty — `/set-learn` populates it on first run by proposing domains from accumulated content:
+Create `.claude/set/taxonomy.md` if it does not already exist (NEVER overwrite):
 
 ```markdown
 # Learning Taxonomy
@@ -264,7 +227,7 @@ Free-form list of domains used to shard learnings in `.claude/set/learnings/`. P
 <!-- populated on first /set-learn run -->
 ```
 
-**Legacy `.claude/set/learnings.md` handling**: do NOT create or touch this file. If a pre-existing one is found, leave it — `/set-learn` will auto-split it into the `learnings/` shards on its next run.
+If `.claude/set/learnings.md` exists (legacy monolithic file), leave it — `/set-learn` will auto-split it into shards on its next run.
 
 ## Step 9: Summary
 
@@ -281,6 +244,7 @@ Stack detected:
   Type checker: [detected]
 
 Agent Teams: enabled
+Serena MCP:  ✓ required and verified
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]
   .claude/agents/ui-specialist.md       — [if created]
@@ -298,9 +262,6 @@ Directories created:
 
 Files created:
   .claude/set/taxonomy.md         — Learning domain taxonomy (populated on first /set-learn)
-  .claude/set/config.json         — SET config (includes serena_enabled)
-
-Serena MCP: [enabled / disabled / not detected]
 
 CLAUDE.md augmented with:
   - SET pipeline reference
