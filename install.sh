@@ -1644,6 +1644,28 @@ RULES:
 SETEOF
 info "Installed references/enhanced-qa-prompt.md"
 
+cat > "$COMMANDS_DIR/references/learn-entry-format.md" << 'SETEOF'
+# Learning Entry Format
+
+Each shard entry MUST be:
+- **Dated**: `[YYYY-MM-DD]`
+- **Specific**: reference actual files, functions, or error messages
+- **Actionable**: future Claude should know what to DO differently
+
+**Good entry:**
+```
+[2026-03-17] Shared field high-run exclusion via `grouping.py`: Pass `shared_field_numbers`
+to `assign_grouped_game_groups()` and union with `time_limited_fields`. Simpler than modifying
+`get_field_capacities()` — directly uses already-computed shared schedule info.
+```
+
+**Bad entry:**
+```
+[2026-03-17] Be careful with shared fields.
+```
+SETEOF
+info "Installed references/learn-entry-format.md"
+
 # ---------------------------------------------------------------------------
 # Step 5: Verify
 # ---------------------------------------------------------------------------
@@ -1692,7 +1714,7 @@ for cmd in set-init set-design set-plan set-build set-review set-learn set-updat
   fi
 done
 
-for ref in enhanced-builder-prompt enhanced-qa-prompt; do
+for ref in enhanced-builder-prompt enhanced-qa-prompt learn-entry-format; do
   if [ -f "$COMMANDS_DIR/references/$ref.md" ]; then
     info "Reference: $ref.md"
   else

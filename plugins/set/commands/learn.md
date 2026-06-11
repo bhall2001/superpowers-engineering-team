@@ -59,15 +59,22 @@ Examine the full arc — design through review — not just the final code:
 
 Learnings are sharded by domain into `.claude/set/learnings/{domain}.md` files. The domain taxonomy lives in `.claude/set/taxonomy.md`.
 
-#### 3a: Migrate existing shards to Serena memories (lazy, one-time per entry)
+#### 3a: Migrate existing shards to Serena memories (one-time)
 
-Before writing new learnings, migrate any unmirrorred shard entries to Serena:
+Check for sentinel first:
+```bash
+ls .claude/set/.serena-migrated 2>/dev/null
+```
 
-1. Run `mcp__serena__list_memories` — get the list of existing memory slugs.
+If the sentinel exists: skip this step entirely — migration already completed.
+
+If NOT present:
+1. Run `mcp__serena__list_memories` — get existing memory slugs.
 2. For each `.md` file in `.claude/set/learnings/`:
-   - Derive expected slugs from the file's entries (kebab-case key concept).
-   - If a slug is NOT in the Serena memory list, write it using `mcp__serena__write_memory`.
-3. Log: "Migrated N existing shard entries to Serena memories." (or "Serena memories already up to date.")
+   - Derive expected slugs from entries (kebab-case key concept).
+   - Write any un-mirrored entries using `mcp__serena__write_memory`.
+3. Write the sentinel: `touch .claude/set/.serena-migrated`
+4. Log: "Migrated N existing shard entries to Serena memories."
 
 #### 3b: Migrate monolithic `learnings.md` if present (first-run only)
 
@@ -121,22 +128,7 @@ Learnings that apply to multiple domains are **copied into each relevant shard**
 
 Append each learning to `.claude/set/learnings/{domain}.md` under the correct section (`## What Works` / `## What Failed` / `## Recurring Bugs`). Create the file with frontmatter if it doesn't exist.
 
-Each entry MUST be:
-- **Dated**: `[YYYY-MM-DD]`
-- **Specific**: reference actual files, functions, or error messages
-- **Actionable**: future Claude should know what to DO differently
-
-**Good entry:**
-```
-[2026-03-17] Shared field high-run exclusion via `grouping.py`: Pass `shared_field_numbers`
-to `assign_grouped_game_groups()` and union with `time_limited_fields`. Simpler than modifying
-`get_field_capacities()` — directly uses already-computed shared schedule info.
-```
-
-**Bad entry:**
-```
-[2026-03-17] Be careful with shared fields.
-```
+Read `references/learn-entry-format.md` for entry format rules and examples before writing any shard entries.
 
 #### 3f: Global-importance learnings → CLAUDE.md
 
@@ -166,16 +158,24 @@ If the project structure changed (new directories, new major modules), update `C
 
 ### 6. Evolve Agents
 
-#### 6a: Gather agent performance data
+#### 6a: Identify participating agents
 
-For each agent that participated, look for:
+Derive which agents actually worked this cycle from git log — do NOT read all agent files:
+
+```bash
+git log --oneline -20 --format="%s %b"
+```
+
+Look for agent names in commit messages (builders sign commits with their agent name or task descriptions reference specialists). Also check TaskList() history if available.
+
+Only read `.claude/agents/{name}.md` for agents confirmed to have participated. If no agents can be identified from git log, skip to step 7.
+
+For each confirmed participant, look for:
 - QA rejections — what was wrong?
 - Review findings in code this agent wrote
 - Ralph Loop struggles — errors hit repeatedly (3+ retries on same error)
 - Scope violations — code modified outside assigned task
 - Patterns handled well — clean implementations that passed QA on first attempt
-
-If no agents participated, skip to step 7.
 
 #### 6b: Propose agent updates
 
