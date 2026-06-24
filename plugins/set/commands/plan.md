@@ -1,12 +1,12 @@
 ---
-description: "Converts an approved design spec into a parallel-execution implementation plan with TDD steps, specialist routing, and shard tagging for Agent Team builders. Use after /set-design produces a spec, when a user says 'create a plan', 'plan this out', or 'ready to plan'. Do NOT use before a design spec exists or when the user wants to jump straight to building."
+description: "Converts an approved design spec into a parallel-execution implementation plan with TDD steps, specialist routing, and shard tagging for dynamic-workflow builders. Use after /set-design produces a spec, when a user says 'create a plan', 'plan this out', or 'ready to plan'. Do NOT use before a design spec exists or when the user wants to jump straight to building."
 ---
 
-# SET Plan — Bridge Superpowers Design to Agent Team Plan
+# SET Plan — Bridge Superpowers Design to a Workflow-Ready Plan
 
 You are running the **planning** phase of the Superpowers Engineering Team (SET) workflow.
 
-Take a Superpowers design spec and produce a plan optimized for Compound Teams' parallel Agent Team execution.
+Take a Superpowers design spec and produce a plan optimized for parallel dynamic-workflow execution. The `Specialist`, `Shards`, `Blocked by`, TDD-steps, and self-review fields map directly to how `/set-build` compiles its brief: `Specialist` → the builder's `agentType`, `Shards` → injected learning context, `Blocked by` → the workflow's dependency graph, and the TDD + self-review content → the verification rubric.
 
 ## Input
 
@@ -40,7 +40,7 @@ Save to `.claude/plans/{feature-name}.md`:
 ```markdown
 # Plan: {Feature Name}
 
-> **Execution:** Use `/set-build` to execute this plan with an Agent Team.
+> **Execution:** Use `/set-build` to execute this plan as a dynamic workflow (or `/set-build --use-agent-team` for an autonomous Agent Team).
 > **Design spec:** `docs/superpowers/specs/{spec-file}.md`
 
 ## Goal
@@ -91,9 +91,9 @@ High-level strategy. Why this over alternatives.
 
 **Self-review checklist in every task:** Each task includes the checklist. Builders must check every box before marking complete. This catches spec drift before QA.
 
-**Specialist assignment:** Every task gets a `Specialist` field. If `.claude/agents/` has a matching specialist (e.g., a DB agent for schema tasks, a UI agent for component tasks), use that agent's name. If no specialist fits, use "generic". During `/set-build`, the team lead uses these tags to spawn the right specialist agents and route tasks to them.
+**Specialist assignment:** Every task gets a `Specialist` field. If `.claude/agents/` has a matching specialist (e.g., a DB agent for schema tasks, a UI agent for component tasks), use that agent's name. If no specialist fits, use "generic". During `/set-build`, this tag becomes the builder agent's `agentType` (or the routed teammate in `--use-agent-team`).
 
-**Shard tagging:** Every task gets a `Shards` field listing the domain names from `.claude/set/taxonomy.md` whose learnings apply to this task. During `/set-build`, the team lead loads those shard files and injects them as context for the task. Be generous — it's better to include a borderline-relevant shard than omit a relevant one. Empty list is fine when no shards apply (e.g. first-ever task in a fresh project, or purely mechanical scaffolding). If the taxonomy is empty, use `[]` for all tasks.
+**Shard tagging:** Every task gets a `Shards` field listing the domain names from `.claude/set/taxonomy.md` whose learnings apply to this task. During `/set-build`, the brief compiler loads those shard files and injects them as per-task context. Be generous — it's better to include a borderline-relevant shard than omit a relevant one. Empty list is fine when no shards apply (e.g. first-ever task in a fresh project, or purely mechanical scaffolding). If the taxonomy is empty, use `[]` for all tasks.
 
 **Exact commands:** Include exact test/lint/typecheck commands, expected outputs, and file paths. Builders should never have to guess.
 
@@ -111,7 +111,7 @@ Show the plan. Wait for user to approve, modify, or reject.
 
 After approval:
 
-> "Plan saved to `.claude/plans/{feature-name}.md`. Ready to build? Run `/set-build {feature-name}` to spawn the Agent Team."
+> "Plan saved to `.claude/plans/{feature-name}.md`. Ready to build? Run `/set-build {feature-name}` to execute it as a dynamic workflow (or `/set-build {feature-name} --use-agent-team` for an autonomous Agent Team)."
 
 ## Unresolved Questions
 

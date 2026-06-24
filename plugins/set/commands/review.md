@@ -1,13 +1,17 @@
 ---
-description: "Runs a four-perspective review (spec compliance, security, architecture, correctness) on the current build using parallel reviewer agents. Use after /set-build completes, when a user says 'review the code', 'run a review', 'check the build', or 'ready for review'. Do NOT use mid-build or as a substitute for the builder's own self-review checklist."
+description: "Runs an independent four-lens review (spec compliance, security, architecture, correctness) on the build via a dynamic workflow fan-out, then synthesizes a ship/iterate/block verdict. Use after /set-build completes, when a user says 'review the code', 'run a review', 'check the build', or 'ready for review'. Add --light for a cheaper 4-subagent review on small diffs. Do NOT use mid-build or as a substitute for the builder's own self-review."
 ---
 
-# SET Review — Multi-Perspective + Spec Compliance Review
+# SET Review — Independent Four-Lens Review
+
+Review's entire value is being an **uncorrelated** check on the build. Independence is the design constraint, not an afterthought:
+
+- Each lens runs as a **fresh-context agent that did NOT write the code**. Where possible, the reviewer for an area is not the specialist that authored it.
+- The build's verification report (from `/set-build`) is handed in as **claims to audit**, NOT ground truth. This is the explicit counter to self-grading bias.
 
 ## What to Review
 
-If the user provides a branch/PR/commit range with `$ARGUMENTS`, use that.
-Otherwise: `git diff main...HEAD`
+If the user provides a branch/PR/commit range with `$ARGUMENTS`, use that. Otherwise: `git diff main...HEAD`.
 
 ## Step 1: Gather Context
 
@@ -19,87 +23,54 @@ git log --oneline main..HEAD
 Read the diff. Also read:
 - The design spec from `docs/superpowers/specs/` (if one exists)
 - The plan from `.claude/plans/` (if one exists)
+- The build's structured verification report, if available (treat as claims to audit)
 
-## Step 2: Spawn Review Team
+## Step 2: Run the Review
 
-```
-Teammate({ operation: "spawnTeam", team_name: "review-{feature}" })
-```
+Check `$ARGUMENTS` for `--light`.
 
-Create 4 tasks and spawn 4 teammates:
+### Default — Dynamic Workflow Fan-Out
 
-### Spec Compliance Reviewer Prompt
+SET is geared for heavy work, so the default uses the **`Workflow` tool**. Author a script that:
 
-```
-Review the git diff (main...HEAD) against the design spec and implementation plan.
+1. Fans out the **four lenses × affected modules** (derive modules from the diff stat). Each lens is an independent `agent()` that did not author the code, given the lens rubric below plus the diff for its module(s).
+2. Has each lens agent return findings via `agent({schema})`, e.g.:
+   ```
+   { lens: string, module: string, findings: [
+       { file: string, line: string, severity: "critical"|"high"|"medium"|"low",
+         issue: string, suggestion: string } ],
+     good_patterns: string[] }
+   ```
+3. **Pre-aggregates per perspective** inside the workflow (collect each lens's findings across modules), so you receive four consolidated perspective reports — not N×4 raw transcripts.
+4. Returns the four perspective reports for synthesis in Step 3.
 
-READ FIRST:
-- Design spec: {path to spec in docs/superpowers/specs/}
-- Implementation plan: {path to plan in .claude/plans/}
-- Use `mcp__serena__list_memories` to find shards whose domain intersects the diff scope. Use `mcp__serena__read_memory` to fetch them.
+Keep intermediate findings in script variables; you receive only the aggregated reports.
 
-VERIFY:
-- Every requirement in the design spec has been implemented
-- No features added that aren't in the spec
-- Implementation matches the approach in the plan
-- Acceptance criteria from each plan task are met
+### `--light` — Four Parallel Subagents
 
-DO NOT trust commit messages or comments — read the actual code.
+For small diffs, skip the workflow. Spawn **4 independent `Agent` subagents in a single message** (one per lens, fresh contexts), each with its lens rubric below. Each returns its findings as its final message. Same independence semantics — none of them wrote the code.
 
-Report:
-- ✅ Spec compliant: all requirements met, nothing extra
-- ❌ Issues: [list specifically what's missing, extra, or misinterpreted — with file:line refs]
+### Lens Rubrics
 
-Message team-lead with findings.
-```
+**Spec Compliance** — READ the design spec + plan; use `mcp__serena__list_memories` / `read_memory` for shards intersecting the diff scope. VERIFY: every spec requirement implemented; nothing extra; matches the plan's approach; each plan task's acceptance criteria met. DO NOT trust commit messages or the build report — read the actual code. Report ✅ compliant or ❌ issues with file:line.
 
-### Security Reviewer Prompt
+**Security** — use `mcp__serena__list_memories` filtered to security/validation/auth domains; fetch "Recurring Bugs". CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal. Report file, line, severity, suggested fix. If nothing found, confirm the changes look secure.
 
-```
-Review the git diff (main...HEAD) for security issues.
+**Architecture** — READ CLAUDE.md for conventions; use Serena for shards intersecting the diff ("What Works"/"What Failed"). CHECK: pattern consistency, separation of concerns, SOLID, DRY without over-abstraction, dependency direction, testability, performance at scale, error-handling consistency. Report file, concern, suggestion. Also note things done WELL.
 
-READ FIRST: use `mcp__serena__list_memories` filtered to security/validation/auth domains. Use `mcp__serena__read_memory` to fetch "Recurring Bugs" sections.
-
-CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth patterns, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal.
-
-Message team-lead with findings: file, line, severity (critical/high/medium/low), suggested fix.
-If nothing found, confirm the changes look secure.
-```
-
-### Architecture Reviewer Prompt
-
-```
-Review the git diff (main...HEAD) for architectural quality.
-
-READ FIRST: CLAUDE.md for project conventions. Use `mcp__serena__list_memories` to find shards intersecting the diff. Use `mcp__serena__read_memory` to fetch "What Works" / "What Failed" sections.
-
-CHECK: Pattern consistency, separation of concerns, SOLID violations, DRY without over-abstraction, dependency direction, testability, performance at scale, error handling consistency.
-
-Message team-lead with findings: file, concern, suggestion.
-Also note things done WELL — good patterns worth documenting.
-```
-
-### Correctness Reviewer Prompt
-
-```
-Review the git diff (main...HEAD) for correctness. Also run the test suite.
-
-READ FIRST: use `mcp__serena__list_memories` to find shards intersecting the diff. Use `mcp__serena__read_memory` to fetch "Recurring Bugs" sections.
-
-CHECK: Test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup.
-
-Message team-lead with findings.
-```
+**Correctness** — run the test suite; use Serena for shards intersecting the diff ("Recurring Bugs"). CHECK: test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup. Report findings.
 
 ## Step 3: Synthesize
 
-Collect all findings. Present unified review:
+You own synthesis. Dedupe, resolve cross-perspective conflicts, severity-rank, and emit a verdict.
 
 ```markdown
 ## SET Review Summary
 
+**Verdict:** SHIP / ITERATE / BLOCK
+
 ### Spec Compliance
-- {findings from spec reviewer}
+- {findings}
 
 ### Critical (must fix before merge)
 - ...
@@ -114,22 +85,23 @@ Collect all findings. Present unified review:
 - ...
 ```
 
-## Step 4: Clean Up
+### Optional: Adversarial Round
+Only as an explicit **second** pass, AFTER independent findings are recorded above — never first, or independence is lost. Spawn agents to try to refute the recorded findings (a finding that survives refutation is high-confidence). Skip by default.
 
-Shut down all reviewers. Clean up the team.
+## Step 4: Route the Verdict
 
 If critical or "should fix" issues exist:
-- Suggest: "Run `/set-build {feature}` again to fix these issues" (for large fixes)
-- Or: "These are small enough to fix directly — want me to handle them?" (for minor fixes)
+- Large fixes → "Run `/set-build {feature}` again to fix these issues."
+- Minor fixes → "These are small enough to fix directly — want me to handle them?"
 
-If all clean: suggest "Run `/set-learn` to capture learnings from this cycle"
+If all clean → "Run `/set-learn` to capture learnings from this cycle."
 
 ## Step 5: Finishing
 
-If review is clean and user is ready to integrate, present 4 options:
+If the review is clean and the user is ready to integrate, present 4 options:
 1. Merge back to base branch locally
 2. Push and create a Pull Request
 3. Keep the branch as-is
 4. Discard this work
 
-Execute the user's choice.
+Execute the user's choice. (This is where a build worktree, if any, gets cleaned up.)

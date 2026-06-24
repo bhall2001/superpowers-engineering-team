@@ -36,7 +36,7 @@ Examine the full arc — design through review — not just the final code:
 - Code patterns that solved problems cleanly
 - Libraries or approaches that proved effective
 - Task decomposition that enabled good parallelism
-- Agent coordination patterns that reduced conflicts
+- Build orchestration that reduced conflicts (workflow fan-out, or Agent Team coordination in `--use-agent-team` runs)
 
 **What failed — patterns to avoid:**
 - Approaches tried and abandoned (and WHY they failed)
@@ -45,10 +45,10 @@ Examine the full arc — design through review — not just the final code:
 - Spec ambiguities that led to rework
 
 **Recurring bugs — patterns to prevent:**
-- Errors that appeared repeatedly during Ralph loops
-- Common mistakes builders made
+- Errors that appeared repeatedly during the per-task TDD loop
+- Common mistakes builder agents made
 - Things linter/type checker caught repeatedly
-- QA findings that could have been caught earlier
+- Review/QA findings that could have been caught earlier
 
 **Process insights — improvements to SET itself:**
 - Was task granularity right?
@@ -166,16 +166,16 @@ Derive which agents actually worked this cycle from git log — do NOT read all 
 git log --oneline -20 --format="%s %b"
 ```
 
-Look for agent names in commit messages (builders sign commits with their agent name or task descriptions reference specialists). Also check TaskList() history if available.
+Look for agent names in commit messages (builders sign commits with their agent name or task descriptions reference specialists). Task history may also help — from the workflow's per-task verdicts, or `TaskList()` in a `--use-agent-team` run — if available; `git log` is the primary signal.
 
 Only read `.claude/agents/{name}.md` for agents confirmed to have participated. If no agents can be identified from git log, skip to step 7.
 
 For each confirmed participant, look for:
-- QA rejections — what was wrong?
+- Verification/QA rejections — what was wrong?
 - Review findings in code this agent wrote
-- Ralph Loop struggles — errors hit repeatedly (3+ retries on same error)
+- TDD-loop struggles — errors hit repeatedly (the verifier or test loop flagged the same issue)
 - Scope violations — code modified outside assigned task
-- Patterns handled well — clean implementations that passed QA on first attempt
+- Patterns handled well — clean implementations that passed verification on first attempt
 
 #### 6b: Propose agent updates
 

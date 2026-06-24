@@ -1,5 +1,5 @@
 ---
-description: "Updates SET commands, Superpowers, Compound Teams, and Serena to their latest versions by re-running install.sh and plugin update commands. Use when a user says 'update SET', 'upgrade SET', 'get the latest SET', or 'SET is out of date'. Do NOT use to initialize a new project (use /set-init) or as part of a normal design/build cycle."
+description: "Updates SET commands, Superpowers, and Serena to their latest versions by re-running install.sh and plugin update commands. Use when a user says 'update SET', 'upgrade SET', 'get the latest SET', or 'SET is out of date'. Do NOT use to initialize a new project (use /set-init) or as part of a normal design/build cycle."
 ---
 
 # SET Update — Update the Full Stack
@@ -22,13 +22,7 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 /plugin update superpowers@claude-plugins-official
 ```
 
-### 3. Update Compound Teams
-
-```
-/plugin update compound-teams@compound-teams-marketplace
-```
-
-### 4. Verify
+### 3. Verify
 
 ```bash
 echo "=== SET commands ==="
@@ -37,17 +31,14 @@ ls ~/.claude/commands/set-*.md 2>/dev/null
 echo "=== Superpowers ==="
 ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "OK" || echo "NOT FOUND"
 
-echo "=== Compound Teams ==="
-ls ~/.claude/plugins/cache/*/compound-teams/ 2>/dev/null && echo "OK" || echo "NOT FOUND"
-
-echo "=== Agent Teams enabled ==="
-cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "NOT FOUND"
+echo "=== Agent Teams enabled (optional — for /set-build --use-agent-team) ==="
+cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "not set (only needed for --use-agent-team)"
 
 echo "=== Serena MCP ==="
 cat ~/.claude/settings.json 2>/dev/null | grep -q '"serena"' && echo "OK" || echo "NOT FOUND"
 ```
 
-### 5. Report
+### 4. Report
 
 Tell the user:
 - Which plugins were updated successfully

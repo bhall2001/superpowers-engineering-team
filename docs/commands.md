@@ -31,7 +31,7 @@ Runs the Superpowers collaborative design process for your feature. Works throug
 
 **Phase 2 — Plan**
 
-Reads the latest design spec and transposes it into a parallelizable task plan optimized for Agent Teams.
+Reads the latest design spec and transposes it into a parallelizable task plan optimized for parallel subagent fan-out.
 
 **Each task in the plan includes:**
 - Acceptance criteria ("Done when...")
@@ -50,7 +50,9 @@ Reads the latest design spec and transposes it into a parallelizable task plan o
 
 **Phase 3 — Build**
 
-Executes the plan using an Agent Team with enhanced TDD and QA discipline.
+Executes the plan as a dynamic workflow with enhanced TDD and verification discipline.
+
+By default, `/set-build` compiles the plan into a build brief and fans out parallel builder subagents — one per task, routed by the task's `Specialist`. To run an autonomous Agent Team instead, pass `--use-agent-team` (requires the Agent Teams env flag, which the installer writes by default).
 
 ### Step 1: Isolated Worktree
 Creates a `feat/{feature-name}` branch in an isolated worktree. Runs project setup. Verifies tests pass before any implementation begins.
@@ -63,22 +65,23 @@ Creates a `feat/{feature-name}` branch in an isolated worktree. Runs project set
 
 Precedence: CLI flag > CLAUDE.md > default (enabled). In no-worktree mode, project setup and baseline tests still run, but on the current branch with no `cd`.
 
-### Step 2–4: Team Execution
-Spawns specialist agents (matched from `.claude/agents/`) and QA. Builders follow the TDD Ralph Loop. QA performs two-stage review.
+### Step 2–4: Parallel Build and Verify
+Fans out one builder subagent per task, each routed by the task's specialist (matched from `.claude/agents/`). Each builder runs the per-task TDD loop. A fresh verifier — one that did not write the code — then checks each task against a rubric before it folds back. SET no longer hand-rolls retry or escalation mechanics: the workflow runs a verify-and-revise loop until each task meets the bar.
 
-**TDD Ralph Loop:**
+**Per-task TDD loop:**
 1. Write failing tests first
 2. Implement minimal code to pass
 3. Refactor while keeping green
 4. Lint → typecheck → self-review
 5. Commit only when all checks pass
 
-**QA Two-Stage Review:**
-- Stage 1: Spec compliance (every acceptance criterion verified independently)
-- Stage 2: Code quality (test quality, edge cases, architecture, security, DRY)
+**Per-task verification rubric:**
+- Spec compliance (every acceptance criterion verified independently)
+- TDD discipline (failing test first, then green)
+- Lint and typecheck clean
 
 ### Wrap Up
-Shuts down agents. Reports worktree location. Suggests `/set-review`.
+Folds completed tasks back, reports worktree location, and suggests `/set-review`.
 
 **Note:** Worktree is preserved for `/set-review` to examine. In no-worktree mode, `/set-review` operates against the current branch instead.
 
@@ -90,12 +93,14 @@ Shuts down agents. Reports worktree location. Suggests `/set-review`.
 
 **Phase 4 — Review**
 
-Four parallel reviewers examine all changes:
+A dynamic-workflow fan-out examines all changes across four lenses × the affected modules. Each lens agent is independent — it did not write the code, and it treats the build's verification report as claims to audit rather than facts:
 
 1. **Spec Compliance** — reads design spec + plan, verifies everything was built as designed
 2. **Security** — injection, XSS, hardcoded secrets, auth gaps, missing validation
 3. **Architecture** — patterns, conventions, abstractions, dependencies
 4. **Correctness** — logic errors, edge cases, test coverage
+
+SET synthesizes the findings into a single ship/iterate/block verdict. For small diffs, `/set-review --light` runs four plain parallel subagents instead of the full per-module fan-out.
 
 **Finishing step:** Offers four options (merge to main, create PR, keep branch, discard) via Superpowers' `finishing-a-development-branch`.
 
@@ -132,7 +137,7 @@ Each agent gets updates specific to its performance. Cross-agent learnings go to
 
 **Maintenance**
 
-Updates all three components to latest versions. SET is not in an official Claude marketplace — update by re-running the installer.
+Updates SET, Superpowers, and Serena to the latest versions. SET is not in an official Claude marketplace — update by re-running the installer.
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
@@ -140,7 +145,6 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 
 ```
 /plugin update superpowers@claude-plugins-official
-/plugin update compound-teams@compound-teams-marketplace
 ```
 
 Run periodically to get improvements and bug fixes.

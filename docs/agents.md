@@ -11,7 +11,7 @@ Agents are markdown files in `.claude/agents/`. Each file contains:
 - Common patterns to follow
 - Mistakes to avoid (populated by `/set-learn` over time)
 
-During `/set-build`, the team lead reads each agent file and uses it as the base context for that specialist. Builders inherit domain knowledge without needing it repeated in every task.
+During `/set-build`, each builder subagent is spawned with its specialist's agent file as base context. Builders inherit domain knowledge without needing it repeated in every task.
 
 ## Scaffolded by `/set-init`
 
@@ -62,7 +62,7 @@ During `/set-plan`, each task is tagged with a specialist:
 Specialist: db-drizzle
 ```
 
-During `/set-build`, the team lead routes the task to the matching agent.
+During `/set-build`, each task is routed to a builder subagent of the matching specialist type.
 
 **If a task spans multiple domains** (e.g., new API route + UI component), it's assigned to the primary domain specialist, with notes about conventions from the other domain.
 
@@ -74,7 +74,7 @@ During `/set-build`, the team lead routes the task to the matching agent.
 
 - **QA rejections** — did this agent's output repeatedly fail spec compliance or quality checks?
 - **Review findings** — did the security or architecture reviewer flag patterns this agent owns?
-- **Ralph Loop struggles** — did this agent get stuck on the same errors repeatedly?
+- **TDD-loop struggles** — did this agent get stuck on the same errors repeatedly?
 - **Scope violations** — did this agent add features not in the acceptance criteria?
 - **Patterns done well** — what should this agent keep doing?
 

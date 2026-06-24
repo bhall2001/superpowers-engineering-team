@@ -13,12 +13,11 @@ Initialize this project for the SET workflow.
 ```bash
 # Check for Superpowers
 ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "Superpowers: installed" || echo "Superpowers: NOT FOUND"
-
-# Check for Compound Teams
-ls ~/.claude/plugins/cache/*/compound-teams/ 2>/dev/null && echo "Compound Teams: installed" || echo "Compound Teams: NOT FOUND"
 ```
 
-If either is missing, tell the user how to install it and stop.
+If Superpowers is missing, tell the user how to install it (`bash install.sh`) and stop.
+
+**Dynamic Workflows:** `/set-build` and `/set-review` use the native `Workflow` tool. It ships with Claude Code (Pro/Max/Team/Enterprise). Pro users may need to enable it once via `/config` → "Dynamic workflows". No plugin install required.
 
 ## Step 2: Audit Current State
 
@@ -62,10 +61,12 @@ Serena is required. Verify it is available:
    ```
    Show the user the file before writing. Get confirmation.
 
-## Step 4: Enable Agent Teams
+## Step 4: Enable Agent Teams (for the optional `--use-agent-team` build mode)
+
+The default `/set-build` path uses dynamic workflows and does NOT need this flag. It enables the optional autonomous Agent Team build mode (`/set-build --use-agent-team`). Write it by default so that mode works out of the box.
 
 Check `.claude/settings.json`:
-- If it **doesn't exist**: create it with `{ "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }`
+- If it **doesn't exist**: create it with `{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
 - If it **exists but lacks the flag**: add the flag, preserving all other settings
 - If it **already has the flag**: skip, tell user it's already enabled
 
@@ -125,15 +126,14 @@ If CLAUDE.md doesn't exist, create a minimal one. Append only the missing sectio
 This project uses the Superpowers Engineering Team workflow:
 `/set-design` → `/set-plan` → `/set-build` → `/set-review` → `/set-learn`
 
-### Ralph Loop (All Teammates Follow This)
+### Per-Task TDD Loop (enforced by /set-build for every builder)
 1. Write failing tests first (TDD red phase)
 2. Implement minimal code to pass (TDD green phase)
 3. Refactor while keeping tests green
-4. Run tests — if fail: read error, fix, retry (max 5 attempts per error)
+4. Run tests — if fail: read error, fix, retry
 5. Run linter/type checker — if fail: fix and retry
 6. Self-review against acceptance criteria
-7. Only mark task complete when ALL checks pass
-8. If stuck after 3 retries on same error, message team lead with blocker
+7. Only mark a task complete when ALL checks pass — a fresh verifier confirms the bar before the work is folded back
 
 ### Build Commands
 - Tests: `[DETECTED_TEST_COMMAND]`
@@ -182,7 +182,7 @@ For each proposed agent, create a starter file in `.claude/agents/`:
 ```markdown
 # {Name} — {Domain} Specialist
 
-You are a {domain} specialist on a SET Agent Team. You have deep expertise in {specific technologies detected}.
+You are a {domain} specialist agent in the SET workflow. You have deep expertise in {specific technologies detected}.
 
 ## Model
 
@@ -243,7 +243,7 @@ Stack detected:
   Linter:       [detected]
   Type checker: [detected]
 
-Agent Teams: enabled
+Execution:   dynamic workflows (default) — Agent Teams enabled for /set-build --use-agent-team
 Serena MCP:  ✓ required and verified
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]
@@ -265,7 +265,7 @@ Files created:
 
 CLAUDE.md augmented with:
   - SET pipeline reference
-  - Ralph Loop (TDD variant)
+  - Per-task TDD loop
   - Build commands
   - Domain specialists list
 
