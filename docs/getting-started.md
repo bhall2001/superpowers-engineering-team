@@ -4,25 +4,22 @@ SET (Superpowers Engineering Team) turns Claude Code into a coordinated AI engin
 
 ## Prerequisites
 
-SET requires two Claude Code plugins:
-
 ### 1. Superpowers
+
+SET requires the Superpowers Claude Code plugin:
 
 ```
 /plugin marketplace add anthropics/claude-plugins-official
 /plugin install superpowers@claude-plugins-official
 ```
 
-### 2. Compound Teams
+### 2. Dynamic workflows
 
-```
-/plugin marketplace add https://github.com/tbdng/compound-teams-plugin.git
-/plugin install compound-teams@compound-teams-marketplace
-```
+The default `/set-build` and `/set-review` paths run on Claude Code's dynamic workflows, which are built into Claude Code (Pro/Max/Team/Enterprise) — there is nothing extra to install. Pro users enable dynamic workflows once via `/config`; Max/Team/Enterprise have them on by default.
 
-### 3. Agent Teams (Experimental)
+### 3. Agent Teams (optional)
 
-Compound Teams requires Claude Code's experimental Agent Teams feature. Run `/set-init` — it will check this and guide you through enabling it if needed.
+The optional `/set-build --use-agent-team` mode runs an autonomous Agent Team and requires Claude Code's Agent Teams feature. The installer writes the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env flag by default, so this is ready to go if you want it — you don't need it for the default dynamic-workflow path.
 
 ## Install SET
 
@@ -32,7 +29,7 @@ SET is not in an official Claude marketplace. Install via the script:
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-The script registers prerequisite marketplaces, enables Agent Teams, and installs SET commands into `~/.claude/commands/`.
+The script registers the Superpowers marketplace and installs SET commands into `~/.claude/commands/`. It also writes the Agent Teams env flag, which is only needed for the optional `/set-build --use-agent-team` mode — the default build path uses dynamic workflows and needs no flag.
 
 ## First Use
 
@@ -46,7 +43,7 @@ Open your project in Claude Code and run:
 
 This will:
 - Check prerequisites are installed
-- Enable Agent Teams if needed
+- Confirm dynamic workflows are available (and the Agent Teams flag, if you plan to use `--use-agent-team`)
 - Detect your tech stack
 - Scaffold domain specialist agents in `.claude/agents/`
 - Augment your `CLAUDE.md` with conventions
@@ -74,7 +71,9 @@ Transposes your design spec into a parallelizable task plan with TDD steps, self
 /set-build
 ```
 
-Spawns an Agent Team. Builders run TDD Ralph Loops. QA does two-stage review (spec compliance + code quality). All work happens in an isolated git worktree.
+Compiles the plan into a build brief and fans out parallel builder subagents — one per task, routed by the task's specialist. Each builder runs the per-task TDD loop, and a fresh verifier checks each task against a rubric (spec compliance + TDD + lint/typecheck) before folding it back. All work happens in an isolated git worktree.
+
+To run an autonomous Agent Team instead, use `/set-build --use-agent-team`.
 
 ### Step 5: Review
 
@@ -98,4 +97,4 @@ Updates `CLAUDE.md` with project-level learnings and evolves specialist agent de
 /set-update
 ```
 
-Updates SET, Superpowers, and Compound Teams to the latest versions.
+Updates SET, Superpowers, and Serena to the latest versions.

@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0] — Workflow-native build & review (drop Compound Teams)
+
+### Changed — orchestration
+- **Dropped the Compound Teams dependency.** `/set-build` and `/set-review` now run on Claude Code's native **dynamic workflows** (the `Workflow` tool). No marketplace to register, no `compound-teams` plugin to install.
+- **`/set-build` is now a brief compiler + gatekeeper.** It compiles the approved plan into one build brief (per-task context bundle: spec section, learning shards, specialist referenced by name, acceptance bar) + a global verification rubric + escalation policy, then hands execution to a dynamic workflow that fans out parallel builders (routed by each task's `Specialist` as the subagent `agentType`), runs the per-task TDD loop, and **schema-verifies each task with a fresh verifier** before folding it back.
+- **SET no longer implements the Ralph Loop retry/escalation mechanics.** The workflow's native verify-and-revise loop owns that; SET specifies only the bar and the escalation policy.
+- **`/set-review` defaults to a dynamic-workflow fan-out** across four independent lenses (spec compliance, security, architecture, correctness) × affected modules, then synthesizes a ship/iterate/block verdict. Each lens is a fresh-context agent that did not write the code and treats the build's verification report as claims to audit. `--light` runs four plain parallel subagents for small diffs.
+
+### Added
+- **`/set-build --use-agent-team`** — optional autonomous Agent Team build mode (native Agent Teams). First-class, not a fallback: when run with permissions skipped the team is autonomous, and its good/bad decisions feed `/set-learn`. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (written by the installer by default).
+- Verification verdicts are returned as structured schema objects so SET can gate ship/iterate programmatically.
+
+### Changed — install & docs
+- **`install.sh` no longer embeds command bodies as heredocs.** It installs command files by copying from `plugins/set/commands/` when run from a checkout, or fetching them from GitHub raw under `curl | bash`. The plugin files are now the single source of truth (eliminates the prior plugin-vs-installer divergence).
+- `/set-update` updates SET + Superpowers + Serena (Compound Teams removed).
+- `/set-init` no longer checks for Compound Teams; it notes that dynamic workflows are built into Claude Code (Pro users enable via `/config`). It still writes the Agent Teams env flag by default for the optional `--use-agent-team` mode.
+- Plugin/marketplace metadata bumped to **1.0.0**; docs reworded throughout.
+
+### Migration Notes (for existing users)
+- Run `/set-update` to pick up the new command files. You can uninstall the `compound-teams` plugin — SET no longer uses it.
+- **`/set-update` now migrates an already-initialized project** (Step 1, before the installer re-run): it reconciles stale SET-generated content on disk — the old `### Ralph Loop (All Teammates Follow This)` block in `CLAUDE.md` and `"specialist on a SET Agent Team"` openers in `.claude/agents/*.md` — showing a diff and applying only on confirmation. Migration runs *before* the reinstall so it executes with known logic and isn't clobbered mid-run. Idempotent; touches only the known stale lines, never user customization.
+- The default build/review path needs no setup beyond having dynamic workflows enabled (Pro users: `/config` → Dynamic workflows). The `--use-agent-team` mode needs the Agent Teams env flag, which the installer writes for you.
+- Your plans, specs, shards, taxonomy, and `/set-learn` data are unchanged and fully compatible.
+
 ## [Unreleased]
 
 ### Added — Sharded Learnings + Optional Serena MCP

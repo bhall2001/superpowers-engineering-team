@@ -13,8 +13,8 @@ This walkthrough shows what a complete SET cycle looks like for a real feature r
 ```
 Checking prerequisites...
 ✓ Superpowers: installed
-✓ Compound Teams: installed
-✓ Agent Teams: enabled
+✓ Dynamic workflows: available
+✓ Agent Teams: flag set (optional, for --use-agent-team)
 
 Detecting stack...
   TypeScript, React, Node.js, PostgreSQL, Drizzle ORM
@@ -98,14 +98,14 @@ Creating worktree at .worktrees/csv-export
 Branch: feat/csv-export
 Running pnpm install... done
 Running pnpm test... 47 tests passing
-Baseline clean. Spawning team.
+Baseline clean. Compiling build brief and fanning out builders.
 ```
 
-**Team spawns:**
-- `api-builder` (reads `.claude/agents/api.md`)
-- `db-builder` (reads `.claude/agents/db-drizzle.md`)
-- `ui-builder` (reads `.claude/agents/react-ui.md`)
-- `qa-agent` (reads `.claude/agents/qa.md`)
+**Builder subagents fan out** — one per task, routed by the task's specialist:
+- `api` task (reads `.claude/agents/api.md`)
+- `db-drizzle` task (reads `.claude/agents/db-drizzle.md`)
+- `react-ui` task (reads `.claude/agents/react-ui.md`)
+- `qa` task (reads `.claude/agents/qa.md`)
 
 **Builders work in parallel.** Each builder:
 1. Claims an unblocked task
@@ -115,11 +115,11 @@ Baseline clean. Spawning team.
 5. Runs lint, typecheck, self-review
 6. Commits and marks complete
 
-**QA reviews each completed task** — spec compliance first, then code quality. Creates fix tasks if anything is wrong.
+**A fresh verifier audits each completed task** against a rubric — spec compliance, TDD discipline, lint/typecheck. The workflow runs a verify-and-revise loop until each task meets the bar before folding it back.
 
 **Wrap up:**
 ```
-All tasks complete. QA: all passed both stages.
+All tasks complete. Verifier: all passed the rubric.
 Final test run: 62 tests passing (15 new)
 
 Worktree: .worktrees/csv-export
@@ -187,6 +187,6 @@ Next cycle will be smarter. ✓
 
 **Tests before code.** Every builder writes failing tests before implementation. If the tests pass before writing code, they aren't testing new behavior.
 
-**QA is adversarial.** QA independently verifies every acceptance criterion. It does not trust the builder's self-review. If a builder pushes back on a finding, QA escalates to the team lead.
+**Verification is adversarial.** A fresh verifier independently checks every acceptance criterion. It did not write the code and does not trust the builder's self-review. The workflow revises and re-verifies until each task meets the bar.
 
 **Each cycle improves the next.** `/set-learn` doesn't just log what happened — it updates the actual instructions agents use. An agent that misses rate limiting once will have rate limiting in its domain knowledge for every future cycle.

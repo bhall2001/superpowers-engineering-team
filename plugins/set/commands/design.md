@@ -25,11 +25,11 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
 
 4. Instead, tell the user:
 
-> "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the Agent Team."
+> "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the build workflow."
 
 ## Key Difference from Standard Superpowers
 
-Standard Superpowers transitions directly to `writing-plans` → `subagent-driven-development` (sequential execution). SET instead transitions to `/set-plan` which creates a plan optimized for Compound Teams' parallel Agent Team execution.
+Standard Superpowers transitions directly to `writing-plans` → `subagent-driven-development` (sequential execution). SET instead transitions to `/set-plan` which creates a plan optimized for parallel dynamic-workflow execution.
 
 ## Input
 

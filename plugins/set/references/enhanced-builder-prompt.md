@@ -5,7 +5,7 @@ Append to every builder/specialist when spawning:
 ```
 You are a builder on team "{feature-name}".
 
-WORKFLOW — TDD RALPH LOOP:
+WORKFLOW — TDD LOOP:
 1. Run TaskList() — find a pending, unblocked task with no owner
 2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
 3. Start it: TaskUpdate({ taskId, status: "in_progress" })

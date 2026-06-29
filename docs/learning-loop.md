@@ -59,7 +59,7 @@ To generate learnings, `/set-learn` looks at:
 
 1. **QA rejections** — tasks that failed spec compliance or code quality review, and why
 2. **Review findings** — security, architecture, or correctness issues flagged by `/set-review`
-3. **Ralph Loop struggles** — builders who hit the same error 3+ times (signals a knowledge gap)
+3. **TDD-loop struggles** — builders who hit the same error repeatedly (signals a knowledge gap)
 4. **Scope violations** — builders who added features not in acceptance criteria
 5. **Patterns done well** — things that went smoothly and should be repeated
 6. **Git history** — what was actually built vs. what was planned
@@ -78,10 +78,10 @@ If it's specific to a domain, it goes to that specialist's agent `.md` file.
 
 ## How Sub-Agents See Learnings
 
-Sub-agents spawned by Compound Teams (builders, QA, reviewers) don't auto-inherit the main session's loaded context. In SET's design:
+Subagents spawned by the dynamic workflow (or by an Agent Team under `--use-agent-team`) — builders, verifiers, reviewers — don't auto-inherit the main session's loaded context. In SET's design:
 
-- **Builders** receive shard content inline in their task description — the team lead loads and injects the per-task shards at `TaskCreate` time. Builders do not fetch shards themselves.
-- **QA** reads the shards referenced in each task's `Shards` field when reviewing.
+- **Builders** receive shard content inline in their task brief — the brief compiler loads and injects the per-task shards into each builder's context. Builders do not fetch shards themselves.
+- **Verifiers** read the shards referenced in each task's `Shards` field when checking the work.
 - **Reviewers** (`/set-review`) load shards whose domain intersects the diff.
 
 ## First-Run Migration

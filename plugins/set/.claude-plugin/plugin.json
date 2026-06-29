@@ -1,7 +1,7 @@
 {
   "name": "set",
-  "version": "0.2.0",
-  "description": "Superpowers Engineering Team — premium AI engineering workflow with parallel agent teams, TDD, and self-improving learning loops",
+  "version": "1.0.0",
+  "description": "Superpowers Engineering Team — premium AI engineering workflow with dynamic-workflow parallel execution (plus an autonomous Agent Team mode), TDD, and self-improving learning loops",
   "author": {
     "name": "Bob Hall"
   },
@@ -9,11 +9,11 @@
   "license": "MIT",
   "keywords": [
     "workflow",
+    "dynamic-workflows",
     "agent-teams",
     "tdd",
     "code-review",
     "compound-learning",
-    "superpowers",
-    "compound-teams"
+    "superpowers"
   ]
 }
