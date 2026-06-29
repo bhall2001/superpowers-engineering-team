@@ -20,7 +20,7 @@
 
 ### Migration Notes (for existing users)
 - Run `/set-update` to pick up the new command files. You can uninstall the `compound-teams` plugin — SET no longer uses it.
-- **`/set-update` now migrates an already-initialized project** (Step 2): it reconciles stale SET-generated content on disk — the old `### Ralph Loop (All Teammates Follow This)` block in `CLAUDE.md` and `"specialist on a SET Agent Team"` openers in `.claude/agents/*.md` — showing a diff and applying only on confirmation. Idempotent; touches only the known stale lines, never user customization.
+- **`/set-update` now migrates an already-initialized project** (Step 1, before the installer re-run): it reconciles stale SET-generated content on disk — the old `### Ralph Loop (All Teammates Follow This)` block in `CLAUDE.md` and `"specialist on a SET Agent Team"` openers in `.claude/agents/*.md` — showing a diff and applying only on confirmation. Migration runs *before* the reinstall so it executes with known logic and isn't clobbered mid-run. Idempotent; touches only the known stale lines, never user customization.
 - The default build/review path needs no setup beyond having dynamic workflows enabled (Pro users: `/config` → Dynamic workflows). The `--use-agent-team` mode needs the Agent Teams env flag, which the installer writes for you.
 - Your plans, specs, shards, taxonomy, and `/set-learn` data are unchanged and fully compatible.
 

@@ -8,21 +8,15 @@ Update SET and both prerequisite plugins to the latest versions.
 
 ## Process
 
-### 1. Update SET
+> **Order matters.** Migration (Step 1) runs **before** the installer re-run (Step 2). This command's migration logic operates on project files using the version of this command currently on disk; re-running the installer first would overwrite this command mid-run (and, when testing an unreleased branch, silently revert it to `main`). Migrate first, then reinstall.
 
-Re-run the installer to pull latest commands (also installs/updates Serena):
+### 1. Migrate this project from pre-1.0 SET (if needed)
 
-```bash
-curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
-```
+SET 1.0 dropped Compound Teams and moved build/review onto dynamic workflows. Projects initialized under an earlier SET have **generated content on disk** with stale wording (the command reinstall in Step 2 does not touch project files). Reconcile it here, first, while this command is still the one running.
 
-### 2. Migrate this project from pre-1.0 SET (if needed)
+This step is **idempotent** (safe to re-run) and **never silently overwrites** — show each proposed change and get confirmation before writing. If none of the stale markers below are found, report "Project already current" and continue to Step 2.
 
-SET 1.0 dropped Compound Teams and moved build/review onto dynamic workflows. Projects initialized under an earlier SET have **generated content on disk** with stale wording (the command reinstall in Step 1 does not touch project files). Reconcile it here.
-
-This step is **idempotent** (safe to re-run) and **never silently overwrites** — show each proposed change and get confirmation before writing. If none of the stale markers below are found, report "Project already current" and skip to Step 3.
-
-#### 2a: Migrate `CLAUDE.md`
+#### 1a: Migrate `CLAUDE.md`
 
 Look for the old SET-generated block. The marker is a heading line `### Ralph Loop (All Teammates Follow This)`.
 
@@ -41,7 +35,7 @@ If present, propose replacing **that heading and its numbered list** (steps 1–
 
 Show the user a diff of the old block vs. the new block. Apply only on confirmation.
 
-#### 2b: Migrate agent scaffolds in `.claude/agents/*.md`
+#### 1b: Migrate agent scaffolds in `.claude/agents/*.md`
 
 For each file, check the opening line for the stale phrase `specialist on a SET Agent Team`. If found, propose replacing **only** that phrase:
 
@@ -49,9 +43,19 @@ For each file, check the opening line for the stale phrase `specialist on a SET 
 
 Also replace any literal `message team lead` / `team lead` coordination phrasing that originated from the old scaffold with workflow-neutral wording (e.g. "report the blocker"). Do **not** reformat or rewrite anything the user customized — touch only the known stale lines. Show each proposed per-file change and apply on confirmation.
 
-#### 2c: Report
+#### 1c: Report migration result
 
 List exactly what was migrated (CLAUDE.md block: yes/no; which agent files changed) or confirm the project was already current. Note that plans, specs, shards, taxonomy, and `config.json` need no migration — they are format-compatible with 1.0.
+
+### 2. Update SET commands
+
+Re-run the installer to pull the latest commands (also installs/updates Serena):
+
+```bash
+curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
+```
+
+> Re-running the installer overwrites this `/set-update` command with the latest version. That's expected and safe now that migration (Step 1) has already run.
 
 ### 3. Update Superpowers
 
