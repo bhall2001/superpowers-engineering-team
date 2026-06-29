@@ -2,6 +2,8 @@
 
 ## [1.0.1] — Fix `/set-update` install reliability
 
+> **Upgrading from pre-1.0?** Run the installer once in your terminal (not via `/set-update`): `curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash`. See the README "Upgrading from a pre-1.0 install" section for why.
+
 ### Fixed
 - **`/set-update` could silently fail to update the SET commands.** When Claude ran the installer for `/set-update`, it executed inside Claude Code's sandbox, which blocks network access and writes to `~/.claude/` — so every command fetch failed with a misleading `"no local checkout and fetch failed"` while appearing to "run". (This was a latent issue: the pre-1.0 installer also could not write to `~/.claude/commands/` under the sandbox.) `/set-update` now instructs Claude to run the installer **with the sandbox disabled** (one permission prompt), or the user can run the line themselves in a terminal.
 - **Installer now downloads the repo once instead of fetching each command file individually.** The no-checkout path resolves a single source (tarball, falling back to `git clone`) and copies all files locally — one network call instead of eleven, far fewer failure points.
@@ -26,7 +28,11 @@
 - Plugin/marketplace metadata bumped to **1.0.0**; docs reworded throughout.
 
 ### Migration Notes (for existing users)
-- Run `/set-update` to pick up the new command files. You can uninstall the `compound-teams` plugin — SET no longer uses it.
+- **To reach v1, run the installer once in your own terminal (NOT via `/set-update`):**
+  ```bash
+  curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
+  ```
+  Your installed `/set-update` is the pre-1.0 version; when Claude runs it the installer executes inside Claude Code's sandbox, which blocks the network/writes it needs, so it can't pull the new commands. Running the one-liner in a terminal sidesteps the sandbox. See the README "Upgrading from a pre-1.0 install" section. After this one-time step, `/set-update` works normally from inside Claude Code. You can uninstall the `compound-teams` plugin — SET no longer uses it.
 - **`/set-update` now migrates an already-initialized project** (Step 1, before the installer re-run): it reconciles stale SET-generated content on disk — the old `### Ralph Loop (All Teammates Follow This)` block in `CLAUDE.md` and `"specialist on a SET Agent Team"` openers in `.claude/agents/*.md` — showing a diff and applying only on confirmation. Migration runs *before* the reinstall so it executes with known logic and isn't clobbered mid-run. Idempotent; touches only the known stale lines, never user customization.
 - The default build/review path needs no setup beyond having dynamic workflows enabled (Pro users: `/config` → Dynamic workflows). The `--use-agent-team` mode needs the Agent Teams env flag, which the installer writes for you.
 - Your plans, specs, shards, taxonomy, and `/set-learn` data are unchanged and fully compatible.
