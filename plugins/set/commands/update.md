@@ -55,6 +55,10 @@ Re-run the installer to pull the latest commands (also installs/updates Serena):
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
+**Run this command with the sandbox DISABLED** (set `dangerouslyDisableSandbox: true` on the Bash call). The installer must reach `raw.githubusercontent.com` to fetch the command files **and** write them into `~/.claude/commands/` — both are blocked by the default command sandbox, which makes every fetch fail with `"no local checkout and fetch failed"`. This is the one place SET legitimately needs network + a write outside the project, so disabling the sandbox for this single call is expected. The user will see one permission prompt to allow it.
+
+If the user prefers not to grant that, tell them to run the line themselves outside the agent — e.g. by typing it with a leading `!` in the Claude Code prompt, or pasting it into their terminal — which runs outside the sandbox.
+
 > Re-running the installer overwrites this `/set-update` command with the latest version. That's expected and safe now that migration (Step 1) has already run.
 
 ### 3. Update Superpowers

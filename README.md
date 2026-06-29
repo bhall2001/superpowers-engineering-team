@@ -50,6 +50,20 @@ Then open Claude Code and install the prerequisite plugin:
 
 Dynamic workflows are built into Claude Code (Pro/Max/Team/Enterprise). Pro users enable them once via `/config`; Max/Team/Enterprise have them on by default.
 
+## Upgrading from a pre-1.0 install
+
+**If you already use SET, do this one-time step to reach v1 — run it in your own terminal, NOT via `/set-update`:**
+
+```bash
+curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
+```
+
+Why the terminal, and why just this once: your installed `/set-update` is the pre-1.0 version, and when Claude runs it the installer executes inside Claude Code's sandbox, which blocks the network and writes it needs — so it can't pull the new commands. Running the same one-liner directly in your terminal sidesteps the sandbox and installs v1 cleanly.
+
+After this one-time upgrade you'll have the v1 `/set-update`, and from then on **`/set-update` works normally from inside Claude Code** — it will (a) migrate the current project's SET-generated files (the old `Ralph Loop` block in `CLAUDE.md`, `"SET Agent Team"` agent scaffolds) with a diff-and-confirm, and (b) re-run the installer for you. No more terminal step, no repo clone needed — ever.
+
+> Nothing else changes: your plans, specs, learning shards, taxonomy, and `/set-learn` data are all format-compatible with v1. You can also uninstall the old `compound-teams` plugin — SET no longer uses it.
+
 ## Getting Started
 
 1. Run the install script (see above)

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "SET — a premium AI engineering workflow combining Superpowers design + dynamic-workflow parallel execution + self-improving learning loops",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "pluginRoot": "./plugins"
   },
   "plugins": [
@@ -14,7 +14,7 @@
       "name": "set",
       "source": "./plugins/set",
       "description": "Superpowers Engineering Team: Design → Plan → Build → Review → Learn with dynamic-workflow parallel execution, TDD, specialist routing, and two-level self-improving feedback loops",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "Bob Hall"
       }
