@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1] — Fix `/set-update` install reliability
+
+### Fixed
+- **`/set-update` could silently fail to update the SET commands.** When Claude ran the installer for `/set-update`, it executed inside Claude Code's sandbox, which blocks network access and writes to `~/.claude/` — so every command fetch failed with a misleading `"no local checkout and fetch failed"` while appearing to "run". (This was a latent issue: the pre-1.0 installer also could not write to `~/.claude/commands/` under the sandbox.) `/set-update` now instructs Claude to run the installer **with the sandbox disabled** (one permission prompt), or the user can run the line themselves in a terminal.
+- **Installer now downloads the repo once instead of fetching each command file individually.** The no-checkout path resolves a single source (tarball, falling back to `git clone`) and copies all files locally — one network call instead of eleven, far fewer failure points.
+- **Installer fails loudly.** It now exits non-zero with a clear ❌ and sandbox/network guidance when commands could not be installed, and asserts the installed commands are current (no stale pre-1.0 leftovers) — so a no-op update can no longer look successful.
+
 ## [1.0.0] — Workflow-native build & review (drop Compound Teams)
 
 ### Changed — orchestration

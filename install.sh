@@ -183,47 +183,86 @@ bold "Step 4: Installing SET commands"
 bold "-------------------------------"
 
 # SET command + reference files are the source of truth under plugins/set/.
-# Install them by copying from a local checkout when available, otherwise by
-# fetching the same files from GitHub raw (supports `curl -sL .../install.sh | bash`).
+# Resolve ONE source tree, then copy all files from it locally:
+#   1. a local repo checkout (when running `bash install.sh` from a clone), or
+#   2. a single download of the repo (tarball, fallback git clone) when piped
+#      via `curl | bash`. One network call instead of one-per-file.
 mkdir -p "$COMMANDS_DIR/references"
+
+# ERRORS may be referenced before Step 5 initializes it; ensure it exists.
+ERRORS=${ERRORS:-0}
 
 # Resolve the directory this script lives in (empty/unreliable under curl|bash).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 PLUGIN_ROOT=""
+DOWNLOAD_TMP=""
+
 if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/plugins/set" ]; then
   PLUGIN_ROOT="$SCRIPT_DIR/plugins/set"
-fi
+  info "Using local checkout: $PLUGIN_ROOT"
+else
+  # No checkout (curl | bash). Download the repo ONCE.
+  info "No local checkout — downloading SET once..."
+  # Tolerate a blocked/failed mktemp (e.g. a sandbox) without aborting under set -e,
+  # so we reach the clear guidance below instead of dying on a cryptic mktemp error.
+  DOWNLOAD_TMP="$(mktemp -d 2>/dev/null || mktemp -d -t set-install 2>/dev/null || true)"
+  if [ -z "$DOWNLOAD_TMP" ] || [ ! -d "$DOWNLOAD_TMP" ]; then
+    : # leave PLUGIN_ROOT empty -> the error block below fires
+  elif curl -fsSL "https://github.com/bhall2001/superpowers-engineering-team/archive/refs/heads/main.tar.gz" \
+       -o "$DOWNLOAD_TMP/set.tar.gz" 2>/dev/null \
+     && tar -xzf "$DOWNLOAD_TMP/set.tar.gz" -C "$DOWNLOAD_TMP" 2>/dev/null \
+     && [ -d "$DOWNLOAD_TMP/superpowers-engineering-team-main/plugins/set" ]; then
+    PLUGIN_ROOT="$DOWNLOAD_TMP/superpowers-engineering-team-main/plugins/set"
+    info "Downloaded SET (tarball)"
+  elif command -v git &>/dev/null \
+       && git clone --depth 1 "https://github.com/bhall2001/superpowers-engineering-team.git" \
+            "$DOWNLOAD_TMP/repo" &>/dev/null \
+       && [ -d "$DOWNLOAD_TMP/repo/plugins/set" ]; then
+    PLUGIN_ROOT="$DOWNLOAD_TMP/repo/plugins/set"
+    info "Downloaded SET (git clone)"
+  fi
 
-# ERRORS may be referenced before Step 5 initializes it; ensure it exists.
-ERRORS=${ERRORS:-0}
+  if [ -z "$PLUGIN_ROOT" ]; then
+    error "Could not download SET (no local checkout, and the download failed)."
+    error "Most common cause: this ran inside Claude Code's sandbox, which blocks"
+    error "network access and writes outside the project. Re-run with the sandbox"
+    error "disabled, or run the installer yourself in a terminal:"
+    error "  curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash"
+    ERRORS=$((ERRORS + 1))
+  fi
+fi
 
 # install_file <src-path-under-plugins/set/> <dest-path-under-COMMANDS_DIR>
 install_file() {
   local rel="$1" dest="$2"
   if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/$rel" ]; then
     cp "$PLUGIN_ROOT/$rel" "$COMMANDS_DIR/$dest"
-    info "Installed $dest (copied)"
-  elif curl -fsSL "$SET_RAW_BASE/plugins/set/$rel" -o "$COMMANDS_DIR/$dest" 2>/dev/null; then
-    info "Installed $dest (fetched)"
+    info "Installed $dest"
   else
-    error "Failed to install $dest (no local checkout and fetch failed)"
+    error "Failed to install $dest (source not available)"
     ERRORS=$((ERRORS + 1))
   fi
 }
 
-# Commands. Plugin files are named build.md/plan.md/etc; installed as set-build.md/etc.
-install_file "commands/init.md"   "set-init.md"
-install_file "commands/design.md" "set-design.md"
-install_file "commands/plan.md"   "set-plan.md"
-install_file "commands/build.md"  "set-build.md"
-install_file "commands/review.md" "set-review.md"
-install_file "commands/learn.md"  "set-learn.md"
-install_file "commands/update.md" "set-update.md"
+# Only attempt file installs if we resolved a source tree.
+if [ -n "$PLUGIN_ROOT" ]; then
+  # Commands. Plugin files are named build.md/plan.md/etc; installed as set-build.md/etc.
+  install_file "commands/init.md"   "set-init.md"
+  install_file "commands/design.md" "set-design.md"
+  install_file "commands/plan.md"   "set-plan.md"
+  install_file "commands/build.md"  "set-build.md"
+  install_file "commands/review.md" "set-review.md"
+  install_file "commands/learn.md"  "set-learn.md"
+  install_file "commands/update.md" "set-update.md"
 
-# Reference files (under plugins/set/references/, installed under references/).
-install_file "references/enhanced-builder-prompt.md" "references/enhanced-builder-prompt.md"
-install_file "references/enhanced-qa-prompt.md"      "references/enhanced-qa-prompt.md"
-install_file "references/learn-entry-format.md"      "references/learn-entry-format.md"
+  # Reference files (under plugins/set/references/, installed under references/).
+  install_file "references/enhanced-builder-prompt.md" "references/enhanced-builder-prompt.md"
+  install_file "references/enhanced-qa-prompt.md"      "references/enhanced-qa-prompt.md"
+  install_file "references/learn-entry-format.md"      "references/learn-entry-format.md"
+fi
+
+# Clean up any downloaded tree.
+[ -n "$DOWNLOAD_TMP" ] && rm -rf "$DOWNLOAD_TMP"
 
 # ---------------------------------------------------------------------------
 # Step 5: Verify
@@ -256,13 +295,23 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-# Check commands
+# Check commands exist. Also assert no stale pre-1.0 markers leaked through — a bare
+# existence check would pass even if nothing was written this run, which is how a
+# silently-failed update can look "successful". The pre-1.0 commands referenced the
+# Compound Teams *marketplace/plugin id*; 1.0+ commands never do (the prose mentions
+# of "Compound Teams" in 1.0 docs don't include the marketplace/plugin id), so it is
+# a clean stale-leftover signal.
+CMD_OK=0
 for cmd in set-init set-design set-plan set-build set-review set-learn set-update; do
-  if [ -f "$COMMANDS_DIR/$cmd.md" ]; then
-    info "Command: /$cmd"
-  else
+  if [ ! -f "$COMMANDS_DIR/$cmd.md" ]; then
     error "Missing command: /$cmd"
     ERRORS=$((ERRORS + 1))
+  elif grep -qiE "compound-teams-marketplace|compound-teams@" "$COMMANDS_DIR/$cmd.md"; then
+    error "/$cmd is STALE (pre-1.0 leftover) — install did not update it"
+    ERRORS=$((ERRORS + 1))
+  else
+    info "Command: /$cmd"
+    CMD_OK=$((CMD_OK + 1))
   fi
 done
 
@@ -275,18 +324,30 @@ for ref in enhanced-builder-prompt enhanced-qa-prompt learn-entry-format; do
   fi
 done
 
+info "SET commands current: $CMD_OK/7"
+
 # ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 bold ""
 bold "============================================"
-if [ $ERRORS -eq 0 ]; then
-  bold "  SET installed successfully!"
+if [ "$ERRORS" -eq 0 ]; then
+  bold "  ✅ SET installed successfully!"
 else
-  bold "  SET installed with $ERRORS warning(s)"
+  bold "  ❌ SET install FAILED — $ERRORS problem(s) above"
 fi
 bold "============================================"
 echo ""
+
+if [ "$ERRORS" -ne 0 ]; then
+  error "SET commands were NOT fully installed/updated. Most common cause:"
+  error "  this ran inside Claude Code's sandbox (blocks network + writes to ~/.claude)."
+  error "  Re-run with the sandbox disabled, or run the installer in your own terminal:"
+  error "    curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash"
+  echo ""
+  exit 1
+fi
+
 info "Pipeline:"
 info "  /set-init (once per project)"
 info "  /set-design → /set-plan → /set-build → /set-review → /set-learn"
