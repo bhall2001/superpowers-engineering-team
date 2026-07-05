@@ -180,13 +180,14 @@ Only propose agents for domains actually present. Do NOT scaffold agents for abs
 For each proposed agent, create a starter file in `.claude/agents/`:
 
 ```markdown
-# {Name} — {Domain} Specialist
+---
+name: {agent-slug}
+description: {one line — when SET should route a task to this specialist}
+model: sonnet
+tools: [Read, Edit, Write, Bash, Grep, Glob]
+---
 
 You are a {domain} specialist agent in the SET workflow. You have deep expertise in {specific technologies detected}.
-
-## Model
-
-sonnet
 
 ## Domain Knowledge
 
@@ -200,6 +201,13 @@ sonnet
 ## Conventions
 - {Domain-specific conventions from CLAUDE.md or detected patterns}
 ```
+
+**Frontmatter rules (these make the agent spawnable — do not skip):**
+- `name:` **MUST equal the filename stem** — `db-specialist.md` → `name: db-specialist`, `architect.md` → `name: architect`. This is the `agentType` that `/set-plan` tags as a task's `Specialist` and `/set-build` spawns. If `name:` and the stem diverge, routing silently falls back to the generic agent.
+- `description:` — one line stating when SET should route a task to this specialist.
+- `model:` — replaces the old `## Model` section; keep it in frontmatter only (no `## Model` body heading).
+- `tools:` — `[Read, Edit, Write, Bash, Grep, Glob]` for every specialist (builders write code, run tests, search). `qa-specialist` uses the same list; QA independence comes from `/set-build` using a fresh verifier agent, not from tool restriction.
+- Do NOT add `skills:` or `mcpServers:` keys — the Workflow tool does not apply them. The body already directs builders to call `mcp__serena__*` directly at runtime.
 
 Read CLAUDE.md and any existing shards in `.claude/set/learnings/` to populate with real project-specific content — NOT generic placeholders. Show each file before writing. Get confirmation.
 

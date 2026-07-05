@@ -43,9 +43,25 @@ For each file, check the opening line for the stale phrase `specialist on a SET 
 
 Also replace any literal `message team lead` / `team lead` coordination phrasing that originated from the old scaffold with workflow-neutral wording (e.g. "report the blocker"). Do **not** reformat or rewrite anything the user customized — touch only the known stale lines. Show each proposed per-file change and apply on confirmation.
 
+**Then normalize frontmatter (makes the agent spawnable as an `agentType`).** For each `.claude/agents/*.md` file, apply the first matching case:
+
+1. **No `---` frontmatter block** → synthesize one and prepend it:
+   - `name:` = filename stem (always — this is the critical key; `db-specialist.md` → `name: db-specialist`).
+   - `description:` = derived from the `# {Name} — {Domain} Specialist` heading if parseable; else `SET specialist (review & refine)`.
+   - `model:` = the value under the old `## Model` section if present; else `sonnet`.
+   - `tools:` = `[Read, Edit, Write, Bash, Grep, Glob]`.
+   - Remove the now-redundant `## Model` section from the body (its value moved to frontmatter).
+   - Leave the rest of the body untouched — do NOT rewrite user customizations.
+2. **Has frontmatter but `name:` is missing or ≠ filename stem** → set/fix `name:` to the stem; leave other keys as-is.
+3. **Already correct** (frontmatter present, `name:` matches stem) → no change.
+
+**Undecipherable/heavily-customized file** (no derivable domain or model): still inject `name:` (stem), `description: SET specialist (review & refine)`, `model: sonnet`, `tools: [Read, Edit, Write, Bash, Grep, Glob]`; leave the body untouched; and **flag the file in the 1c report** for the user to review and refine.
+
+This normalization is **idempotent** and follows the same rule as the rest of Step 1: show each proposed per-file diff and apply only on confirmation.
+
 #### 1c: Report migration result
 
-List exactly what was migrated (CLAUDE.md block: yes/no; which agent files changed) or confirm the project was already current. Note that plans, specs, shards, taxonomy, and `config.json` need no migration — they are format-compatible with 1.0.
+List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review) or confirm the project was already current. Note that plans, specs, shards, taxonomy, and `config.json` need no migration — they are format-compatible with 1.0.
 
 ### 2. Update SET commands
 
