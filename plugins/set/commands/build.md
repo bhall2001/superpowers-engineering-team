@@ -1,5 +1,5 @@
 ---
-description: "Executes a SET plan via a dynamic workflow: compiles the plan into a build brief (per-task specialist + learning context), fans out parallel TDD builders, and schema-verifies each task against the spec before the human gate. Use after /set-plan produces a plan, when a user says 'build it', 'execute the plan', 'start building', or 'run the team'. Add --use-agent-team to run the build as an autonomous Agent Team instead. Do NOT use without an existing plan in .claude/plans/."
+description: "Executes a SET plan as a native Agent Team: compiles the plan into a build brief (per-task specialist + learning context), spawns parallel TDD builder teammates with a dedicated verifier per task, and schema-verifies each task against the spec before the human gate. Use after /set-plan produces a plan, when a user says 'build it', 'execute the plan', 'start building', or 'run the team'. Add --use-workflow to run the build as a dynamic workflow instead. Do NOT use without an existing plan in .claude/plans/."
 ---
 
 # SET Build — Dynamic Workflow Execution
@@ -10,10 +10,18 @@ You do NOT implement retry/escalation loops yourself. You specify the **bar** (t
 
 ## Execution Mode
 
-Check `$ARGUMENTS` for `--use-agent-team`:
+SET's default build path is a **native Agent Team**: the lead session (you) is the
+coordinator, spawning builder and verifier teammates that coordinate through a shared
+task list. This is a deliberate lean toward durable, autonomous teams.
 
-- **Absent (default)** → the **dynamic-workflow path** (Steps 2–6 below).
-- **Present** → the **autonomous Agent Team path** (see "Autonomous Agent Team Mode" at the end). With permissions skipped, the team runs autonomously; SET captures what the agents did well and badly so `/set-learn` can compound it.
+Check `$ARGUMENTS`:
+
+- **Default (no flag)** → the **Agent Team path** (Phase B-team). Requires the
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env var; see "Agent Team Availability Gate".
+- **`--use-workflow`** → the **dynamic-workflow path** (Phase B-workflow). Skips the
+  availability gate entirely.
+- **`--use-agent-team`** → accepted as a **silent no-op alias** for the default.
+  Do not warn, do not print a deprecation notice — it simply selects the default path.
 
 ## Before Starting
 
