@@ -2,11 +2,11 @@
 description: "Executes a SET plan as a native Agent Team: compiles the plan into a build brief (per-task specialist + learning context), spawns parallel TDD builder teammates with a dedicated verifier per task, and schema-verifies each task against the spec before the human gate. Use after /set-plan produces a plan, when a user says 'build it', 'execute the plan', 'start building', or 'run the team'. Add --use-workflow to run the build as a dynamic workflow instead. Do NOT use without an existing plan in .claude/plans/."
 ---
 
-# SET Build — Dynamic Workflow Execution
+# SET Build — Agent Team Execution
 
-You are the **brief compiler and gatekeeper**, not the orchestrator. SET compiles the approved plan into one well-formed build brief, hands execution to a **dynamic workflow** (the `Workflow` tool — it owns fan-out, parallel builder spawning, the per-task TDD verify-and-revise loop, and keeping intermediate work out of your context), and surfaces the result at a human gate.
+You are the **brief compiler and coordinator**. SET compiles the approved plan into one well-formed build brief, then executes it as a **native Agent Team** — you spawn builder and verifier teammates that coordinate through a shared task list — and surfaces the result at a human gate. With `--use-workflow`, the same brief is handed to a **dynamic workflow** (the `Workflow` tool) instead, which owns fan-out and parallel builder spawning itself.
 
-You do NOT implement retry/escalation loops yourself. You specify the **bar** (the verification rubric) and the **escalation policy**; the workflow runs the loop.
+You do NOT implement retry/escalation loops yourself. You specify the **bar** (the verification rubric) and the **escalation policy**; the execution path runs the loop.
 
 ## Execution Mode
 
