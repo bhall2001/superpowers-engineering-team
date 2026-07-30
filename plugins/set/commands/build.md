@@ -97,6 +97,44 @@ Tests passing ({N} tests, 0 failures)
 Ready to compile the build brief.
 ```
 
+## Phase A — Compile the Build Brief (main context, cheap)
+
+This is SET's methodology layer. Assemble ONE brief the workflow can execute without re-deriving anything. For each task in the plan:
+
+### A1: Load shards for the task
+For each domain in the task's `Shards` field, read `.claude/set/learnings/{domain}.md` and collect its contents (strip frontmatter, keep the What Works / What Failed / Recurring Bugs sections). If `Shards` is empty, skip.
+
+### A2: Query Serena (if enabled)
+If `serena_enabled: true`, query Serena for memories relevant to the task's `What` + `Done when` text. Cap at top 5 by relevance. Dedupe against shards already loaded in A1 (skip memories whose `source:` points to an already-loaded shard). If Serena fails or times out, log a warning and continue — never block the build on Serena.
+
+### A3: Assemble the per-task context bundle
+```
+{full task description from plan, INCLUDING TDD Steps, Files, Tests, Done-when, and Self-Review Checklist}
+
+## Specialist guidance
+Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
+(If Specialist is "generic" or absent, no agent file — use general best practices.)
+NOTE: a specialist definition's `skills`/`mcpServers` frontmatter is NOT auto-applied to
+workflow agents. If this task needs Serena, call `mcp__serena__*` tools directly.
+
+## Relevant Learnings (from shards: {comma-separated domains})
+{shard contents}
+
+{if Serena enabled and returned results:}
+## Additional Semantic Matches (from Serena)
+{top-5 deduped memory contents}
+```
+
+### A4: Compose the global verification rubric
+The bar EVERY task must clear before the workflow folds its output back:
+- **TDD discipline:** a failing test was written first (red), minimal code made it pass (green), then refactor — tests stay green.
+- **Spec compliance:** every "Done when" criterion met; nothing implemented beyond spec.
+- **Quality gates:** lint and typecheck commands from CLAUDE.md "Build Commands" pass clean.
+- **Self-review:** every item in the task's Self-Review Checklist is satisfied.
+
+### A5: Define the escalation policy
+What the workflow does when a task can't meet the bar after its own revise loop: stop that task, record the specific failing criterion + what was tried, and return it as a **failed task** in the report (do NOT fold partial/failing work back as if it passed). Other independent tasks continue.
+
 ## Agent Team Availability Gate
 
 Run this AFTER Phase A and BEFORE Phase B. **Skip entirely if `--use-workflow` was passed.**
@@ -138,44 +176,6 @@ Which? [1/2]
 
 Do not persist the answer to `config.json`. This gate asks each cycle while
 Agent Teams are unavailable — the choice is not persisted between runs.
-
-## Phase A — Compile the Build Brief (main context, cheap)
-
-This is SET's methodology layer. Assemble ONE brief the workflow can execute without re-deriving anything. For each task in the plan:
-
-### A1: Load shards for the task
-For each domain in the task's `Shards` field, read `.claude/set/learnings/{domain}.md` and collect its contents (strip frontmatter, keep the What Works / What Failed / Recurring Bugs sections). If `Shards` is empty, skip.
-
-### A2: Query Serena (if enabled)
-If `serena_enabled: true`, query Serena for memories relevant to the task's `What` + `Done when` text. Cap at top 5 by relevance. Dedupe against shards already loaded in A1 (skip memories whose `source:` points to an already-loaded shard). If Serena fails or times out, log a warning and continue — never block the build on Serena.
-
-### A3: Assemble the per-task context bundle
-```
-{full task description from plan, INCLUDING TDD Steps, Files, Tests, Done-when, and Self-Review Checklist}
-
-## Specialist guidance
-Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
-(If Specialist is "generic" or absent, no agent file — use general best practices.)
-NOTE: a specialist definition's `skills`/`mcpServers` frontmatter is NOT auto-applied to
-workflow agents. If this task needs Serena, call `mcp__serena__*` tools directly.
-
-## Relevant Learnings (from shards: {comma-separated domains})
-{shard contents}
-
-{if Serena enabled and returned results:}
-## Additional Semantic Matches (from Serena)
-{top-5 deduped memory contents}
-```
-
-### A4: Compose the global verification rubric
-The bar EVERY task must clear before the workflow folds its output back:
-- **TDD discipline:** a failing test was written first (red), minimal code made it pass (green), then refactor — tests stay green.
-- **Spec compliance:** every "Done when" criterion met; nothing implemented beyond spec.
-- **Quality gates:** lint and typecheck commands from CLAUDE.md "Build Commands" pass clean.
-- **Self-review:** every item in the task's Self-Review Checklist is satisfied.
-
-### A5: Define the escalation policy
-What the workflow does when a task can't meet the bar after its own revise loop: stop that task, record the specific failing criterion + what was tried, and return it as a **failed task** in the report (do NOT fold partial/failing work back as if it passed). Other independent tasks continue.
 
 ## Phase B — Delegate to the Dynamic Workflow (the `Workflow` tool owns this)
 
