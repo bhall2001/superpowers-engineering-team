@@ -177,7 +177,25 @@ Which? [1/2]
 Do not persist the answer to `config.json`. This gate asks each cycle while
 Agent Teams are unavailable — the choice is not persisted between runs.
 
-## Phase B — Delegate to the Dynamic Workflow (the `Workflow` tool owns this)
+## Phase B — Fork by Execution Mode
+
+Phase A above and Phase C below are **shared and harness-agnostic** — they run
+identically regardless of path. Only this phase forks:
+
+- **Default** → Phase B-team (native Agent Team)
+- **`--use-workflow`, or Option 1 at the availability gate** → Phase B-workflow
+
+Both paths are first-class and must emit the **identical per-task verdict schema**:
+
+```
+{ task: string, passed: boolean, tdd_followed: boolean, spec_compliant: boolean,
+  lint_pass: boolean, typecheck_pass: boolean, failing_criteria: string[], notes: string }
+```
+
+Phase C consumes this shape without knowing which path produced it. This schema is the
+seam that keeps the two paths from drifting — when editing either path, preserve it exactly.
+
+## Phase B-workflow — Delegate to the Dynamic Workflow
 
 Invoke the **`Workflow` tool** with a script that executes the brief. The script must:
 
