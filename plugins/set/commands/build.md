@@ -97,6 +97,48 @@ Tests passing ({N} tests, 0 failures)
 Ready to compile the build brief.
 ```
 
+## Agent Team Availability Gate
+
+Run this AFTER Phase A and BEFORE Phase B. **Skip entirely if `--use-workflow` was passed.**
+
+Agent Teams are an experimental Claude Code feature, disabled by default:
+
+```bash
+jq -r '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS // empty' ~/.claude/settings.json
+```
+
+If the value is `1`, proceed to Phase B-team.
+
+If it is empty or absent, present exactly two options and wait for the user:
+
+```
+Agent Teams are not enabled, so /set-build cannot run its default path.
+
+  1. Run this build on the dynamic-workflow path now
+  2. Stop, so you can enable Agent Teams
+
+Which? [1/2]
+```
+
+- **Option 1** → run Phase B-workflow. Say so plainly; never degrade silently.
+- **Option 2** → stop and print:
+
+  ```
+  Add this to ~/.claude/settings.json:
+
+    "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }
+
+  Then restart your session — the variable is read at session start, so setting
+  it in this session will not take effect. Re-run /set-build after you restart
+  the session.
+  ```
+
+  The restart line is required. Without it a user sets the variable, retries in the
+  same session, and hits the identical failure.
+
+Do not persist the answer to `config.json`. This gate asks each cycle while
+Agent Teams are unavailable — the choice is not persisted between runs.
+
 ## Phase A — Compile the Build Brief (main context, cheap)
 
 This is SET's methodology layer. Assemble ONE brief the workflow can execute without re-deriving anything. For each task in the plan:
