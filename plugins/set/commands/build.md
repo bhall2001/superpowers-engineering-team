@@ -195,6 +195,125 @@ Both paths are first-class and must emit the **identical per-task verdict schema
 Phase C consumes this shape without knowing which path produced it. This schema is the
 seam that keeps the two paths from drifting — when editing either path, preserve it exactly.
 
+## Phase B-team — Execute as a Native Agent Team (default)
+
+You are the **coordinator**. Claude Code ships no separate coordinator agent or skill —
+the lead session fills that role. You spawn teammates, route work through a shared task
+list, and unblock with guidance. You do **not** write implementation code yourself.
+
+Valid tools for this phase: `Agent`, `SendMessage`, `TaskCreate`, `TaskGet`, `TaskList`,
+`TaskUpdate`. There is no dedicated team-spawning tool, no forced-shutdown tool, and no
+cleanup operation — a team is implicit in the session and is created by spawning the first
+named agent.
+
+### T1: Build the task graph
+
+One `TaskCreate` per plan task:
+
+```
+TaskCreate({
+  subject: "{task name from plan}",
+  description: "{the complete Phase-A A3 context bundle for this task}",
+  activeForm: "{what in-progress looks like}",
+  blockedBy: ["{task IDs from this task's `Blocked by` field}"]
+})
+```
+
+The `description` carries the **entire** A3 bundle — task description, TDD steps, files,
+tests, done-when criteria, self-review checklist, specialist guidance, shard learnings,
+and any Serena matches. Teammates do **not** re-read shards; everything is injected here.
+
+### T2: Spawn builder teammates
+
+Route each task by its `Specialist` field:
+
+```
+Agent({
+  name: "{Specialist}",
+  subagent_type: "{Specialist}",
+  prompt: "{A3 context bundle}\n\n{contents of references/enhanced-builder-prompt.md}"
+})
+```
+
+`name` makes the teammate addressable by `SendMessage`. `subagent_type` resolves from
+`.claude/agents/*.md` by the agent file's `name:` frontmatter field, which equals the
+filename stem, which equals the value `/set-plan` tags as `Specialist`. When `Specialist`
+is `generic` or absent, omit `subagent_type` and spawn a default builder.
+
+Scale builders by task count: 2–3 tasks → 1 builder; 4–6 → 2; 7+ → 3. Prefer distinct
+specialists over duplicate generic builders.
+
+Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt. QA's remit
+is unchanged from previous SET versions — it is a peer role, **not** the verifier.
+
+Read both reference files before spawning anything.
+
+Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
+to teammates — only `tools`, `model`, `permissionMode`, and `maxTurns` carry over. If a
+task needs Serena, instruct the teammate to call `mcp__serena__*` tools directly.
+
+### T3: Spawn a dedicated verifier per task
+
+Each task gets its **own** verifier teammate, separate from its builder:
+
+```
+Agent({
+  name: "verifier-{task-id}",
+  prompt: "You verify one task. You write NO code — verification only.
+           Task: {task name}
+           Context: {A3 bundle}
+           Rubric: {A4 rubric}
+           Return ONLY this JSON: { task, passed, tdd_followed, spec_compliant,
+           lint_pass, typecheck_pass, failing_criteria, notes }"
+})
+```
+
+A verifier writes no code, so it can never verify its own work — this preserves the
+fresh-verifier guarantee the workflow path gets from a separate `agent({schema})` call.
+
+**Concurrency ceiling of 4.** Spawn a verifier when its builder reports the task
+complete. If 4 verifiers are already running, queue the rest and spawn as earlier ones
+finish. This bounds token cost and file contention on large plans without serializing
+verification.
+
+Build-time verification is **self-grading and biased by construction**. It is not the
+final word — `/set-review` is the independent audit.
+
+### T4: Coordinate and detect stalls
+
+Poll `TaskList()`. Unblock with **guidance, not code**, via `SendMessage`.
+
+A documented Agent Teams limitation: teammates sometimes fail to mark tasks complete,
+which stalls every `blockedBy` dependent. Mitigate:
+
+1. Track consecutive polls where a task stays `in_progress` with no status change.
+2. After **3** consecutive unchanged polls, `SendMessage` that teammate for a status report.
+3. If still unchanged after **3 more** polls (6 total), mark the task **failed** per the
+   A5 escalation policy, recording that it stalled and what it last reported.
+4. Independent tasks continue. Only genuine dependents of the stalled task are affected.
+
+Poll-count rather than wall-clock, because legitimate task duration varies widely with
+task size.
+
+Cost control: if a teammate loops on the same error 5+ times, `SendMessage` it to stop,
+request shutdown, and report the blocker to the user.
+
+### T5: Shut down and wrap up
+
+1. `SendMessage` a shutdown request to each teammate; await acknowledgement. Teammates
+   may accept or reject — there is no forced-termination tool.
+2. Run the full test suite one final time.
+3. Collect the per-task verdicts and hand them to Phase C.
+4. Report the worktree location or branch name. Do **not** remove the worktree —
+   `/set-review` handles cleanup.
+
+### Agent Teams limitations to keep in mind
+
+- `/resume` and `/rewind` do **not** restore teammates; there is no session resumption.
+- One team per session. Teammates cannot spawn nested teams.
+- Task status can lag — mitigated by the T4 stall timeout.
+- Permissions are fixed at spawn; all teammates inherit the lead's mode.
+
 ## Phase B-workflow — Delegate to the Dynamic Workflow
 
 Invoke the **`Workflow` tool** with a script that executes the brief. The script must:
