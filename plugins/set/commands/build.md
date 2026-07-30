@@ -216,11 +216,11 @@ Author the workflow script to keep intermediate builder output in script variabl
 
 ## Phase C — Build Gate-Back (you own this)
 
-When the workflow returns:
+When the selected execution path returns:
 
 1. Run the full test suite yourself one final time.
 2. Present the result at the human gate. Show: tasks passed/failed (from the structured verdicts), the diff stat, and any failed-task escalations.
-3. **Frame the verification report as builder self-grading** — useful but biased by construction (a grader checking work the same workflow produced prefers its own findings). It is never the final word. The independent audit happens in `/set-review`.
+3. **Frame the verification report as builder self-grading** — useful but biased by construction (a grader checking work produced by the same execution path prefers its own findings). It is never the final word. The independent audit happens in `/set-review`.
 4. Report the worktree location or current branch name.
 5. Suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
 
