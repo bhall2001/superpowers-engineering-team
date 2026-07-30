@@ -151,18 +151,19 @@ add_marketplace "claude-plugins-official" "github" "$OFFICIAL_MARKETPLACE_REPO"
 # Step 2: Enable Agent Teams
 # ---------------------------------------------------------------------------
 bold ""
-bold "Step 2: Enabling Agent Teams (optional build mode)"
-bold "--------------------------------------------------"
+bold "Step 2: Enabling Agent Teams (required for the default build path)"
+bold "------------------------------------------------------------------"
 
-# The default /set-build path uses native dynamic workflows and does NOT require
-# this flag. It enables the optional autonomous Agent Team build mode
-# (/set-build --use-agent-team). Written by default so that mode works out of the box.
+# /set-build runs as a native Agent Team by default, which requires this flag.
+# Without it, /set-build prompts the user to fall back to the dynamic-workflow
+# path (/set-build --use-workflow), which needs no flag.
 if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
-  info "Agent Teams already enabled (for /set-build --use-agent-team)"
+  info "Agent Teams already enabled (required for the default /set-build path)"
 else
   jq '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"' \
     "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-  info "Agent Teams enabled (for /set-build --use-agent-team)"
+  info "Agent Teams enabled (required for the default /set-build path)"
+  warn "Restart any running Claude Code session — this variable is read at session start"
 fi
 
 # ---------------------------------------------------------------------------
@@ -283,9 +284,10 @@ else
 fi
 
 if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
-  info "Agent Teams: enabled (for /set-build --use-agent-team)"
+  info "Agent Teams: enabled (required for the default /set-build path)"
 else
-  warn "Agent Teams: not enabled (only needed for /set-build --use-agent-team)"
+  error "Agent Teams: not enabled — the default /set-build path will not run"
+  ERRORS=$((ERRORS + 1))
 fi
 
 if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
