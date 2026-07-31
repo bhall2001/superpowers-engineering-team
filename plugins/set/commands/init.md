@@ -17,7 +17,7 @@ ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "Superpowers: inst
 
 If Superpowers is missing, tell the user how to install it (`bash install.sh`) and stop.
 
-**Dynamic Workflows:** `/set-build` and `/set-review` use the native `Workflow` tool. It ships with Claude Code (Pro/Max/Team/Enterprise). Pro users may need to enable it once via `/config` → "Dynamic workflows". No plugin install required.
+**Dynamic Workflows:** `/set-review` and `/set-build --use-workflow` use the native `Workflow` tool. It ships with Claude Code (Pro/Max/Team/Enterprise). Pro users may need to enable it once via `/config` → "Dynamic workflows". No plugin install required.
 
 ## Step 2: Audit Current State
 

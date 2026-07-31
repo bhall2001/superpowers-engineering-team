@@ -99,7 +99,7 @@ Ready to compile the build brief.
 
 ## Phase A — Compile the Build Brief (main context, cheap)
 
-This is SET's methodology layer. Assemble ONE brief the workflow can execute without re-deriving anything. For each task in the plan:
+This is SET's methodology layer. Assemble ONE brief the execution path can run without re-deriving anything. For each task in the plan:
 
 ### A1: Load shards for the task
 For each domain in the task's `Shards` field, read `.claude/set/learnings/{domain}.md` and collect its contents (strip frontmatter, keep the What Works / What Failed / Recurring Bugs sections). If `Shards` is empty, skip.
