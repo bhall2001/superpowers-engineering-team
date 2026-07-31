@@ -342,10 +342,17 @@ bold "============================================"
 echo ""
 
 if [ "$ERRORS" -ne 0 ]; then
-  error "SET commands were NOT fully installed/updated. Most common cause:"
-  error "  this ran inside Claude Code's sandbox (blocks network + writes to ~/.claude)."
-  error "  Re-run with the sandbox disabled, or run the installer in your own terminal:"
-  error "    curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash"
+  error "SET did not install cleanly. Check the problems listed above. Common causes:"
+  error ""
+  error "  Agent Teams not enabled — /set-build's default path needs this in"
+  error "    ~/.claude/settings.json:  \"env\": { \"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\" }"
+  error "    Restart Claude Code after setting it. To skip Agent Teams entirely,"
+  error "    run /set-build --use-workflow, which needs no flag."
+  error ""
+  error "  Commands not installed/updated — this often means the installer ran inside"
+  error "    Claude Code's sandbox (blocks network + writes to ~/.claude). Re-run with"
+  error "    the sandbox disabled, or run it in your own terminal:"
+  error "      curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash"
   echo ""
   exit 1
 fi
