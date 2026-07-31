@@ -61,9 +61,9 @@ Serena is required. Verify it is available:
    ```
    Show the user the file before writing. Get confirmation.
 
-## Step 4: Enable Agent Teams (for the optional `--use-agent-team` build mode)
+## Step 4: Enable Agent Teams (required for the default `/set-build` path)
 
-The default `/set-build` path uses dynamic workflows and does NOT need this flag. It enables the optional autonomous Agent Team build mode (`/set-build --use-agent-team`). Write it by default so that mode works out of the box.
+The default `/set-build` path runs as a native Agent Team and REQUIRES this flag (a session restart is needed after first write). Write it by default so the default path works out of the box. `/set-build --use-workflow` runs the dynamic-workflow path instead and needs no flag.
 
 Check `.claude/settings.json`:
 - If it **doesn't exist**: create it with `{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
@@ -251,7 +251,7 @@ Stack detected:
   Linter:       [detected]
   Type checker: [detected]
 
-Execution:   dynamic workflows (default) — Agent Teams enabled for /set-build --use-agent-team
+Execution:   Agent Teams (default for /set-build) — dynamic workflows available via /set-build --use-workflow
 Serena MCP:  ✓ required and verified
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]

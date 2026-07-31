@@ -40,7 +40,7 @@ Save to `.claude/plans/{feature-name}.md`:
 ```markdown
 # Plan: {Feature Name}
 
-> **Execution:** Use `/set-build` to execute this plan as a dynamic workflow (or `/set-build --use-agent-team` for an autonomous Agent Team).
+> **Execution:** Use `/set-build` to execute this plan as a native Agent Team by default (or `/set-build --use-workflow` for the dynamic-workflow path).
 > **Design spec:** `docs/superpowers/specs/{spec-file}.md`
 
 ## Goal
@@ -111,7 +111,7 @@ Show the plan. Wait for user to approve, modify, or reject.
 
 After approval:
 
-> "Plan saved to `.claude/plans/{feature-name}.md`. Ready to build? Run `/set-build {feature-name}` to execute it as a dynamic workflow (or `/set-build {feature-name} --use-agent-team` for an autonomous Agent Team)."
+> "Plan saved to `.claude/plans/{feature-name}.md`. Ready to build? Run `/set-build {feature-name}` to execute it as a native Agent Team by default (or `/set-build {feature-name} --use-workflow` for the dynamic-workflow path)."
 
 ## Unresolved Questions
 

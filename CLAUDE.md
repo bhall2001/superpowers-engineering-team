@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-SET (Superpowers Engineering Team) is a Claude Code plugin that provides a 6-command workflow pipeline turning a single Claude Code instance into a coordinated, self-improving engineering team. It combines [Superpowers](https://github.com/obra/superpowers) (design framework) with Claude Code's native [dynamic workflows](https://code.claude.com/docs/en/workflows) (the `Workflow` tool — parallel subagent execution) for the build and review phases. An optional autonomous Agent Team mode (`/set-build --use-agent-team`) is also supported.
+SET (Superpowers Engineering Team) is a Claude Code plugin that provides a 6-command workflow pipeline turning a single Claude Code instance into a coordinated, self-improving engineering team. It combines [Superpowers](https://github.com/obra/superpowers) (design framework) with Claude Code's native Agent Teams and [dynamic workflows](https://code.claude.com/docs/en/workflows) (the `Workflow` tool — parallel subagent execution). The build phase (`/set-build`) runs as a native Agent Team by default; the review phase (`/set-review`) runs on dynamic workflows. A dynamic-workflow build mode is available via `/set-build --use-workflow`.
 
 **Pipeline:** `/set-init` → `/set-design` → `/set-plan` → `/set-build` → `/set-review` → `/set-learn` (+ `/set-update` for maintenance)
 
@@ -28,7 +28,7 @@ SET is NOT in an official Claude marketplace. Install via script only (the plugi
 bash install.sh
 ```
 
-The default build/review path uses native dynamic workflows and needs no special env var (Pro users enable dynamic workflows once via `/config`). The env var `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is written by the installer and is only needed for the optional `/set-build --use-agent-team` mode.
+The default `/set-build` path runs as a native Agent Team and REQUIRES the env var `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (written by the installer; a session restart is needed after first write). `/set-review` and `/set-build --use-workflow` run on dynamic workflows and need no special env var (Pro users enable dynamic workflows once via `/config`).
 
 ## Key Design Principles
 
@@ -36,7 +36,7 @@ The default build/review path uses native dynamic workflows and needs no special
 - **TDD enforced**: Every builder writes failing tests first, then a fresh verifier confirms the bar before the work is folded back
 - **Self-improving**: `/set-learn` updates CLAUDE.md + agent definitions after each cycle
 - **Domain specialist routing**: Tasks matched to agents with relevant domain knowledge
-- **Parallel execution**: Plan phase decomposes tasks for maximum parallelism; `/set-build` fans them out via a dynamic workflow (or an autonomous Agent Team)
+- **Parallel execution**: Plan phase decomposes tasks for maximum parallelism; `/set-build` fans them out as a native Agent Team by default (or a dynamic workflow under `--use-workflow`)
 - **Four-perspective review**: Spec compliance, security, architecture, correctness
 
 ## When Editing Commands

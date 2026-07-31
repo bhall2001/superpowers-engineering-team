@@ -115,7 +115,7 @@ If `serena_enabled: true`, query Serena for memories relevant to the task's `Wha
 Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
 (If Specialist is "generic" or absent, no agent file — use general best practices.)
 NOTE: a specialist definition's `skills`/`mcpServers` frontmatter is NOT auto-applied to
-workflow agents. If this task needs Serena, call `mcp__serena__*` tools directly.
+spawned agents. If this task needs Serena, call `mcp__serena__*` tools directly.
 
 ## Relevant Learnings (from shards: {comma-separated domains})
 {shard contents}
@@ -126,14 +126,14 @@ workflow agents. If this task needs Serena, call `mcp__serena__*` tools directly
 ```
 
 ### A4: Compose the global verification rubric
-The bar EVERY task must clear before the workflow folds its output back:
+The bar EVERY task must clear before the execution path folds its output back:
 - **TDD discipline:** a failing test was written first (red), minimal code made it pass (green), then refactor — tests stay green.
 - **Spec compliance:** every "Done when" criterion met; nothing implemented beyond spec.
 - **Quality gates:** lint and typecheck commands from CLAUDE.md "Build Commands" pass clean.
 - **Self-review:** every item in the task's Self-Review Checklist is satisfied.
 
 ### A5: Define the escalation policy
-What the workflow does when a task can't meet the bar after its own revise loop: stop that task, record the specific failing criterion + what was tried, and return it as a **failed task** in the report (do NOT fold partial/failing work back as if it passed). Other independent tasks continue.
+What the execution path does when a task can't meet the bar after its own revise loop: stop that task, record the specific failing criterion + what was tried, and return it as a **failed task** in the report (do NOT fold partial/failing work back as if it passed). Other independent tasks continue.
 
 ## Agent Team Availability Gate
 
