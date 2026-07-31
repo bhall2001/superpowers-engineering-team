@@ -91,7 +91,7 @@ High-level strategy. Why this over alternatives.
 
 **Self-review checklist in every task:** Each task includes the checklist. Builders must check every box before marking complete. This catches spec drift before QA.
 
-**Specialist assignment:** Every task gets a `Specialist` field. If `.claude/agents/` has a matching specialist (e.g., a DB agent for schema tasks, a UI agent for component tasks), use that agent's name. If no specialist fits, use "generic". During `/set-build`, this tag becomes the builder agent's `agentType` (or the routed teammate in `--use-agent-team`).
+**Specialist assignment:** Every task gets a `Specialist` field. If `.claude/agents/` has a matching specialist (e.g., a DB agent for schema tasks, a UI agent for component tasks), use that agent's name. If no specialist fits, use "generic". During `/set-build`, this tag routes the work: it becomes the builder teammate's `subagent_type` on the default Agent Team path, or the builder agent's `agentType` in a `--use-workflow` run.
 
 **Shard tagging:** Every task gets a `Shards` field listing the domain names from `.claude/set/taxonomy.md` whose learnings apply to this task. During `/set-build`, the brief compiler loads those shard files and injects them as per-task context. Be generous — it's better to include a borderline-relevant shard than omit a relevant one. Empty list is fine when no shards apply (e.g. first-ever task in a fresh project, or purely mechanical scaffolding). If the taxonomy is empty, use `[]` for all tasks.
 

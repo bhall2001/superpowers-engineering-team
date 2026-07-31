@@ -36,7 +36,7 @@ Examine the full arc — design through review — not just the final code:
 - Code patterns that solved problems cleanly
 - Libraries or approaches that proved effective
 - Task decomposition that enabled good parallelism
-- Build orchestration that reduced conflicts (workflow fan-out, or Agent Team coordination in `--use-agent-team` runs)
+- Build orchestration that reduced conflicts (Agent Team coordination, or workflow fan-out in `--use-workflow` runs)
 
 **What failed — patterns to avoid:**
 - Approaches tried and abandoned (and WHY they failed)
@@ -166,7 +166,7 @@ Derive which agents actually worked this cycle from git log — do NOT read all 
 git log --oneline -20 --format="%s %b"
 ```
 
-Look for agent names in commit messages (builders sign commits with their agent name or task descriptions reference specialists). Task history may also help — from the workflow's per-task verdicts, or `TaskList()` in a `--use-agent-team` run — if available; `git log` is the primary signal.
+Look for agent names in commit messages (builders sign commits with their agent name or task descriptions reference specialists). Task history may also help — from `TaskList()` on the default Agent Team path, or the workflow's per-task verdicts in a `--use-workflow` run — if available; `git log` is the primary signal.
 
 Only read `.claude/agents/{name}.md` for agents confirmed to have participated. If no agents can be identified from git log, skip to step 7.
 

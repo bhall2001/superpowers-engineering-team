@@ -92,8 +92,8 @@ ls ~/.claude/commands/set-*.md 2>/dev/null
 echo "=== Superpowers ==="
 ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "OK" || echo "NOT FOUND"
 
-echo "=== Agent Teams enabled (optional — for /set-build --use-agent-team) ==="
-cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "not set (only needed for --use-agent-team)"
+echo "=== Agent Teams enabled (required for the default /set-build path) ==="
+cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "not set — the default /set-build path needs it (restart after setting); /set-build --use-workflow needs no flag"
 
 echo "=== Serena MCP ==="
 cat ~/.claude/settings.json 2>/dev/null | grep -q '"serena"' && echo "OK" || echo "NOT FOUND"
