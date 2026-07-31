@@ -2,7 +2,7 @@
 
 A premium AI engineering workflow for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that turns a single coding assistant into a coordinated, self-improving engineering team.
 
-SET combines [Superpowers](https://github.com/obra/superpowers) (structured design) with Claude Code's native dynamic workflows (parallel subagent execution) into a unified pipeline with TDD enforcement, spec compliance verification, domain-specialist routing, and a two-level self-improving learning loop.
+SET combines [Superpowers](https://github.com/obra/superpowers) (structured design) with Claude Code's native Agent Teams and dynamic workflows (parallel multi-agent execution) into a unified pipeline with TDD enforcement, spec compliance verification, domain-specialist routing, and a two-level self-improving learning loop.
 
 ## Pipeline
 
@@ -11,11 +11,12 @@ SET combines [Superpowers](https://github.com/obra/superpowers) (structured desi
     |
 /set-design  →  /set-plan  →  /set-build  →  /set-review  →  /set-learn
     |               |              |               |               |
-  Design spec   Task plan     Dynamic         4-perspective    Two-level
-  with human    optimized     workflow        review           learning:
-  approval      for parallel  with TDD        (spec, security, project +
-  at each       execution     loop + verify   architecture,    agent
-  section                                     correctness)     evolution
+  Design spec   Task plan     Agent Team      4-perspective    Two-level
+  with human    optimized     with TDD        review           learning:
+  approval      for parallel  loop + verify   (spec, security, project +
+  at each       execution     (dynamic        architecture,    agent
+  section                     workflow via    correctness)     evolution
+                               --use-workflow)
 ```
 
 ## What Makes SET Different
@@ -30,7 +31,7 @@ Agents that repeatedly make the same mistake get that mistake added to their ins
 
 **Domain specialist routing.** `/set-init` scaffolds specialist agents (DB, UI, API, QA, architect) based on your detected stack. `/set-plan` tags each task with the best-fit specialist. `/set-build` routes tasks to the right agent.
 
-**Per-task TDD loop.** Every builder writes failing tests first, implements minimal code to pass, then refactors — looping until all checks (tests, lint, typecheck, self-review) pass. A fresh verifier then audits each task against a rubric (spec compliance, TDD, lint/typecheck), and the workflow runs a verify-and-revise loop until each task meets the bar.
+**Per-task TDD loop.** Every builder writes failing tests first, implements minimal code to pass, then refactors — looping until all checks (tests, lint, typecheck, self-review) pass. A dedicated verifier teammate then audits each task against a rubric (spec compliance, TDD, lint/typecheck), and the team runs a verify-and-revise loop until each task meets the bar.
 
 ## Install
 
@@ -40,7 +41,7 @@ SET is not in an official Claude plugin marketplace. Install via the script:
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-Registers the Superpowers marketplace and installs SET commands directly into `~/.claude/commands/`. It also writes the Agent Teams environment flag, which is only needed for the optional `/set-build --use-agent-team` mode — the default build path uses dynamic workflows and needs no flag.
+Registers the Superpowers marketplace and installs SET commands directly into `~/.claude/commands/`. It also writes the Agent Teams environment flag, which the default `/set-build` path requires — restart Claude Code after the first install so the flag takes effect.
 
 Then open Claude Code and install the prerequisite plugin:
 
@@ -48,7 +49,7 @@ Then open Claude Code and install the prerequisite plugin:
 /plugin install superpowers@claude-plugins-official
 ```
 
-Dynamic workflows are built into Claude Code (Pro/Max/Team/Enterprise). Pro users enable them once via `/config`; Max/Team/Enterprise have them on by default.
+Dynamic workflows (used by `/set-review` and `/set-build --use-workflow`) are built into Claude Code (Pro/Max/Team/Enterprise). Pro users enable them once via `/config`; Max/Team/Enterprise have them on by default.
 
 ## Upgrading from a pre-1.0 install
 
@@ -79,7 +80,7 @@ After this one-time upgrade you'll have the v1 `/set-update`, and from then on *
 | `/set-init` | Setup (once) | Detects stack, scaffolds agents, augments CLAUDE.md, creates directories |
 | `/set-design` | Design | Superpowers brainstorming → approved design spec |
 | `/set-plan` | Plan | Transposes design spec into parallelizable task plan with TDD steps and specialist tags |
-| `/set-build` | Build | Dynamic workflow — fans out parallel builder subagents (one per task, routed by specialist), each runs the per-task TDD loop, a fresh verifier checks each task against a rubric. Optional `--use-agent-team` runs an autonomous Agent Team instead |
+| `/set-build` | Build | Native Agent Team — spawns builder teammates (one per task, routed by specialist) each running the per-task TDD loop, plus a dedicated verifier teammate per task that checks it against a rubric. `--use-workflow` runs the same brief as a dynamic workflow instead |
 | `/set-review` | Review | Dynamic-workflow fan-out across 4 lenses (spec compliance, security, architecture, correctness) × affected modules; `--light` runs 4 plain parallel subagents for small diffs |
 | `/set-learn` | Learn | Extracts learnings to CLAUDE.md + evolves agent definitions based on cycle performance |
 | `/set-update` | Maintenance | Updates SET, Superpowers, and Serena to latest versions |
@@ -125,7 +126,7 @@ SET is functional and has been used in production development, but it is early-s
 
 - Tested on one production codebase (TypeScript/React + Python + PostgreSQL + AWS)
 - The workflow will evolve as more teams use it
-- The default build and review paths run on Claude Code's dynamic workflows (Pro/Max/Team/Enterprise; Pro opt-in via `/config`). The optional `/set-build --use-agent-team` mode uses Claude Code's Agent Teams feature
+- The default `/set-build` path runs on Claude Code's Agent Teams (experimental; the installer sets the required env flag). `/set-review` and `/set-build --use-workflow` run on dynamic workflows (Pro/Max/Team/Enterprise; Pro opt-in via `/config`)
 - Token cost is higher than single-agent work — this is a premium workflow that trades cost for quality
 
 ## License

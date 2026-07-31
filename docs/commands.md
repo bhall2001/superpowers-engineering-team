@@ -50,9 +50,11 @@ Reads the latest design spec and transposes it into a parallelizable task plan o
 
 **Phase 3 — Build**
 
-Executes the plan as a dynamic workflow with enhanced TDD and verification discipline.
+Executes the plan as a native Agent Team with enhanced TDD and verification discipline.
 
-By default, `/set-build` compiles the plan into a build brief and fans out parallel builder subagents — one per task, routed by the task's `Specialist`. To run an autonomous Agent Team instead, pass `--use-agent-team` (requires the Agent Teams env flag, which the installer writes by default).
+**Build modes.** By default, `/set-build` compiles the plan into a build brief, then spawns builder teammates — one per task, routed by the task's `Specialist` — plus a dedicated verifier teammate per task that writes no code and checks the work against the rubric. This requires the Agent Teams env flag, which the installer writes by default.
+
+Pass `--use-workflow` to run the same brief as a dynamic workflow instead. That path needs no env flag and is what `/set-build` offers as a fallback if Agent Teams are unavailable. `--use-agent-team` is accepted as a no-op alias for the default.
 
 ### Step 1: Isolated Worktree
 Creates a `feat/{feature-name}` branch in an isolated worktree. Runs project setup. Verifies tests pass before any implementation begins.
@@ -66,7 +68,7 @@ Creates a `feat/{feature-name}` branch in an isolated worktree. Runs project set
 Precedence: CLI flag > CLAUDE.md > default (enabled). In no-worktree mode, project setup and baseline tests still run, but on the current branch with no `cd`.
 
 ### Step 2–4: Parallel Build and Verify
-Fans out one builder subagent per task, each routed by the task's specialist (matched from `.claude/agents/`). Each builder runs the per-task TDD loop. A fresh verifier — one that did not write the code — then checks each task against a rubric before it folds back. SET no longer hand-rolls retry or escalation mechanics: the workflow runs a verify-and-revise loop until each task meets the bar.
+Spawns one builder teammate per task, each routed by the task's specialist (matched from `.claude/agents/`). Each builder runs the per-task TDD loop. A dedicated verifier teammate — one that did not write the code — then checks each task against a rubric before it folds back. SET no longer hand-rolls retry or escalation mechanics: the team runs a verify-and-revise loop until each task meets the bar.
 
 **Per-task TDD loop:**
 1. Write failing tests first

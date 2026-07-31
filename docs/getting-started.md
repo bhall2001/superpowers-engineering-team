@@ -13,13 +13,19 @@ SET requires the Superpowers Claude Code plugin:
 /plugin install superpowers@claude-plugins-official
 ```
 
-### 2. Dynamic workflows
+### 2. Agent Teams
 
-The default `/set-build` and `/set-review` paths run on Claude Code's dynamic workflows, which are built into Claude Code (Pro/Max/Team/Enterprise) — there is nothing extra to install. Pro users enable dynamic workflows once via `/config`; Max/Team/Enterprise have them on by default.
+`/set-build` runs as a native Agent Team by default. Agent Teams are an experimental
+Claude Code feature, so they must be enabled — the installer writes the
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env flag for you. A session restart is required
+after it is first written, because the variable is read at session start.
 
-### 3. Agent Teams (optional)
+### 3. Dynamic workflows
 
-The optional `/set-build --use-agent-team` mode runs an autonomous Agent Team and requires Claude Code's Agent Teams feature. The installer writes the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env flag by default, so this is ready to go if you want it — you don't need it for the default dynamic-workflow path.
+`/set-review`, and `/set-build --use-workflow`, run on Claude Code's dynamic workflows,
+built into Claude Code (Pro/Max/Team/Enterprise) with nothing extra to install. Pro users
+enable dynamic workflows once via `/config`; Max/Team/Enterprise have them on by default.
+This is also the fallback `/set-build` offers if Agent Teams are unavailable.
 
 ## Install SET
 
@@ -29,7 +35,7 @@ SET is not in an official Claude marketplace. Install via the script:
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-The script registers the Superpowers marketplace and installs SET commands into `~/.claude/commands/`. It also writes the Agent Teams env flag, which is only needed for the optional `/set-build --use-agent-team` mode — the default build path uses dynamic workflows and needs no flag.
+The script registers the Superpowers marketplace and installs SET commands into `~/.claude/commands/`. It also writes the Agent Teams env flag, which the default `/set-build` path requires.
 
 ## First Use
 
@@ -43,7 +49,7 @@ Open your project in Claude Code and run:
 
 This will:
 - Check prerequisites are installed
-- Confirm dynamic workflows are available (and the Agent Teams flag, if you plan to use `--use-agent-team`)
+- Confirm the Agent Teams flag is set (required for the default `/set-build`) and that dynamic workflows are available
 - Detect your tech stack
 - Scaffold domain specialist agents in `.claude/agents/`
 - Augment your `CLAUDE.md` with conventions
@@ -71,9 +77,9 @@ Transposes your design spec into a parallelizable task plan with TDD steps, self
 /set-build
 ```
 
-Compiles the plan into a build brief and fans out parallel builder subagents — one per task, routed by the task's specialist. Each builder runs the per-task TDD loop, and a fresh verifier checks each task against a rubric (spec compliance + TDD + lint/typecheck) before folding it back. All work happens in an isolated git worktree.
+Compiles the plan into a build brief, then runs it as a native Agent Team by default: builder teammates fan out — one per task, routed by the task's specialist — alongside a dedicated verifier teammate per task that writes no code. Each builder runs the per-task TDD loop, and its verifier checks the work against a rubric (spec compliance + TDD + lint/typecheck) before folding it back. All work happens in an isolated git worktree.
 
-To run an autonomous Agent Team instead, use `/set-build --use-agent-team`.
+To run the build as a dynamic workflow instead, use `/set-build --use-workflow`.
 
 ### Step 5: Review
 

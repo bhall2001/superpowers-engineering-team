@@ -6,11 +6,11 @@
 
 SET is a workflow system for Claude Code (Anthropic's AI coding CLI) that turns a single AI coding assistant into a coordinated engineering team. It orchestrates multiple AI agents working in parallel — each with specialized roles — to design, plan, build, and review software features with production-grade quality discipline.
 
-SET combines the Superpowers Claude Code plugin with Claude Code's native dynamic workflows into a unified pipeline:
+SET combines the Superpowers Claude Code plugin with Claude Code's native Agent Teams and dynamic workflows into a unified pipeline:
 
 **Superpowers** — a structured design and brainstorming framework
 
-**Dynamic workflows** — Claude Code's built-in parallel subagent execution engine, which SET drives with iterative verify-and-revise quality loops. (An optional autonomous Agent Team mode is available behind a `--use-agent-team` flag on `/set-build`.)
+**Agent Teams** — Claude Code's native multi-agent coordination, where the lead session acts as coordinator over builder and verifier teammates sharing a task list. This is the default `/set-build` path. (A dynamic-workflow mode is available via `/set-build --use-workflow`, and is also the fallback when Agent Teams are unavailable.)
 
 The innovation is in the integration layer: six custom commands (`/set-init`, `/set-design`, `/set-plan`, `/set-build`, `/set-review`, `/set-learn`) that bridge these systems into a single end-to-end workflow, adding project initialization with auto-scaffolded domain specialists, TDD enforcement, spec compliance verification, domain-specialist routing, and a persistent self-improving learning loop.
 
@@ -30,7 +30,7 @@ The AI explores the codebase, asks clarifying questions, proposes multiple appro
 The AI reads the approved design spec, analyzes the codebase for existing patterns and utilities, and breaks the feature into discrete, parallelizable tasks. Each task includes specific files to modify, test-driven development steps, acceptance criteria, and a self-review checklist. Tasks are tagged with domain specialists (e.g., database, UI, API) if the project defines them.
 
 **Phase 3 — Build** (`/set-build`)
-SET compiles the plan into a build brief and fans out parallel builder subagents — one per task, routed by the task's specialist. Each builder:
+SET compiles the plan into a build brief and, by default, runs it as a native Agent Team — spawning builder teammates one per task, routed by the task's specialist, plus a dedicated verifier teammate per task. Each builder:
 
 Claims an unblocked task
 
@@ -46,7 +46,7 @@ Commits only after all checks pass
 
 Loops back for the next task
 
-A fresh verifier — one that did not write the code — independently audits each completed task against a rubric: spec compliance (did the builder implement exactly what was required — nothing missing, nothing extra?), TDD discipline, and clean lint/typecheck. The workflow runs a verify-and-revise loop until each task meets the bar before folding it back.
+Its dedicated verifier teammate — one that did not write the code — independently audits each completed task against a rubric: spec compliance (did the builder implement exactly what was required — nothing missing, nothing extra?), TDD discipline, and clean lint/typecheck. The team runs a verify-and-revise loop until each task meets the bar before folding it back.
 
 **Phase 4 — Review** (`/set-review`)
 A dynamic-workflow fan-out examines all changes simultaneously across four independent lenses — spec compliance, security, architecture, and correctness — spread over the affected modules. Each lens agent did not write the code and treats the build's verification report as claims to audit. SET synthesizes the findings into a unified report with severity ratings and a ship/iterate/block verdict.
@@ -76,7 +76,7 @@ After each cycle, the system analyzes the full arc — design through review —
 
 **Domain specialist routing.** Projects can define specialist agent profiles (e.g., a database expert that knows Drizzle ORM patterns, a UI expert that knows React conventions). The plan phase tags each task with the best-fit specialist, and the build phase routes tasks accordingly — the right AI "engineer" works on the right problem.
 
-**Bounded verify-and-revise loops.** Each task is gated by a verifier against a fixed rubric (spec compliance, TDD, lint/typecheck). The workflow revises and re-verifies only until the task clears the bar, rather than looping indefinitely — keeping token consumption bounded by the work that remains.
+**Bounded verify-and-revise loops.** Each task is gated by its dedicated verifier teammate against a fixed rubric (spec compliance, TDD, lint/typecheck). The team revises and re-verifies only until the task clears the bar, rather than looping indefinitely — keeping token consumption bounded by the work that remains.
 
 ---
 
@@ -98,7 +98,7 @@ This is a meaningful step beyond "AI writes code, human reviews." SET brings the
 
 **The workflow will evolve.** The self-improving learning loop applies to SET itself — as more teams use it, the process, prompts, and coordination patterns will be refined based on real-world feedback. Early adopters should expect the workflow to change as it matures.
 
-**Built on Claude Code's dynamic workflows** for the default build and review paths (the optional `/set-build --use-agent-team` mode runs on Claude Code's Agent Teams feature). Updates to that underlying platform could require corresponding updates to SET.
+**Built on Claude Code's Agent Teams** for the default build path, and on dynamic workflows for `/set-review` and `/set-build --use-workflow`. Agent Teams are an experimental Claude Code feature; updates to that underlying platform could require corresponding updates to SET.
 
 **Cost profile is higher than single-agent work.** Multiple parallel subagents, each running an iterative TDD loop, consume more tokens. The bounded verify-and-revise loop keeps this in check — each task stops once it clears its rubric — but users should understand the cost-quality trade-off before adopting.
 

@@ -78,7 +78,7 @@ If it's specific to a domain, it goes to that specialist's agent `.md` file.
 
 ## How Sub-Agents See Learnings
 
-Subagents spawned by the dynamic workflow (or by an Agent Team under `--use-agent-team`) — builders, verifiers, reviewers — don't auto-inherit the main session's loaded context. In SET's design:
+Teammates spawned by the Agent Team (or subagents spawned by the dynamic workflow under `--use-workflow`) — builders, verifiers, reviewers — don't auto-inherit the main session's loaded context. In SET's design:
 
 - **Builders** receive shard content inline in their task brief — the brief compiler loads and injects the per-task shards into each builder's context. Builders do not fetch shards themselves.
 - **Verifiers** read the shards referenced in each task's `Shards` field when checking the work.
