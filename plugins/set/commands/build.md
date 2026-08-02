@@ -344,6 +344,8 @@ Invoke the **`Workflow` tool** with a script that executes the brief. The script
 
 Author the workflow script to keep intermediate builder output in script variables — do not pull every builder transcript into your context. You receive only the final verdicts + diff.
 
+**Same MCP rule as the team path: builders and verifiers must NOT call `mcp__serena__*`.** A dynamic workflow runs many `agent()` calls concurrently against the *same* single Serena process, so it has the identical hazard described in Phase B-team — one shared, mutable `_active_project` pointer with no per-caller isolation, in a worktree where Serena often starts unactivated. Serena is queried once in Phase A (lead) and injected into each task bundle as text. For code navigation, workflow agents use Claude Code's built-in LSP tool.
+
 > SET no longer implements "max 5 retries / escalate after 3." The workflow's native verify-and-revise loop subsumes it. You specified the bar (A4) and the escalation policy (A5); the workflow runs the loop.
 
 ## Phase C — Build Gate-Back (you own this)
