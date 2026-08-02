@@ -106,7 +106,7 @@ SET can optionally use [Serena MCP](https://github.com/oraios/serena) as a seman
 **What it adds:**
 - **Semantic retrieval per task.** `/set-build` queries Serena with each task's description and injects the top-5 most relevant memories alongside the statically-selected shards. Catches learnings the shard-tagging missed.
 - **Cross-domain matching.** A learning filed under `db` may still surface for an `api` task if it's semantically relevant — without duplicating it across shards.
-- **LSP-backed symbol tools** that Serena brings along are usable by builder/review agents.
+- **Lead-only by design.** `/set-build` queries Serena once in the lead session and injects the results into each task brief as text. Builder teammates never call Serena themselves — see [Code Intelligence for Agent Teams](#code-intelligence-for-agent-teams) for why.
 
 **How it works:**
 - Shards are authoritative. `/set-learn` mirrors each learning to `.serena/memories/` with domain tags in frontmatter.
@@ -119,6 +119,52 @@ SET can optionally use [Serena MCP](https://github.com/oraios/serena) as a seman
 - You already use Serena for its symbol tools and want the integration
 
 Not needed for smaller projects — sharding alone handles most scale.
+
+## Code Intelligence for Agent Teams
+
+`/set-build` runs as a native Agent Team, spawning several builder and verifier teammates in parallel inside a git worktree. That parallelism changes which code-navigation tools are safe to use.
+
+**Short version:** Serena is for the lead session only. Teammates use Claude Code's built-in LSP tool.
+
+### Why teammates must not call Serena
+
+Serena runs as a **single stdio subprocess** shared by the lead and every teammate — not one instance each. Inside it, the active project is one mutable field on one object (`SerenaAgent._active_project`), and the `activate_project` tool permanently reassigns it. MCP's stdio transport has no per-caller session, so there is no isolation between callers.
+
+This matters specifically because `/set-build` works in a **worktree**, where Serena frequently starts with no active project. A teammate that hits this calls `activate_project` — and moves the pointer for everyone. Another teammate, mid-task, can then query symbols from the wrong project.
+
+Serena serializes tool calls through a single task-executor thread, so nothing crashes or corrupts. The failure is quieter than that: **wrong answers, silently**. That is the argument for avoiding it, not a crash risk.
+
+Serena remains valuable where SET already uses it — Phase A of `/set-build` queries it once, in the lead, and injects the matched learnings into each task's brief as plain text. Teammates get the benefit without touching the server.
+
+### What teammates use instead
+
+Claude Code has a **built-in LSP tool** — this is a core feature, not an MCP server. Code-intelligence plugins simply declare which language-server binary to launch. Each Claude Code session runs its own language server scoped to its own working directory, so parallel teammates cannot interfere with one another. The shared-state problem cannot occur, because nothing is shared.
+
+Install the plugin for your stack plus its language server:
+
+```bash
+# TypeScript / JavaScript
+npm install -g typescript-language-server typescript
+claude plugin install typescript-lsp@claude-plugins-official
+
+# Python
+npm install -g pyright
+claude plugin install pyright-lsp@claude-plugins-official
+```
+
+Restart Claude Code afterward — plugins load at session start.
+
+Also available from `claude-plugins-official`: `clangd-lsp`, `csharp-lsp`, `gopls-lsp`, `jdtls-lsp` (Java), `kotlin-lsp`, `liquid-lsp`, `lua-lsp`, `php-lsp`, `ruby-lsp`, `rust-analyzer-lsp`, `swift-lsp`. Each needs its own language-server binary installed separately.
+
+### Summary
+
+| Need | Use | Why |
+|---|---|---|
+| Learnings / semantic memory recall | Serena, **lead session only** | Phase A injects results as text; zero contention |
+| Symbol navigation, references, diagnostics | **Built-in LSP tool** + a code-intelligence plugin | Per-session language server; safe under parallel teammates |
+| Teammates calling `mcp__serena__*` | **Avoid** | Shared mutable project pointer; silent wrong-project reads |
+
+> **Caveat.** Anthropic does not explicitly document "one language server process per session." The per-session model is inferred from the plugin architecture and from docs noting memory pressure across concurrent sessions. The Serena findings above, by contrast, are read directly from its source (`serena/agent.py`).
 
 ## Current Status
 

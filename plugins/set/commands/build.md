@@ -115,7 +115,8 @@ If `serena_enabled: true`, query Serena for memories relevant to the task's `Wha
 Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
 (If Specialist is "generic" or absent, no agent file — use general best practices.)
 NOTE: a specialist definition's `skills`/`mcpServers` frontmatter is NOT auto-applied to
-spawned agents. If this task needs Serena, call `mcp__serena__*` tools directly.
+spawned agents. Do NOT call `mcp__serena__*` yourself — the learnings you need are already
+injected below. For code navigation, use Claude Code's built-in LSP tool.
 
 ## Relevant Learnings (from shards: {comma-separated domains})
 {shard contents}
@@ -249,8 +250,20 @@ is unchanged from previous SET versions — it is a peer role, **not** the verif
 Read both reference files before spawning anything.
 
 Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
-to teammates — only `tools`, `model`, `permissionMode`, and `maxTurns` carry over. If a
-task needs Serena, instruct the teammate to call `mcp__serena__*` tools directly.
+to teammates — only `tools`, `model`, `permissionMode`, and `maxTurns` carry over.
+
+**Teammates must NOT call `mcp__serena__*`.** Serena runs as a single stdio process with
+one global `_active_project` pointer that `activate_project` permanently mutates. All
+teammates share that one process, and there is no per-caller isolation. Because the build
+runs in a **worktree** — where Serena often starts with no active project — concurrent
+`activate_project` calls from teammates can leave another teammate silently querying the
+wrong project. Tool calls are serialized (one task-executor thread), so nothing crashes;
+you just get wrong answers quietly.
+
+Serena is **lead-only**: Phase A queries it once and injects the results as text into each
+task bundle. For code navigation, teammates use Claude Code's **built-in LSP tool**
+(via code-intelligence plugins such as `typescript-lsp` or `pyright-lsp`), which is
+per-session and therefore safe under parallel teammates.
 
 ### T3: Spawn a dedicated verifier per task
 
