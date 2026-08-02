@@ -96,7 +96,13 @@ echo "=== Agent Teams enabled (required for the default /set-build path) ==="
 cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "not set — the default /set-build path needs it (restart after setting); /set-build --use-workflow needs no flag"
 
 echo "=== Serena MCP ==="
-cat ~/.claude/settings.json 2>/dev/null | grep -q '"serena"' && echo "OK" || echo "NOT FOUND"
+if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' ~/.claude/settings.json &>/dev/null; then
+  echo "OK (plugin)"
+elif jq -e '.mcpServers.serena' ~/.claude/settings.json &>/dev/null; then
+  echo "OK (standalone mcpServers entry)"
+else
+  echo "NOT FOUND — install with: /plugin install serena@claude-plugins-official"
+fi
 ```
 
 ### 5. Report

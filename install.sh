@@ -72,39 +72,38 @@ if ! command -v jq &> /dev/null; then
 fi
 info "jq found: $(which jq)"
 
-# Check for uv (required for Serena)
+# Check for uv (Serena's plugin launches via uvx)
 if ! command -v uv &> /dev/null; then
-  error "uv is required to install Serena."
+  error "uv is required to run Serena."
   error "Install it from https://docs.astral.sh/uv/ then re-run install.sh"
   exit 1
 fi
 info "uv found: $(which uv)"
 
-# Install Serena MCP server
+# Install Serena as a Claude Code plugin
 bold ""
 bold "Step 0: Installing Serena MCP"
 bold "-----------------------------"
-if command -v serena &> /dev/null; then
-  info "Serena already installed: $(which serena)"
-else
-  info "Installing serena-agent via uv..."
-  if uv tool install serena-agent; then
-    info "Serena installed"
-  else
-    error "Failed to install serena-agent. Ensure Python 3.11+ is available and retry."
-    exit 1
-  fi
-fi
 
-# Write Serena MCP entry to ~/.claude/settings.json
-SERENA_BIN="$(command -v serena)"
+# SET installs Serena via the official plugin rather than a hand-written
+# mcpServers entry. The plugin ships the same stdio server, but launches it with
+# `uvx --from git+...` so it tracks upstream instead of pinning whatever binary
+# happened to be installed, and Claude Code refcounts its lifecycle across
+# sessions. Existing standalone installs are left alone — see below.
 if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null 2>&1; then
-  info "Serena already configured in settings.json"
+  info "Serena already configured in settings.json (standalone mcpServers entry)"
+  info "  Leaving it as-is. To switch to the plugin, remove .mcpServers.serena"
+  info "  from $SETTINGS_FILE and run: claude plugin install serena@claude-plugins-official"
+elif jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null 2>&1; then
+  info "Serena plugin already installed"
 else
-  jq --arg bin "$SERENA_BIN" \
-    '.mcpServers.serena = {"command": $bin, "args": ["start-mcp-server", "--context=claude-code"]}' \
-    "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-  info "Serena written to $SETTINGS_FILE"
+  info "Installing Serena plugin..."
+  if claude plugin install serena@claude-plugins-official 2>/dev/null; then
+    info "Serena plugin installed"
+  else
+    warn "Could not install the Serena plugin automatically."
+    warn "  In Claude Code, run: /plugin install serena@claude-plugins-official"
+  fi
 fi
 
 # Ensure .claude directory exists
@@ -290,10 +289,12 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
-  info "Serena MCP: configured"
+if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null; then
+  info "Serena MCP: installed as a plugin"
+elif jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
+  info "Serena MCP: configured (standalone mcpServers entry)"
 else
-  error "Serena MCP: not configured in settings.json"
+  error "Serena MCP: not installed — SET uses it as the semantic index over learning shards"
   ERRORS=$((ERRORS + 1))
 fi
 
@@ -366,6 +367,6 @@ warn "succeed, install Superpowers manually. In Claude Code, run:"
 warn "  /plugin install superpowers@claude-plugins-official"
 echo ""
 info "  Dynamic workflows: built into Claude Code (Pro users enable via /config)"
-info "  Serena MCP:    ✓ installed and configured"
+info "  Serena MCP:    ✓ installed"
 info "To initialize a project, open it in Claude Code and run: /set-init"
 echo ""
