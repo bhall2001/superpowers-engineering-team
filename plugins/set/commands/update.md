@@ -55,13 +55,45 @@ Also replace any literal `message team lead` / `team lead` coordination phrasing
 2. **Has frontmatter but `name:` is missing or ≠ filename stem** → set/fix `name:` to the stem; leave other keys as-is.
 3. **Already correct** (frontmatter present, `name:` matches stem) → no change.
 
-**Undecipherable/heavily-customized file** (no derivable domain or model): still inject `name:` (stem), `description: SET specialist (review & refine)`, `model: sonnet`, `tools: [Read, Edit, Write, Bash, Grep, Glob]`; leave the body untouched; and **flag the file in the 1c report** for the user to review and refine.
+**Undecipherable/heavily-customized file** (no derivable domain or model): still inject `name:` (stem), `description: SET specialist (review & refine)`, `model: sonnet`, `tools: [Read, Edit, Write, Bash, Grep, Glob]`; leave the body untouched; and **flag the file in the 1d report** for the user to review and refine.
 
 This normalization is **idempotent** and follows the same rule as the rest of Step 1: show each proposed per-file diff and apply only on confirmation.
 
-#### 1c: Report migration result
+#### 1c: Offer to move Serena onto the official plugin
 
-List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review) or confirm the project was already current. Note that plans, specs, shards, taxonomy, and `config.json` need no migration — they are format-compatible with 1.0.
+SET now installs Serena as a Claude Code plugin rather than a hand-written `mcpServers` entry. The installer (Step 2) deliberately **leaves an existing standalone entry alone** so nobody's Serena is swapped mid-cycle — which means this migration only ever happens here, if the user opts in.
+
+Check for a standalone entry:
+
+```bash
+jq -e '.mcpServers.serena' ~/.claude/settings.json &>/dev/null && echo "standalone" || echo "none"
+```
+
+If it prints `none`, skip this sub-step entirely — either the plugin is already in use or Serena isn't installed.
+
+If it prints `standalone`, offer the switch. Explain it plainly, including what does **not** change:
+
+> Your Serena is configured as a standalone `mcpServers` entry pointing at a locally-installed binary. The official plugin runs the same server via `uvx --from git+https://github.com/oraios/serena`, so it tracks upstream instead of staying pinned to whatever version you installed, and Claude Code manages its lifecycle across sessions.
+>
+> This is a packaging change only — same stdio server, same one-instance-per-session behavior. It does **not** give spawned agents their own Serena, so SET's lead-only rule for Serena is unaffected either way.
+>
+> Switch now? (Your local `serena` binary stays installed; you can remove it with `uv tool uninstall serena-agent` once you're happy.)
+
+On confirmation:
+
+```bash
+jq 'del(.mcpServers.serena)' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+  && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+claude plugin install serena@claude-plugins-official
+```
+
+Run the `claude plugin install` line with the sandbox disabled (same reason as Step 2 — it writes under `~/.claude/`). Then tell the user to **restart Claude Code**, since MCP servers are wired up at session start.
+
+If the user declines, leave everything as-is and note it in the 1d report — the standalone entry keeps working and SET supports both.
+
+#### 1d: Report migration result
+
+List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; Serena: switched to plugin / declined / already plugin / not installed) or confirm the project was already current. Note that plans, specs, shards, taxonomy, and `config.json` need no migration — they are format-compatible with 1.0.
 
 ### 2. Update SET commands
 
