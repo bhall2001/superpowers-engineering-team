@@ -27,6 +27,19 @@ Read the diff. Also read:
 
 ## Step 2: Run the Review
 
+### Step 2a: Pre-load learnings (lead only — do this BEFORE any fan-out)
+
+Both review modes spawn multiple independent agents. **They must not call `mcp__serena__*` themselves.** Serena runs as a single stdio process whose active project is one mutable field shared by every caller, with no per-caller isolation; memory reads resolve through that pointer (`Tool.memories_manager` → `self.project.memories_manager`). Reviews run against a **worktree**, where Serena often starts unactivated — so a concurrent `activate_project` anywhere can leave a lens silently reading another project's memories. Fanning out N lenses × M modules multiplies the exposure.
+
+So load everything once, here, in the lead:
+
+1. Read `.claude/set/taxonomy.md` and derive the domains intersecting the diff.
+2. Read the matching `.claude/set/learnings/{domain}.md` shards — these are the source of truth.
+3. If `serena_enabled` is true in `.claude/set/config.json`, query Serena **once** for memories relevant to the diff scope. Dedupe against shards already loaded. On failure or timeout, warn and continue — never block the review on Serena.
+4. Bucket the result by lens: spec/plan context, security + validation + auth domains, architecture ("What Works"/"What Failed"), correctness ("Recurring Bugs").
+
+Inject each lens's bucket into its prompt as **text**. Lens agents receive learnings; they never fetch them. For code navigation, lens agents use Claude Code's built-in LSP tool, which is per-session and safe under parallel agents.
+
 Check `$ARGUMENTS` for `--light`.
 
 ### Default — Dynamic Workflow Fan-Out
@@ -52,13 +65,13 @@ For small diffs, skip the workflow. Spawn **4 independent `Agent` subagents in a
 
 ### Lens Rubrics
 
-**Spec Compliance** — READ the design spec + plan; use `mcp__serena__list_memories` / `read_memory` for shards intersecting the diff scope. VERIFY: every spec requirement implemented; nothing extra; matches the plan's approach; each plan task's acceptance criteria met. DO NOT trust commit messages or the build report — read the actual code. Report ✅ compliant or ❌ issues with file:line.
+**Spec Compliance** — READ the design spec + plan; use the spec/plan learnings injected into your prompt (Step 2a). VERIFY: every spec requirement implemented; nothing extra; matches the plan's approach; each plan task's acceptance criteria met. DO NOT trust commit messages or the build report — read the actual code. Report ✅ compliant or ❌ issues with file:line.
 
-**Security** — use `mcp__serena__list_memories` filtered to security/validation/auth domains; fetch "Recurring Bugs". CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal. Report file, line, severity, suggested fix. If nothing found, confirm the changes look secure.
+**Security** — use the security/validation/auth learnings injected into your prompt (Step 2a), including any "Recurring Bugs". CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal. Report file, line, severity, suggested fix. If nothing found, confirm the changes look secure.
 
-**Architecture** — READ CLAUDE.md for conventions; use Serena for shards intersecting the diff ("What Works"/"What Failed"). CHECK: pattern consistency, separation of concerns, SOLID, DRY without over-abstraction, dependency direction, testability, performance at scale, error-handling consistency. Report file, concern, suggestion. Also note things done WELL.
+**Architecture** — READ CLAUDE.md for conventions; use the architecture learnings injected into your prompt (Step 2a) — "What Works"/"What Failed". CHECK: pattern consistency, separation of concerns, SOLID, DRY without over-abstraction, dependency direction, testability, performance at scale, error-handling consistency. Report file, concern, suggestion. Also note things done WELL.
 
-**Correctness** — run the test suite; use Serena for shards intersecting the diff ("Recurring Bugs"). CHECK: test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup. Report findings.
+**Correctness** — run the test suite; use the correctness learnings injected into your prompt (Step 2a) — "Recurring Bugs". CHECK: test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup. Report findings.
 
 ## Step 3: Synthesize
 

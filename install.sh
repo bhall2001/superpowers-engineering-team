@@ -72,39 +72,111 @@ if ! command -v jq &> /dev/null; then
 fi
 info "jq found: $(which jq)"
 
-# Check for uv (required for Serena)
+# Check for uv (Serena's plugin launches via uvx). Serena is OPTIONAL and opt-in, so a
+# missing uv is a skip, not a failure — SET's learning shards are plain markdown and work
+# without any MCP server.
+HAVE_UV=1
 if ! command -v uv &> /dev/null; then
-  error "uv is required to install Serena."
-  error "Install it from https://docs.astral.sh/uv/ then re-run install.sh"
-  exit 1
+  HAVE_UV=0
+else
+  info "uv found: $(which uv)"
 fi
-info "uv found: $(which uv)"
 
-# Install Serena MCP server
+# Serena is opt-in. Prompt only when a human is actually there to answer: under
+# `curl | bash`, stdin is the SCRIPT ITSELF, so a bare `read` would swallow installer
+# source as the answer. Read from /dev/tty instead, and skip entirely when there is no
+# tty (CI, devcontainer builds, piped installs) — default is no.
+ask_yes_no() {
+  local prompt="$1" reply=""
+  # /dev/tty's device node exists even when it cannot be opened (piped install, CI,
+  # container build), so test that it actually opens rather than that it exists.
+  { : < /dev/tty; } 2>/dev/null || return 1
+  read -r -p "$prompt" reply < /dev/tty 2>/dev/null || return 1
+  [[ "$reply" =~ ^[Yy] ]]
+}
+
+# Install Serena as a Claude Code plugin (optional enhancement)
 bold ""
-bold "Step 0: Installing Serena MCP"
+bold "Step 0: Serena MCP (optional)"
 bold "-----------------------------"
-if command -v serena &> /dev/null; then
-  info "Serena already installed: $(which serena)"
-else
-  info "Installing serena-agent via uv..."
-  if uv tool install serena-agent; then
-    info "Serena installed"
-  else
-    error "Failed to install serena-agent. Ensure Python 3.11+ is available and retry."
-    exit 1
-  fi
-fi
 
-# Write Serena MCP entry to ~/.claude/settings.json
-SERENA_BIN="$(command -v serena)"
-if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null 2>&1; then
-  info "Serena already configured in settings.json"
+# Claude Code reads MCP servers from four places, not one. A standalone Serena in
+# ANY of them runs alongside the plugin's — duplicate uvx processes, and /plugin
+# reporting -32000 from the conflicting config keys. Scan all four and report the
+# ones that hold a `serena` key. Purely diagnostic: we never edit these files,
+# because per-project and repo-level config is the user's (or their team's) call.
+#
+# Note ~/.claude.json sits OUTSIDE ~/.claude/, so it does not cross into
+# devcontainers that bind-mount ~/.claude — anything stored there is host-only.
+LEGACY_SERENA_LOCATIONS=()
+
+scan_legacy_serena() {
+  LEGACY_SERENA_LOCATIONS=()
+
+  # 1. Global settings — universal MCP servers belong here.
+  if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
+    LEGACY_SERENA_LOCATIONS+=("$SETTINGS_FILE (.mcpServers.serena)")
+  fi
+
+  # 2. Per-project servers, keyed by absolute path.
+  if [ -f "$HOME/.claude.json" ]; then
+    while IFS= read -r proj; do
+      [ -n "$proj" ] && LEGACY_SERENA_LOCATIONS+=("$HOME/.claude.json (project: $proj)")
+    done < <(jq -r '.projects // {} | to_entries[] | select(.value.mcpServers.serena) | .key' \
+      "$HOME/.claude.json" 2>/dev/null)
+  fi
+
+  # 3+4. Repo-local config in the cwd — checked in (.mcp.json) and personal
+  # (.claude/settings.local.json). Only meaningful when install.sh runs from a project.
+  local f
+  for f in ".mcp.json" ".claude/settings.local.json"; do
+    if [ -f "$f" ] && jq -e '.mcpServers.serena' "$f" &>/dev/null; then
+      LEGACY_SERENA_LOCATIONS+=("$(pwd)/$f (.mcpServers.serena)")
+    fi
+  done
+}
+
+scan_legacy_serena
+
+# SET installs Serena via the official plugin rather than a hand-written
+# mcpServers entry. The plugin ships the same stdio server, but launches it with
+# `uvx --from git+...` so it tracks upstream instead of pinning whatever binary
+# happened to be installed, and Claude Code refcounts its lifecycle across
+# sessions. Existing standalone installs are left alone — see below.
+if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
+  warn "Serena is already configured standalone in:"
+  for loc in "${LEGACY_SERENA_LOCATIONS[@]}"; do
+    warn "  - $loc"
+  done
+  warn "  Leaving it as-is. Running it alongside the plugin starts duplicate"
+  warn "  Serena processes and makes /plugin report -32000 on the conflicting keys."
+  warn "  To switch to the plugin, remove the serena entry from the file(s) above,"
+  warn "  then run: claude plugin install serena@claude-plugins-official"
+elif jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null 2>&1; then
+  info "Serena plugin already installed"
+elif [ "$HAVE_UV" -eq 0 ]; then
+  info "Serena not installed — uv not found (Serena launches via uvx)."
+  info "  Optional. SET works without it; learning shards are plain markdown."
+  info "  To add it later: install uv (https://docs.astral.sh/uv/), then run"
+  info "  /plugin install serena@claude-plugins-official"
 else
-  jq --arg bin "$SERENA_BIN" \
-    '.mcpServers.serena = {"command": $bin, "args": ["start-mcp-server", "--context=claude-code"]}' \
-    "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-  info "Serena written to $SETTINGS_FILE"
+  echo ""
+  echo "  Serena adds semantic recall over your learning shards. SET works fully"
+  echo "  without it — the same shards are searched by keyword instead. It is not"
+  echo "  usable inside walled devcontainers, where no agent can reach an MCP server."
+  echo ""
+  if ask_yes_no "  Install Serena? [y/N] "; then
+    info "Installing Serena plugin..."
+    if claude plugin install serena@claude-plugins-official 2>/dev/null; then
+      info "Serena plugin installed"
+    else
+      warn "Could not install the Serena plugin (optional — SET works without it)."
+      warn "  To retry, in Claude Code run: /plugin install serena@claude-plugins-official"
+    fi
+  else
+    info "Skipping Serena (optional)."
+    info "  To add it later: /plugin install serena@claude-plugins-official"
+  fi
 fi
 
 # Ensure .claude directory exists
@@ -151,18 +223,19 @@ add_marketplace "claude-plugins-official" "github" "$OFFICIAL_MARKETPLACE_REPO"
 # Step 2: Enable Agent Teams
 # ---------------------------------------------------------------------------
 bold ""
-bold "Step 2: Enabling Agent Teams (optional build mode)"
-bold "--------------------------------------------------"
+bold "Step 2: Enabling Agent Teams (required for the default build path)"
+bold "------------------------------------------------------------------"
 
-# The default /set-build path uses native dynamic workflows and does NOT require
-# this flag. It enables the optional autonomous Agent Team build mode
-# (/set-build --use-agent-team). Written by default so that mode works out of the box.
+# /set-build runs as a native Agent Team by default, which requires this flag.
+# Without it, /set-build prompts the user to fall back to the dynamic-workflow
+# path (/set-build --use-workflow), which needs no flag.
 if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
-  info "Agent Teams already enabled (for /set-build --use-agent-team)"
+  info "Agent Teams already enabled (required for the default /set-build path)"
 else
   jq '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"' \
     "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-  info "Agent Teams enabled (for /set-build --use-agent-team)"
+  info "Agent Teams enabled (required for the default /set-build path)"
+  warn "Restart any running Claude Code session — this variable is read at session start"
 fi
 
 # ---------------------------------------------------------------------------
@@ -283,16 +356,31 @@ else
 fi
 
 if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
-  info "Agent Teams: enabled (for /set-build --use-agent-team)"
+  info "Agent Teams: enabled (required for the default /set-build path)"
 else
-  warn "Agent Teams: not enabled (only needed for /set-build --use-agent-team)"
+  error "Agent Teams: not enabled — the default /set-build path will not run"
+  ERRORS=$((ERRORS + 1))
 fi
 
-if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
-  info "Serena MCP: configured"
+# Re-scan: the plugin install above may have changed things, and a standalone
+# entry anywhere counts as "configured" — erroring out on a working per-project
+# Serena would be a false negative.
+scan_legacy_serena
+if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null; then
+  info "Serena MCP: installed as a plugin"
+  if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
+    warn "  Conflict: a standalone Serena is also configured in ${#LEGACY_SERENA_LOCATIONS[@]} location(s)."
+    for loc in "${LEGACY_SERENA_LOCATIONS[@]}"; do
+      warn "    - $loc"
+    done
+    warn "  Remove the serena entry there — duplicate servers cause /plugin -32000 errors."
+  fi
+elif [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
+  info "Serena MCP: configured (standalone entry in ${LEGACY_SERENA_LOCATIONS[0]})"
 else
-  error "Serena MCP: not configured in settings.json"
-  ERRORS=$((ERRORS + 1))
+  info "Serena MCP: not installed (optional) — SET runs without it"
+  info "  Learning shards in .claude/set/learnings/ are the source of truth and work"
+  info "  standalone. Serena adds semantic recall over them for the lead session only."
 fi
 
 # Check commands exist. Also assert no stale pre-1.0 markers leaked through — a bare
@@ -340,10 +428,17 @@ bold "============================================"
 echo ""
 
 if [ "$ERRORS" -ne 0 ]; then
-  error "SET commands were NOT fully installed/updated. Most common cause:"
-  error "  this ran inside Claude Code's sandbox (blocks network + writes to ~/.claude)."
-  error "  Re-run with the sandbox disabled, or run the installer in your own terminal:"
-  error "    curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash"
+  error "SET did not install cleanly. Check the problems listed above. Common causes:"
+  error ""
+  error "  Agent Teams not enabled — /set-build's default path needs this in"
+  error "    ~/.claude/settings.json:  \"env\": { \"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\" }"
+  error "    Restart Claude Code after setting it. To skip Agent Teams entirely,"
+  error "    run /set-build --use-workflow, which needs no flag."
+  error ""
+  error "  Commands not installed/updated — this often means the installer ran inside"
+  error "    Claude Code's sandbox (blocks network + writes to ~/.claude). Re-run with"
+  error "    the sandbox disabled, or run it in your own terminal:"
+  error "      curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash"
   echo ""
   exit 1
 fi
@@ -357,6 +452,6 @@ warn "succeed, install Superpowers manually. In Claude Code, run:"
 warn "  /plugin install superpowers@claude-plugins-official"
 echo ""
 info "  Dynamic workflows: built into Claude Code (Pro users enable via /config)"
-info "  Serena MCP:    ✓ installed and configured"
+info "  Serena MCP:    ✓ installed"
 info "To initialize a project, open it in Claude Code and run: /set-init"
 echo ""

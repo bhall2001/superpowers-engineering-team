@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.0] — Agent Teams by default
+
+### Changed
+- **`/set-build` now runs as a native Agent Team by default.** `--use-workflow` runs the same build brief on the dynamic-workflow path instead. `--use-agent-team` still exists as a silent no-op alias for the default.
+- **The previous `--use-agent-team` implementation was dead code.** It called a `Teammate` tool with spawn/shutdown/cleanup operations that do not exist in the current Claude Code harness. It has been rewritten against the real API: the `Agent` tool spawns teammates, `SendMessage` coordinates them and requests shutdown, and the shared Task tools track task state. There is no native "coordinator" agent in Claude Code — the lead session is the coordinator.
+- **A dedicated verifier teammate per task, capped at a concurrency ceiling of 4, writes no code** — preserving the fresh-verifier bar from the workflow path.
+- **A stall timeout (3 unchanged polls, then 3 more)** prevents a lagging task's status from deadlocking its `blockedBy` dependents.
+- **An availability gate guards the default path.** `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is now REQUIRED (a session restart is needed after first write). If Agent Teams are unavailable, `/set-build` prompts to run on the workflow path now or stop and enable Agent Teams.
+- **`install.sh` now treats a missing env var as an error, not a warning**, with a diagnostic naming both possible failure causes.
+- **`/set-review` is unchanged** — still runs on dynamic workflows.
+
 ## [1.0.1] — Fix `/set-update` install reliability
 
 > **Upgrading from pre-1.0?** Run the installer once in your terminal (not via `/set-update`): `curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash`. See the README "Upgrading from a pre-1.0 install" section for why.

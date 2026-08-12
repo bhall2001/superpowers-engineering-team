@@ -14,7 +14,7 @@ This walkthrough shows what a complete SET cycle looks like for a real feature r
 Checking prerequisites...
 ✓ Superpowers: installed
 ✓ Dynamic workflows: available
-✓ Agent Teams: flag set (optional, for --use-agent-team)
+✓ Agent Teams: flag set (required for the default /set-build path)
 
 Detecting stack...
   TypeScript, React, Node.js, PostgreSQL, Drizzle ORM
@@ -101,7 +101,7 @@ Running pnpm test... 47 tests passing
 Baseline clean. Compiling build brief and fanning out builders.
 ```
 
-**Builder subagents fan out** — one per task, routed by the task's specialist:
+**Builder teammates fan out** — one per task, routed by the task's specialist, alongside a dedicated verifier teammate per task:
 - `api` task (reads `.claude/agents/api.md`)
 - `db-drizzle` task (reads `.claude/agents/db-drizzle.md`)
 - `react-ui` task (reads `.claude/agents/react-ui.md`)
@@ -115,7 +115,7 @@ Baseline clean. Compiling build brief and fanning out builders.
 5. Runs lint, typecheck, self-review
 6. Commits and marks complete
 
-**A fresh verifier audits each completed task** against a rubric — spec compliance, TDD discipline, lint/typecheck. The workflow runs a verify-and-revise loop until each task meets the bar before folding it back.
+**A dedicated verifier teammate audits each completed task** against a rubric — spec compliance, TDD discipline, lint/typecheck. The team runs a verify-and-revise loop until each task meets the bar before folding it back.
 
 **Wrap up:**
 ```
@@ -187,6 +187,6 @@ Next cycle will be smarter. ✓
 
 **Tests before code.** Every builder writes failing tests before implementation. If the tests pass before writing code, they aren't testing new behavior.
 
-**Verification is adversarial.** A fresh verifier independently checks every acceptance criterion. It did not write the code and does not trust the builder's self-review. The workflow revises and re-verifies until each task meets the bar.
+**Verification is adversarial.** A dedicated verifier teammate independently checks every acceptance criterion. It did not write the code and does not trust the builder's self-review. The team revises and re-verifies until each task meets the bar.
 
 **Each cycle improves the next.** `/set-learn` doesn't just log what happened — it updates the actual instructions agents use. An agent that misses rate limiting once will have rate limiting in its domain knowledge for every future cycle.

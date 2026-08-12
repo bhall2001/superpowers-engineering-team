@@ -17,7 +17,7 @@ ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "Superpowers: inst
 
 If Superpowers is missing, tell the user how to install it (`bash install.sh`) and stop.
 
-**Dynamic Workflows:** `/set-build` and `/set-review` use the native `Workflow` tool. It ships with Claude Code (Pro/Max/Team/Enterprise). Pro users may need to enable it once via `/config` → "Dynamic workflows". No plugin install required.
+**Dynamic Workflows:** `/set-review` and `/set-build --use-workflow` use the native `Workflow` tool. It ships with Claude Code (Pro/Max/Team/Enterprise). Pro users may need to enable it once via `/config` → "Dynamic workflows". No plugin install required.
 
 ## Step 2: Audit Current State
 
@@ -46,14 +46,23 @@ git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 
 Report findings to the user before proceeding.
 
-## Step 3: Verify Serena MCP
+## Step 3: Detect Serena MCP (optional)
 
-Serena is required. Verify it is available:
+Serena is an **optional enhancement**, not a requirement. It adds semantic recall over
+the learning shards for the lead session. Shards themselves are plain markdown in
+`.claude/set/learnings/` and are the source of truth — SET's full pipeline runs without
+any MCP server. This matters for autonomous teams running inside devcontainers or
+isolated worktrees, where no MCP server is reachable by any agent, lead included.
 
-1. Check that any `mcp__serena__*` tool is listed in your available tools.
-2. If NOT available, print the following and stop:
-   > "Serena MCP is required by SET. Run `bash install.sh` from the SET repository to install it, then restart Claude Code and try again."
-3. If available, initialize `.serena/project.yml` for this project (create `.serena/` if missing):
+Detect it and record the result — never block on it:
+
+1. Check whether any `mcp__serena__*` tool is listed in your available tools.
+2. **Not available** → write `serena_enabled: false` to `.claude/set/config.json` and
+   continue. Mention once, without alarm:
+   > "Serena not detected — continuing without it. Learning shards work standalone;
+   > semantic recall over them is disabled. To add it later: `/plugin install serena@claude-plugins-official`."
+3. **Available** → write `serena_enabled: true` to `.claude/set/config.json`, then
+   initialize `.serena/project.yml` for this project (create `.serena/` if missing):
    ```yaml
    project_name: "{project-name-from-git-or-dirname}"
    languages: []  # fill in your primary languages
@@ -61,9 +70,33 @@ Serena is required. Verify it is available:
    ```
    Show the user the file before writing. Get confirmation.
 
-## Step 4: Enable Agent Teams (for the optional `--use-agent-team` build mode)
+Keep `.serena/` gitignored — it is a rebuildable index. The shards under `.claude/set/`
+are what must be committed; see Step 3b.
 
-The default `/set-build` path uses dynamic workflows and does NOT need this flag. It enables the optional autonomous Agent Team build mode (`/set-build --use-agent-team`). Write it by default so that mode works out of the box.
+## Step 3b: Ensure learning shards are committable
+
+Shards only carry forward to future cycles if git can see them. Many repos ignore
+`.claude/` wholesale, which would silently discard every learning SET produces:
+
+```bash
+git check-ignore -q .claude/set/ && echo IGNORED || echo TRACKABLE
+```
+
+If `IGNORED`, tell the user and offer to fix `.gitignore` by excluding `.claude/`'s
+*contents* rather than the directory itself:
+
+```
+.claude/*
+!.claude/set/
+```
+
+The trailing `*` is required — git will not re-include a path whose parent directory is
+excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op. Show the change
+and get confirmation before writing.
+
+## Step 4: Enable Agent Teams (required for the default `/set-build` path)
+
+The default `/set-build` path runs as a native Agent Team and REQUIRES this flag (a session restart is needed after first write). Write it by default so the default path works out of the box. `/set-build --use-workflow` runs the dynamic-workflow path instead and needs no flag.
 
 Check `.claude/settings.json`:
 - If it **doesn't exist**: create it with `{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
@@ -251,8 +284,9 @@ Stack detected:
   Linter:       [detected]
   Type checker: [detected]
 
-Execution:   dynamic workflows (default) — Agent Teams enabled for /set-build --use-agent-team
-Serena MCP:  ✓ required and verified
+Execution:   Agent Teams (default for /set-build) — dynamic workflows available via /set-build --use-workflow
+Serena MCP:  [✓ detected — semantic recall enabled | — not detected (optional; shards work standalone)]
+Learnings:   [✓ .claude/set/ is trackable by git | ⚠ gitignored — learnings will not persist]
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]
   .claude/agents/ui-specialist.md       — [if created]
