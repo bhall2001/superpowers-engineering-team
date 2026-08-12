@@ -46,20 +46,53 @@ git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 
 Report findings to the user before proceeding.
 
-## Step 3: Verify Serena MCP
+## Step 3: Detect Serena MCP (optional)
 
-Serena is required. Verify it is available:
+Serena is an **optional enhancement**, not a requirement. It adds semantic recall over
+the learning shards for the lead session. Shards themselves are plain markdown in
+`.claude/set/learnings/` and are the source of truth — SET's full pipeline runs without
+any MCP server. This matters for autonomous teams running inside devcontainers or
+isolated worktrees, where no MCP server is reachable by any agent, lead included.
 
-1. Check that any `mcp__serena__*` tool is listed in your available tools.
-2. If NOT available, print the following and stop:
-   > "Serena MCP is required by SET. Run `bash install.sh` from the SET repository to install it, then restart Claude Code and try again."
-3. If available, initialize `.serena/project.yml` for this project (create `.serena/` if missing):
+Detect it and record the result — never block on it:
+
+1. Check whether any `mcp__serena__*` tool is listed in your available tools.
+2. **Not available** → write `serena_enabled: false` to `.claude/set/config.json` and
+   continue. Mention once, without alarm:
+   > "Serena not detected — continuing without it. Learning shards work standalone;
+   > semantic recall over them is disabled. To add it later: `/plugin install serena@claude-plugins-official`."
+3. **Available** → write `serena_enabled: true` to `.claude/set/config.json`, then
+   initialize `.serena/project.yml` for this project (create `.serena/` if missing):
    ```yaml
    project_name: "{project-name-from-git-or-dirname}"
    languages: []  # fill in your primary languages
    ignore_all_files_in_gitignore: true
    ```
    Show the user the file before writing. Get confirmation.
+
+Keep `.serena/` gitignored — it is a rebuildable index. The shards under `.claude/set/`
+are what must be committed; see Step 3b.
+
+## Step 3b: Ensure learning shards are committable
+
+Shards only carry forward to future cycles if git can see them. Many repos ignore
+`.claude/` wholesale, which would silently discard every learning SET produces:
+
+```bash
+git check-ignore -q .claude/set/ && echo IGNORED || echo TRACKABLE
+```
+
+If `IGNORED`, tell the user and offer to fix `.gitignore` by excluding `.claude/`'s
+*contents* rather than the directory itself:
+
+```
+.claude/*
+!.claude/set/
+```
+
+The trailing `*` is required — git will not re-include a path whose parent directory is
+excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op. Show the change
+and get confirmation before writing.
 
 ## Step 4: Enable Agent Teams (required for the default `/set-build` path)
 
@@ -252,7 +285,8 @@ Stack detected:
   Type checker: [detected]
 
 Execution:   Agent Teams (default for /set-build) — dynamic workflows available via /set-build --use-workflow
-Serena MCP:  ✓ required and verified
+Serena MCP:  [✓ detected — semantic recall enabled | — not detected (optional; shards work standalone)]
+Learnings:   [✓ .claude/set/ is trackable by git | ⚠ gitignored — learnings will not persist]
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]
   .claude/agents/ui-specialist.md       — [if created]

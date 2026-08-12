@@ -104,8 +104,29 @@ This is SET's methodology layer. Assemble ONE brief the execution path can run w
 ### A1: Load shards for the task
 For each domain in the task's `Shards` field, read `.claude/set/learnings/{domain}.md` and collect its contents (strip frontmatter, keep the What Works / What Failed / Recurring Bugs sections). If `Shards` is empty, skip.
 
-### A2: Query Serena (if enabled)
-If `serena_enabled: true`, query Serena for memories relevant to the task's `What` + `Done when` text. Cap at top 5 by relevance. Dedupe against shards already loaded in A1 (skip memories whose `source:` points to an already-loaded shard). If Serena fails or times out, log a warning and continue — never block the build on Serena.
+### A2: Retrieve additional learnings beyond the task's tagged shards
+
+A1 covers the domains the plan tagged. A2 catches relevant learnings in *untagged*
+shards. Two interchangeable paths — both optional, neither ever blocks the build:
+
+**If `serena_enabled: true`:** query Serena for memories relevant to the task's `What` +
+`Done when` text. Cap at top 5 by relevance. If Serena fails or times out, log a warning
+and fall through to the keyword path below rather than giving up on retrieval entirely.
+
+**Otherwise (the default, and the only path in walled environments):** keyword-scan the
+shards directly. No MCP server required — shards are plain markdown on disk:
+
+1. Derive 3-6 distinctive keywords from the task's `What` + `Done when` (skip generic
+   verbs like "add", "update", "fix"; keep domain nouns, API names, error strings).
+2. Scan shards **not** already loaded in A1:
+   ```bash
+   grep -rin -A 3 -e '{keyword1}' -e '{keyword2}' .claude/set/learnings/ | head -60
+   ```
+3. Keep entries whose match is substantive, not incidental. Cap at top 5.
+
+Under either path, dedupe against shards already loaded in A1 (for Serena, skip memories
+whose `source:` points to an already-loaded shard). If nothing is found, omit the section
+from the bundle entirely — an empty heading is noise that costs every builder tokens.
 
 ### A3: Assemble the per-task context bundle
 ```
@@ -121,9 +142,9 @@ injected below. For code navigation, use Claude Code's built-in LSP tool.
 ## Relevant Learnings (from shards: {comma-separated domains})
 {shard contents}
 
-{if Serena enabled and returned results:}
-## Additional Semantic Matches (from Serena)
-{top-5 deduped memory contents}
+{if A2 returned results — omit this whole section if it found nothing:}
+## Additional Relevant Learnings (from untagged shards)
+{top-5 deduped entries from A2, whichever retrieval path produced them}
 ```
 
 ### A4: Compose the global verification rubric

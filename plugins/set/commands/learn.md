@@ -61,7 +61,14 @@ Learnings are sharded by domain into `.claude/set/learnings/{domain}.md` files. 
 
 #### 3a: Migrate existing shards to Serena memories (one-time)
 
-Check for sentinel first:
+**Gate on `serena_enabled` first.** Read `.claude/set/config.json`. If `serena_enabled`
+is not `true` — including when the key or the file is **missing** — skip this step
+entirely and do not call `mcp__serena__*`. Only `/set-build` writes that key, so a
+project that has not built yet will legitimately have no value; absent means off. SET
+runs Serena-less by design in walled environments (devcontainers, isolated worktrees)
+where no MCP server is reachable; shards are the source of truth and lose nothing.
+
+Then check for the sentinel:
 ```bash
 ls .claude/set/.serena-migrated 2>/dev/null
 ```
@@ -135,6 +142,11 @@ Read `references/learn-entry-format.md` for entry format rules and examples befo
 A learning that every agent must always apply goes into `CLAUDE.md` instead of (or in addition to) a shard. Bar is high — examples: project-wide security rules, absolute conventions that cause silent bugs if missed. Most learnings do NOT meet this bar. When in doubt, shard.
 
 #### 3g: Mirror to Serena memories
+
+**Skip this entire step unless `serena_enabled` is `true` in `.claude/set/config.json`.**
+The shards written above are complete and authoritative on their own; the Serena mirror
+is a runtime index over them, rebuildable at any time by a session that has Serena. Never
+block or fail `/set-learn` on Serena being absent or erroring — log and continue.
 
 For each new learning, write a Serena memory using `mcp__serena__write_memory`:
 - Name/slug: short kebab-case from the learning's key concept (e.g. `shared-field-high-run-exclusion`)
@@ -217,13 +229,50 @@ mkdir -p .claude/plans/archive
 mv .claude/plans/{feature}.md .claude/plans/archive/{feature}.md 2>/dev/null
 ```
 
+### 7b: Verify shards are visible to git
+
+`/set-learn` never commits — that call is the human's. But shards only carry forward to
+future cycles if they are *committable*, so verify they are not silently ignored. Many
+repos ignore `.claude/` wholesale, which would make every learning written above
+invisible to `git status` and lost when a worktree or container is torn down.
+
+```bash
+git check-ignore -q .claude/set/learnings/ && echo IGNORED || echo TRACKABLE
+```
+
+If it prints `IGNORED`, warn prominently in the report:
+
+> ⚠️  `.claude/set/learnings/` is gitignored — the {N} learnings written this cycle will
+> NOT persist. Future agent teams will not see them.
+>
+> Fix `.gitignore` by excluding `.claude/`'s *contents* rather than the directory, then
+> negating `.claude/set/`:
+>
+> ```
+> .claude/*
+> !.claude/set/
+> ```
+>
+> The trailing `*` is required. Git will not re-include a path whose parent directory is
+> itself excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op.
+>
+> Keep `.serena/` ignored — it is a rebuildable index, not source of truth.
+
+Then list the shard files changed this cycle so the human can review and commit them:
+
+```bash
+git status --short .claude/set/
+```
+
 ### 8. Report to User
 
 - How many new learnings added, broken down by shard (`{domain}: N entries`)
 - Any new domains proposed and added to the taxonomy
 - Whether a migration from monolithic `learnings.md` happened
 - Any updates to `CLAUDE.md` — these should be rare
-- Count of Serena memories written (new + migrated)
+- Count of Serena memories written (new + migrated), or `skipped (serena_enabled: false)`
+- **Shard files changed, and whether they are trackable by git** — plus the ignored-path
+  warning from 7b if it fired. State plainly that committing them is the user's call.
 - Which agents were updated and what was added
 - Any patterns that contradict previous ones (update, don't duplicate)
 - Process insights about SET itself (task sizing, specialist routing, etc.)

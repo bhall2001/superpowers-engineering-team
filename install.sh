@@ -72,17 +72,32 @@ if ! command -v jq &> /dev/null; then
 fi
 info "jq found: $(which jq)"
 
-# Check for uv (Serena's plugin launches via uvx)
+# Check for uv (Serena's plugin launches via uvx). Serena is OPTIONAL and opt-in, so a
+# missing uv is a skip, not a failure — SET's learning shards are plain markdown and work
+# without any MCP server.
+HAVE_UV=1
 if ! command -v uv &> /dev/null; then
-  error "uv is required to run Serena."
-  error "Install it from https://docs.astral.sh/uv/ then re-run install.sh"
-  exit 1
+  HAVE_UV=0
+else
+  info "uv found: $(which uv)"
 fi
-info "uv found: $(which uv)"
 
-# Install Serena as a Claude Code plugin
+# Serena is opt-in. Prompt only when a human is actually there to answer: under
+# `curl | bash`, stdin is the SCRIPT ITSELF, so a bare `read` would swallow installer
+# source as the answer. Read from /dev/tty instead, and skip entirely when there is no
+# tty (CI, devcontainer builds, piped installs) — default is no.
+ask_yes_no() {
+  local prompt="$1" reply=""
+  # /dev/tty's device node exists even when it cannot be opened (piped install, CI,
+  # container build), so test that it actually opens rather than that it exists.
+  { : < /dev/tty; } 2>/dev/null || return 1
+  read -r -p "$prompt" reply < /dev/tty 2>/dev/null || return 1
+  [[ "$reply" =~ ^[Yy] ]]
+}
+
+# Install Serena as a Claude Code plugin (optional enhancement)
 bold ""
-bold "Step 0: Installing Serena MCP"
+bold "Step 0: Serena MCP (optional)"
 bold "-----------------------------"
 
 # Claude Code reads MCP servers from four places, not one. A standalone Serena in
@@ -139,13 +154,28 @@ if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
   warn "  then run: claude plugin install serena@claude-plugins-official"
 elif jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null 2>&1; then
   info "Serena plugin already installed"
+elif [ "$HAVE_UV" -eq 0 ]; then
+  info "Serena not installed — uv not found (Serena launches via uvx)."
+  info "  Optional. SET works without it; learning shards are plain markdown."
+  info "  To add it later: install uv (https://docs.astral.sh/uv/), then run"
+  info "  /plugin install serena@claude-plugins-official"
 else
-  info "Installing Serena plugin..."
-  if claude plugin install serena@claude-plugins-official 2>/dev/null; then
-    info "Serena plugin installed"
+  echo ""
+  echo "  Serena adds semantic recall over your learning shards. SET works fully"
+  echo "  without it — the same shards are searched by keyword instead. It is not"
+  echo "  usable inside walled devcontainers, where no agent can reach an MCP server."
+  echo ""
+  if ask_yes_no "  Install Serena? [y/N] "; then
+    info "Installing Serena plugin..."
+    if claude plugin install serena@claude-plugins-official 2>/dev/null; then
+      info "Serena plugin installed"
+    else
+      warn "Could not install the Serena plugin (optional — SET works without it)."
+      warn "  To retry, in Claude Code run: /plugin install serena@claude-plugins-official"
+    fi
   else
-    warn "Could not install the Serena plugin automatically."
-    warn "  In Claude Code, run: /plugin install serena@claude-plugins-official"
+    info "Skipping Serena (optional)."
+    info "  To add it later: /plugin install serena@claude-plugins-official"
   fi
 fi
 
@@ -348,8 +378,9 @@ if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_F
 elif [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
   info "Serena MCP: configured (standalone entry in ${LEGACY_SERENA_LOCATIONS[0]})"
 else
-  error "Serena MCP: not installed — SET uses it as the semantic index over learning shards"
-  ERRORS=$((ERRORS + 1))
+  info "Serena MCP: not installed (optional) — SET runs without it"
+  info "  Learning shards in .claude/set/learnings/ are the source of truth and work"
+  info "  standalone. Serena adds semantic recall over them for the lead session only."
 fi
 
 # Check commands exist. Also assert no stale pre-1.0 markers leaked through — a bare

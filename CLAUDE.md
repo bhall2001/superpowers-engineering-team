@@ -51,7 +51,9 @@ Each command in `plugins/set/commands/` is a self-contained prompt spec. Changes
 
 **Serena memories:** Runtime index of shard entries. Slugs are kebab-case key concepts. Frontmatter includes `domains:`, `date:`, `source:` fields. Written/read via `mcp__serena__*` tools. Shards are the source of truth; Serena is the index.
 
-**Serena requirement:** Serena MCP is a hard dependency. `install.sh` installs it. `/set-init` verifies it at project init time.
+**Serena is optional.** It is a semantic index over the learning shards, nothing more. Shards under `.claude/set/learnings/` are plain markdown and the source of truth; every command degrades to keyword retrieval over them when Serena is absent, gated on `serena_enabled` in `.claude/set/config.json`. `install.sh` installs it best-effort; `/set-init` detects and records it.
+
+This matters for autonomous teams: when the whole team runs walled inside a devcontainer or isolated worktree, **no** agent can reach an MCP server — the lead included. Serena being lead-only does not rescue that topology, so nothing in the pipeline may depend on it. Committing shards is what carries learnings between cycles, and that is the human's call at `/set-learn`.
 
 ## Where MCP config lives
 
