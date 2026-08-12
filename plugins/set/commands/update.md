@@ -41,7 +41,16 @@ For each file, check the opening line for the stale phrase `specialist on a SET 
 
 - `You are a {domain} specialist on a SET Agent Team.` → `You are a {domain} specialist agent in the SET workflow.`
 
-Also replace any literal `message team lead` / `team lead` coordination phrasing that originated from the old scaffold with workflow-neutral wording (e.g. "report the blocker"). Do **not** reformat or rewrite anything the user customized — touch only the known stale lines. Show each proposed per-file change and apply on confirmation.
+**Only if that scaffold phrase was found in this file**, also replace literal `message team lead` / `team lead` coordination phrasing with workflow-neutral wording (e.g. "report the blocker").
+
+If the scaffold phrase is **absent**, leave every `team lead` mention alone and do not propose changes to them. The phrase is a proxy for "this file came from the old scaffold", and proxies produce false positives:
+
+- `team-lead.md` may be a real, deliberate agent in this project's roster — rewriting its self-description breaks a live agent.
+- Dated entries under a learnings or notes heading are project-authored history, not scaffold text. Never rewrite them.
+
+When in doubt, skip the line and note it in the 1d report for the user to decide. Under-migrating is recoverable; corrupting authored content is not.
+
+Do **not** reformat or rewrite anything the user customized — touch only the known stale lines. Show each proposed per-file change and apply on confirmation.
 
 **Then normalize frontmatter (makes the agent spawnable as an `agentType`).** For each `.claude/agents/*.md` file, apply the first matching case:
 
@@ -54,6 +63,8 @@ Also replace any literal `message team lead` / `team lead` coordination phrasing
    - Leave the rest of the body untouched — do NOT rewrite user customizations.
 2. **Has frontmatter but `name:` is missing or ≠ filename stem** → set/fix `name:` to the stem; leave other keys as-is.
 3. **Already correct** (frontmatter present, `name:` matches stem) → no change.
+
+`name:` is the only key this migration guarantees, because it is the one that makes the file resolvable as an `agentType`. A missing `tools:` on an existing file is **not** a defect to fix here — omitting it grants the agent all tools, which is a valid configuration; the six-tool list is only what `/set-init` writes when synthesizing a scaffold from scratch. Do not add `tools:` to files that already have working frontmatter.
 
 **Undecipherable/heavily-customized file** (no derivable domain or model): still inject `name:` (stem), `description: SET specialist (review & refine)`, `model: sonnet`, `tools: [Read, Edit, Write, Bash, Grep, Glob]`; leave the body untouched; and **flag the file in the 1d report** for the user to review and refine.
 
