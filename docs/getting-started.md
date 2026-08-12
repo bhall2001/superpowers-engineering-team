@@ -103,4 +103,4 @@ Updates `CLAUDE.md` with project-level learnings and evolves specialist agent de
 /set-update
 ```
 
-Updates SET, Superpowers, and Serena to the latest versions.
+Updates SET and Superpowers to the latest versions, and migrates project files from earlier SET versions.

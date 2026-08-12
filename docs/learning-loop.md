@@ -47,11 +47,57 @@ Domain-specific lessons are written directly into each specialist's definition f
 - Patterns this agent handled well
 - New conventions relevant to this agent's domain
 
+## Commit your shards — the loop depends on it
+
+Shards are the durable artifact. They carry learnings between cycles only if they are
+committed to the repository, so a future team — on a fresh clone, a new worktree, or a
+rebuilt container — starts with everything prior cycles learned.
+
+`/set-learn` **never commits.** It writes the shards and reports what changed; staging and
+committing them is your call, like any other file it touches.
+
+The one thing to check is that git can actually see them. Many repos ignore `.claude/`
+wholesale, which silently discards every learning SET produces — no error, no warning, and
+the pipeline still reports success:
+
+```bash
+git check-ignore -q .claude/set/ && echo "IGNORED — learnings will not persist" || echo "OK"
+```
+
+If it reports `IGNORED`, exclude `.claude/`'s *contents* rather than the directory itself:
+
+```gitignore
+.claude/*
+!.claude/set/
+```
+
+The trailing `*` is required. Git will not re-include a path whose parent directory is
+excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op. `/set-init`
+checks this on new projects and `/set-update` checks it on existing ones, both offering
+the fix.
+
+Keep `.serena/` ignored — it is a rebuildable index, not source of truth.
+
 ## Optional Semantic Index → Serena MCP
 
-If Serena MCP is installed and enabled during `/set-init` (or toggled on later via `/set-update`), `/set-learn` additionally mirrors each learning to `.serena/memories/` with domain tags in frontmatter. During `/set-build`, the team lead queries Serena for the top-5 semantically-relevant memories per task and injects them alongside the statically-selected shards.
+Serena is **optional and opt-in**. `install.sh` prompts before installing it (default no),
+and SET's full pipeline runs without any MCP server.
 
-Shards remain the source of truth — Serena is an index. If Serena is uninstalled or fails, SET continues working against the shards unchanged.
+If Serena is present and `serena_enabled` is `true` in `.claude/set/config.json`,
+`/set-learn` additionally mirrors each learning to `.serena/memories/` with domain tags in
+frontmatter. During `/set-build`, the lead queries Serena for the top-5
+semantically-relevant memories per task and injects them alongside the statically-selected
+shards.
+
+Shards remain the source of truth — Serena is an index over them. With Serena off,
+`/set-build` falls back to keyword search across untagged shards, so retrieval still
+happens; only the ranking quality differs. If Serena is uninstalled or a call fails, SET
+continues against the shards unchanged.
+
+**Autonomous teams:** when the whole team runs walled inside a devcontainer or isolated
+worktree, no agent can reach an MCP server — the lead included. Serena being lead-only does
+not rescue that topology, which is why nothing in the pipeline depends on it. Set
+`serena_enabled: false` there and rely on the committed shards.
 
 ## What `/set-learn` Analyzes
 

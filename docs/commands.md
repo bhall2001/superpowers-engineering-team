@@ -139,7 +139,7 @@ Each agent gets updates specific to its performance. Cross-agent learnings go to
 
 **Maintenance**
 
-Updates SET, Superpowers, and Serena to the latest versions. SET is not in an official Claude marketplace — update by re-running the installer.
+Updates SET and Superpowers to the latest versions, and migrates project files from earlier SET versions. SET is not in an official Claude marketplace — update by re-running the installer.
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash

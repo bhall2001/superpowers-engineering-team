@@ -43,6 +43,8 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 
 Registers the Superpowers marketplace and installs SET commands directly into `~/.claude/commands/`. It also writes the Agent Teams environment flag, which the default `/set-build` path requires — restart Claude Code after the first install so the flag takes effect.
 
+The installer asks once whether to add [Serena MCP](#optional-serena-mcp-integration) (optional, default no). Piped and non-interactive runs skip it automatically. `jq` and the Claude Code CLI are the only hard prerequisites.
+
 Then open Claude Code and install the prerequisite plugin:
 
 ```
@@ -83,7 +85,7 @@ After this one-time upgrade you'll have the v1 `/set-update`, and from then on *
 | `/set-build` | Build | Native Agent Team — spawns builder teammates (one per task, routed by specialist) each running the per-task TDD loop, plus a dedicated verifier teammate per task that checks it against a rubric. `--use-workflow` runs the same brief as a dynamic workflow instead |
 | `/set-review` | Review | Dynamic-workflow fan-out across 4 lenses (spec compliance, security, architecture, correctness) × affected modules; `--light` runs 4 plain parallel subagents for small diffs |
 | `/set-learn` | Learn | Extracts learnings to CLAUDE.md + evolves agent definitions based on cycle performance |
-| `/set-update` | Maintenance | Updates SET, Superpowers, and Serena to latest versions |
+| `/set-update` | Maintenance | Updates SET and Superpowers; migrates projects from earlier SET versions |
 
 ## How the Learning Loop Works
 
@@ -101,24 +103,28 @@ Next session, Claude reads CLAUDE.md, relevant shards per task, and evolved agen
 
 ## Optional: Serena MCP Integration
 
-SET can optionally use [Serena MCP](https://github.com/oraios/serena) as a semantic index over your learning shards. Shards remain the source of truth; Serena adds recall.
+SET can optionally use [Serena MCP](https://github.com/oraios/serena) as a semantic index over your learning shards. It is **opt-in and never installed without asking** — `install.sh` prompts (default no), and declining changes nothing else. Shards remain the source of truth; Serena only adds recall.
 
 **What it adds:**
 - **Semantic retrieval per task.** `/set-build` queries Serena with each task's description and injects the top-5 most relevant memories alongside the statically-selected shards. Catches learnings the shard-tagging missed.
 - **Cross-domain matching.** A learning filed under `db` may still surface for an `api` task if it's semantically relevant — without duplicating it across shards.
 - **Lead-only by design.** `/set-build` queries Serena once in the lead session and injects the results into each task brief as text. Builder teammates never call Serena themselves — see [Code Intelligence for Agent Teams](#code-intelligence-for-agent-teams) for why.
 
+**Without it, nothing breaks.** Every command is gated on `serena_enabled` in `.claude/set/config.json`. When it's off, `/set-build` falls back to keyword search over the same shards, and `/set-learn` skips the mirror step. The shards are plain markdown either way.
+
 **How it works:**
 - Shards are authoritative. `/set-learn` mirrors each learning to `.serena/memories/` with domain tags in frontmatter.
 - If Serena is uninstalled or the call fails, SET falls back to shards unchanged — nothing breaks.
-- You can enable/disable at any time: `/set-init` prompts on fresh projects; `/set-learn` and `/set-build` detect Serena lazily for existing projects (prompted once, persisted); `/set-update` lets you re-toggle.
+- You can enable/disable at any time: `/set-init` detects and records it on fresh projects; `/set-build` detects lazily for existing projects (prompted once, persisted); `/set-update` reconciles the flag.
 
 **When it's worth it:**
 - Your learning base has grown past what static domain tagging catches cleanly
 - You want cross-project memory (Serena's memories can be shared across projects)
 - You already use Serena for its symbol tools and want the integration
 
-Not needed for smaller projects — sharding alone handles most scale.
+**When to skip it:**
+- **Your agents run walled** — inside a devcontainer or an isolated worktree with no MCP access. No agent reaches Serena there, the lead included, so the lead-only design doesn't help. Set `serena_enabled: false` and use keyword retrieval.
+- Smaller projects — sharding alone handles most scale.
 
 ## Code Intelligence for Agent Teams
 
