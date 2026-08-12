@@ -52,3 +52,21 @@ Each command in `plugins/set/commands/` is a self-contained prompt spec. Changes
 **Serena memories:** Runtime index of shard entries. Slugs are kebab-case key concepts. Frontmatter includes `domains:`, `date:`, `source:` fields. Written/read via `mcp__serena__*` tools. Shards are the source of truth; Serena is the index.
 
 **Serena requirement:** Serena MCP is a hard dependency. `install.sh` installs it. `/set-init` verifies it at project init time.
+
+## Where MCP config lives
+
+Claude Code reads MCP servers from four places. `install.sh`'s `scan_legacy_serena`
+checks all four for a standalone `serena` key, because one running alongside the
+plugin's means duplicate `uvx` processes and `/plugin` reporting `-32000` on the
+conflicting keys:
+
+1. `~/.claude/settings.json` → `.mcpServers` — universal servers belong here
+2. `~/.claude.json` → `.projects["<abs path>"].mcpServers` — per-project, host-only
+3. `<repo>/.mcp.json` → `.mcpServers` — checked in, project-specific servers belong here
+4. `<repo>/.claude/settings.local.json` → `.mcpServers` — personal, not checked in
+
+The scan is diagnostic only — it warns and lists the paths, never edits these files,
+since per-project and repo-level config is the user's or their team's call.
+
+Note `~/.claude.json` sits OUTSIDE `~/.claude/`, so it does not cross into
+devcontainers that bind-mount `~/.claude` — anything stored there is host-only.

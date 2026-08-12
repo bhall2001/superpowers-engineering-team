@@ -85,15 +85,58 @@ bold ""
 bold "Step 0: Installing Serena MCP"
 bold "-----------------------------"
 
+# Claude Code reads MCP servers from four places, not one. A standalone Serena in
+# ANY of them runs alongside the plugin's — duplicate uvx processes, and /plugin
+# reporting -32000 from the conflicting config keys. Scan all four and report the
+# ones that hold a `serena` key. Purely diagnostic: we never edit these files,
+# because per-project and repo-level config is the user's (or their team's) call.
+#
+# Note ~/.claude.json sits OUTSIDE ~/.claude/, so it does not cross into
+# devcontainers that bind-mount ~/.claude — anything stored there is host-only.
+LEGACY_SERENA_LOCATIONS=()
+
+scan_legacy_serena() {
+  LEGACY_SERENA_LOCATIONS=()
+
+  # 1. Global settings — universal MCP servers belong here.
+  if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
+    LEGACY_SERENA_LOCATIONS+=("$SETTINGS_FILE (.mcpServers.serena)")
+  fi
+
+  # 2. Per-project servers, keyed by absolute path.
+  if [ -f "$HOME/.claude.json" ]; then
+    while IFS= read -r proj; do
+      [ -n "$proj" ] && LEGACY_SERENA_LOCATIONS+=("$HOME/.claude.json (project: $proj)")
+    done < <(jq -r '.projects // {} | to_entries[] | select(.value.mcpServers.serena) | .key' \
+      "$HOME/.claude.json" 2>/dev/null)
+  fi
+
+  # 3+4. Repo-local config in the cwd — checked in (.mcp.json) and personal
+  # (.claude/settings.local.json). Only meaningful when install.sh runs from a project.
+  local f
+  for f in ".mcp.json" ".claude/settings.local.json"; do
+    if [ -f "$f" ] && jq -e '.mcpServers.serena' "$f" &>/dev/null; then
+      LEGACY_SERENA_LOCATIONS+=("$(pwd)/$f (.mcpServers.serena)")
+    fi
+  done
+}
+
+scan_legacy_serena
+
 # SET installs Serena via the official plugin rather than a hand-written
 # mcpServers entry. The plugin ships the same stdio server, but launches it with
 # `uvx --from git+...` so it tracks upstream instead of pinning whatever binary
 # happened to be installed, and Claude Code refcounts its lifecycle across
 # sessions. Existing standalone installs are left alone — see below.
-if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null 2>&1; then
-  info "Serena already configured in settings.json (standalone mcpServers entry)"
-  info "  Leaving it as-is. To switch to the plugin, remove .mcpServers.serena"
-  info "  from $SETTINGS_FILE and run: claude plugin install serena@claude-plugins-official"
+if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
+  warn "Serena is already configured standalone in:"
+  for loc in "${LEGACY_SERENA_LOCATIONS[@]}"; do
+    warn "  - $loc"
+  done
+  warn "  Leaving it as-is. Running it alongside the plugin starts duplicate"
+  warn "  Serena processes and makes /plugin report -32000 on the conflicting keys."
+  warn "  To switch to the plugin, remove the serena entry from the file(s) above,"
+  warn "  then run: claude plugin install serena@claude-plugins-official"
 elif jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null 2>&1; then
   info "Serena plugin already installed"
 else
@@ -289,10 +332,21 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+# Re-scan: the plugin install above may have changed things, and a standalone
+# entry anywhere counts as "configured" — erroring out on a working per-project
+# Serena would be a false negative.
+scan_legacy_serena
 if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null; then
   info "Serena MCP: installed as a plugin"
-elif jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
-  info "Serena MCP: configured (standalone mcpServers entry)"
+  if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
+    warn "  Conflict: a standalone Serena is also configured in ${#LEGACY_SERENA_LOCATIONS[@]} location(s)."
+    for loc in "${LEGACY_SERENA_LOCATIONS[@]}"; do
+      warn "    - $loc"
+    done
+    warn "  Remove the serena entry there — duplicate servers cause /plugin -32000 errors."
+  fi
+elif [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
+  info "Serena MCP: configured (standalone entry in ${LEGACY_SERENA_LOCATIONS[0]})"
 else
   error "Serena MCP: not installed — SET uses it as the semantic index over learning shards"
   ERRORS=$((ERRORS + 1))
