@@ -332,6 +332,7 @@ if [ -n "$PLUGIN_ROOT" ]; then
   install_file "references/enhanced-builder-prompt.md" "references/enhanced-builder-prompt.md"
   install_file "references/enhanced-qa-prompt.md"      "references/enhanced-qa-prompt.md"
   install_file "references/learn-entry-format.md"      "references/learn-entry-format.md"
+  install_file "references/autonomous-mode.md"         "references/autonomous-mode.md"
 fi
 
 # Clean up any downloaded tree.
@@ -403,7 +404,7 @@ for cmd in set-init set-design set-plan set-build set-review set-learn set-updat
   fi
 done
 
-for ref in enhanced-builder-prompt enhanced-qa-prompt learn-entry-format; do
+for ref in enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode; do
   if [ -f "$COMMANDS_DIR/references/$ref.md" ]; then
     info "Reference: $ref.md"
   else
