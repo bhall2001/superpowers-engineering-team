@@ -87,6 +87,22 @@ After this one-time upgrade you'll have the v1 `/set-update`, and from then on *
 | `/set-learn` | Learn | Extracts learnings to CLAUDE.md + evolves agent definitions based on cycle performance |
 | `/set-update` | Maintenance | Updates SET and Superpowers; migrates projects from earlier SET versions |
 
+### Autonomous runs
+
+Add `--autonomous` to `/set-design`, `/set-plan`, `/set-build`, or `/set-review` to run
+that phase and everything after it through `/set-learn` without stopping at gates. Add
+`--verbose` (independently) for per-agent progress output.
+
+> **Caution: `--autonomous` on `/set-design` is not currently best practice.** The agent
+> authors its own requirements, so a poor design costs tokens twice — once building it,
+> and again fixing it. Prefer starting autonomy at `/set-plan`, from a human-approved
+> spec.
+
+Autonomous runs never push, open a PR, or merge. They end by handing you the browser
+check and the push decision.
+
+See [`docs/commands.md`](docs/commands.md#switches) for the full switch reference.
+
 ## How the Learning Loop Works
 
 After each build/review cycle, run `/set-learn`. It:
