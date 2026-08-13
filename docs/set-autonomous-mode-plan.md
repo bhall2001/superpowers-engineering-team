@@ -195,11 +195,16 @@ Expected: two hits — one `install_file` line, one in the verify loop list.
 - [ ] **Step 6: Verify the reference file defines all five named concepts**
 
 ```bash
-grep -c '^## ' plugins/set/references/autonomous-mode.md
-grep -n '^## ' plugins/set/references/autonomous-mode.md
+for s in "Flag Parsing" "Verbosity Levels" "Chaining Contract" "Hard Boundaries" "Autonomous Final Report"; do
+  grep -q "^## $s\$" plugins/set/references/autonomous-mode.md && echo "OK   $s" || echo "MISS $s"
+done
 ```
 
-Expected: 5 sections — Flag Parsing, Verbosity Levels, Chaining Contract, Hard Boundaries, Autonomous Final Report.
+Expected: all five OK.
+
+Do not assert a total `^## ` count — the Autonomous Final Report template contains
+its own `## SET Autonomous Run Complete` heading inside a fenced block, so a raw
+count returns 6, not 5.
 
 - [ ] **Step 7: Commit**
 
