@@ -42,45 +42,105 @@ Inject each lens's bucket into its prompt as **text**. Lens agents receive learn
 
 Check `$ARGUMENTS` for `--light`.
 
+### Step 2b: The Lens Return Contract (binding on both modes)
+
+A lens that reviews the code but does not hand its findings back has **failed**, no matter how good the review was. Analysis left in a lens agent's own transcript is invisible to the lead, and the tokens that produced it are wasted. Every lens agent MUST return exactly this object:
+
+```
+{ lens: string, module: string, reviewed: boolean,
+  findings: [ { file: string, line: string,
+                severity: "critical"|"high"|"medium"|"low",
+                issue: string, suggestion: string } ],
+  good_patterns: string[] }
+```
+
+This schema is **mandatory and identical across both modes** — it is the seam that keeps the workflow and `--light` paths from drifting. When editing either path, preserve it exactly.
+
+Rules that bind every lens agent:
+
+- **A clean lens still returns.** Finding nothing is a result, not a reason to stay silent: return `reviewed: true` with `findings: []`. An empty array is a valid, expected outcome.
+- **The returned object is the deliverable.** Prose written anywhere else does not count as reporting.
+- **No lens may return `reviewed: false`** except when it genuinely could not read its assigned diff. If so, say why in a single `low` finding.
+
+The lead NEVER performs a lens itself to cover for a missing return — that would destroy the independence the review exists for and re-spend the tokens the lens already burned.
+
 ### Default — Dynamic Workflow Fan-Out
 
 SET is geared for heavy work, so the default uses the **`Workflow` tool**. Author a script that:
 
 1. Fans out the **four lenses × affected modules** (derive modules from the diff stat). Each lens is an independent `agent()` that did not author the code, given the lens rubric below plus the diff for its module(s).
-2. Has each lens agent return findings via `agent({schema})`, e.g.:
-   ```
-   { lens: string, module: string, findings: [
-       { file: string, line: string, severity: "critical"|"high"|"medium"|"low",
-         issue: string, suggestion: string } ],
-     good_patterns: string[] }
-   ```
-3. **Pre-aggregates per perspective** inside the workflow (collect each lens's findings across modules), so you receive four consolidated perspective reports — not N×4 raw transcripts.
-4. Returns the four perspective reports for synthesis in Step 3.
+2. Calls each lens as `agent(prompt, { schema: LENS_SCHEMA })` using the Step 2b schema. Passing `schema` forces the subagent through a `StructuredOutput` tool call and returns a validated object, so a lens cannot end its turn with unstructured prose. **Do not call a lens agent without `schema`** — that is the defect this contract exists to prevent.
+3. Handles a missing return per **Step 2c** before aggregating.
+4. **Pre-aggregates per perspective** inside the workflow (collect each lens's findings across modules), so you receive four consolidated perspective reports — not N×4 raw transcripts.
+5. Returns the four perspective reports, each carrying its per-module `reviewed` status, for synthesis in Step 3.
 
 Keep intermediate findings in script variables; you receive only the aggregated reports.
 
 ### `--light` — Four Parallel Subagents
 
-For small diffs, skip the workflow. Spawn **4 independent `Agent` subagents in a single message** (one per lens, fresh contexts), each with its lens rubric below. Each returns its findings as its final message. Same independence semantics — none of them wrote the code.
+For small diffs, skip the workflow. Spawn **4 independent `Agent` subagents in a single message** (one per lens, fresh contexts), each with its lens rubric below. Same independence semantics — none of them wrote the code.
+
+The `Agent` tool has **no `schema` parameter**, so the contract cannot be enforced by the harness here — it must be enforced by the prompt. Append this verbatim to every `--light` lens prompt:
+
+```
+Your final message IS your return value. It is parsed by the coordinating
+agent, not read by a human. Emit ONLY a single JSON object matching this
+shape — no preamble, no markdown fences, no commentary before or after:
+
+{ "lens": "...", "module": "...", "reviewed": true,
+  "findings": [ { "file": "...", "line": "...", "severity": "critical|high|medium|low",
+                  "issue": "...", "suggestion": "..." } ],
+  "good_patterns": ["..."] }
+
+If you found no issues, return the same object with "findings": [].
+Do not end your turn with a summary, a status update, or a question.
+```
+
+Then handle missing returns per Step 2c.
+
+### Step 2c: Missing or Unparseable Returns
+
+Applies to both modes. For each lens whose result is null, empty, or does not parse against the Step 2b schema:
+
+1. **Retry that lens exactly once**, fresh context, same rubric and diff, with this line prepended to the prompt: `Your previous attempt returned no parseable findings object. Return ONLY the JSON object specified below.`
+2. **If the retry also fails, mark that lens `FAILED`** and move on. Do not retry a second time.
+3. Do **not** substitute your own review for a failed lens.
+4. Surface every failed lens in the Step 3 summary under **Coverage**, and cap the verdict at **ITERATE** — a review missing a lens has not cleared the bar for SHIP, since the unexamined lens is exactly where an unknown risk would sit.
 
 ### Lens Rubrics
 
-**Spec Compliance** — READ the design spec + plan; use the spec/plan learnings injected into your prompt (Step 2a). VERIFY: every spec requirement implemented; nothing extra; matches the plan's approach; each plan task's acceptance criteria met. DO NOT trust commit messages or the build report — read the actual code. Report ✅ compliant or ❌ issues with file:line.
+Every rubric below returns its results **only** through the Step 2b contract object. "Report" throughout means "populate `findings` in the returned object" — never prose in your own transcript.
 
-**Security** — use the security/validation/auth learnings injected into your prompt (Step 2a), including any "Recurring Bugs". CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal. Report file, line, severity, suggested fix. If nothing found, confirm the changes look secure.
+**Spec Compliance** — READ the design spec + plan; use the spec/plan learnings injected into your prompt (Step 2a). VERIFY: every spec requirement implemented; nothing extra; matches the plan's approach; each plan task's acceptance criteria met. DO NOT trust commit messages or the build report — read the actual code. Return one finding per deviation with `file:line`. Fully compliant → `findings: []` and note what you verified in `good_patterns`.
 
-**Architecture** — READ CLAUDE.md for conventions; use the architecture learnings injected into your prompt (Step 2a) — "What Works"/"What Failed". CHECK: pattern consistency, separation of concerns, SOLID, DRY without over-abstraction, dependency direction, testability, performance at scale, error-handling consistency. Report file, concern, suggestion. Also note things done WELL.
+**Security** — use the security/validation/auth learnings injected into your prompt (Step 2a), including any "Recurring Bugs". CHECK: SQL injection, XSS, CSRF, hardcoded secrets/keys, missing input validation, insecure auth, sensitive data in logs/errors, missing rate limiting, unsafe deserialization, path traversal. Return one finding per issue with file, line, severity, and suggested fix. Nothing found → `findings: []` with the areas you cleared listed in `good_patterns`.
 
-**Correctness** — run the test suite; use the correctness learnings injected into your prompt (Step 2a) — "Recurring Bugs". CHECK: test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup. Report findings.
+**Architecture** — READ CLAUDE.md for conventions; use the architecture learnings injected into your prompt (Step 2a) — "What Works"/"What Failed". CHECK: pattern consistency, separation of concerns, SOLID, DRY without over-abstraction, dependency direction, testability, performance at scale, error-handling consistency. Return one finding per concern with file and suggestion. Put things done WELL in `good_patterns`.
+
+**Correctness** — run the test suite; use the correctness learnings injected into your prompt (Step 2a) — "Recurring Bugs". CHECK: test quality (not coverage theater), edge cases (null/empty/boundary), helpful error messages, type consistency across API boundaries, race conditions, resource cleanup. Return one finding per issue with file, line, and severity. A failing suite is a `critical` finding, not a reason to abandon the return.
 
 ## Step 3: Synthesize
 
-You own synthesis. Dedupe, resolve cross-perspective conflicts, severity-rank, and emit a verdict.
+You own synthesis — and **only** synthesis. You dedupe, resolve cross-perspective conflicts, severity-rank, and emit a verdict over the findings the lenses returned.
+
+You do **not** review the diff yourself. If coverage came back thin, that is a **coverage failure to report**, not a gap for you to quietly fill. Reviewing it yourself would forfeit the independence the four-lens design exists to provide — you read the build context in Step 1, so your own read is correlated with it — and would re-spend tokens the lens already burned. Report the gap; let the human decide.
+
+Every lens must appear in the summary, including failed ones.
 
 ```markdown
 ## SET Review Summary
 
 **Verdict:** SHIP / ITERATE / BLOCK
+
+### Coverage
+- Spec Compliance: ✅ returned / ⚠️ FAILED (no findings returned after retry)
+- Security: ✅ returned / ⚠️ FAILED
+- Architecture: ✅ returned / ⚠️ FAILED
+- Correctness: ✅ returned / ⚠️ FAILED
+
+{If any lens FAILED, verdict is capped at ITERATE and this line appears:}
+⚠️ This review is incomplete — {N} of 4 lenses returned no findings. The areas
+they cover are unreviewed, not clean.
 
 ### Spec Compliance
 - {findings}
@@ -107,7 +167,9 @@ If critical or "should fix" issues exist:
 - Large fixes → "Run `/set-build {feature}` again to fix these issues."
 - Minor fixes → "These are small enough to fix directly — want me to handle them?"
 
-If all clean → "Run `/set-learn` to capture learnings from this cycle."
+If any lens FAILED → "{N} of 4 lenses returned no findings, so {areas} are unreviewed. Re-run `/set-review` to retry those lenses, or proceed knowing the gap." Do not offer `/set-learn` as if the cycle were clean — absent findings are not passing findings.
+
+If all four lenses returned and all clean → "Run `/set-learn` to capture learnings from this cycle."
 
 ## Step 5: Finishing
 
