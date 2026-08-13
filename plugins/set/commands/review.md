@@ -40,7 +40,8 @@ So load everything once, here, in the lead:
 
 Inject each lens's bucket into its prompt as **text**. Lens agents receive learnings; they never fetch them. For code navigation, lens agents use Claude Code's built-in LSP tool, which is per-session and safe under parallel agents.
 
-Check `$ARGUMENTS` for `--light`.
+Check `$ARGUMENTS` for `--light`. Parse and strip `--autonomous` and `--verbose`
+per `~/.claude/commands/references/autonomous-mode.md`.
 
 ### Step 2b: The Lens Return Contract (binding on both modes)
 
@@ -161,7 +162,62 @@ they cover are unreviewed, not clean.
 ### Optional: Adversarial Round
 Only as an explicit **second** pass, AFTER independent findings are recorded above — never first, or independence is lost. Spawn agents to try to refute the recorded findings (a finding that survives refutation is high-confidence). Skip by default.
 
+## Step 3b: The Iterate Loop (autonomous only)
+
+Skipped entirely without `--autonomous`.
+
+On the synthesized verdict:
+
+- **SHIP / clean** → chain to `/set-learn`.
+- **BLOCK, or any lens returned `FAILED`** → **halt immediately, iterations unspent.**
+  BLOCK means something is fundamentally wrong; a `FAILED` lens means missing coverage,
+  not a findings list a fix agent can act on. Neither is fixable by another round, and
+  spending one produces two expensive passes papering over the real problem. Report and
+  hand back to the human.
+- **ITERATE** → run a fix pass (below), then a **fresh** re-review — a full Step 2
+  fan-out, not a re-read of prior findings.
+
+### Loop exit conditions
+
+Stop on whichever comes first:
+
+1. **Review comes back clean** → chain to `/set-learn`.
+2. **No new findings** — every finding this round was already reported last round,
+   matched on file + issue. A shrinking list of known findings means the fix pass works
+   but is incomplete: report and hand back rather than spend a round on diminishing
+   returns.
+3. **2 rounds spent** → halt. A loop still surfacing genuinely new issues after two
+   rounds is itself the signal.
+
+The cap is a ceiling, not a target; condition 2 is expected to fire more often than 3.
+
+### The fix pass routes findings by domain
+
+A fix pass is **NOT** a build re-run.
+
+1. Compile the findings into a fix brief, one entry per finding: file, line, severity,
+   the lens that raised it, and the suggested fix.
+2. Route each finding to the specialist that owns its domain, using the same
+   specialist-matching `/set-plan` uses — **including specialists the original build
+   never spawned.** A security finding in an API/sync module gets that owner even when
+   the build only touched UI and database tasks. This is the point of routing by
+   finding rather than handing everything back to the original builders.
+3. Spawn fix agents in **fresh contexts**, each receiving only its own findings plus the
+   relevant learning shards.
+4. Under `--verbose`, report each finding's routing decision.
+
+The re-review is a fresh independent four-lens run, so a lens never reviews code it
+helped fix — the independence guaranteed by the Step 2b return contract holds across
+rounds.
+
+Carry forward to `/set-learn`: `rounds_spent`, `exit_condition`
+(`clean` | `no new findings` | `round cap` | `BLOCK` | `lens FAILED`), and
+`remaining_findings`.
+
 ## Step 4: Route the Verdict
+
+**Under `--autonomous`, Step 3b has already routed the verdict** — skip this step and
+proceed to the chain. The prompts below are for supervised runs, where a human chooses.
 
 If critical or "should fix" issues exist:
 - Large fixes → "Run `/set-build {feature}` again to fix these issues."
@@ -172,6 +228,10 @@ If any lens FAILED → "{N} of 4 lenses returned no findings, so {areas} are unr
 If all four lenses returned and all clean → "Run `/set-learn` to capture learnings from this cycle."
 
 ## Step 5: Finishing
+
+**Under `--autonomous`, skip this step entirely.** The four integration options below
+include pushing and opening a PR, which autonomous mode never does (see Hard
+Boundaries). Leave the branch and worktree exactly as they are; chain to `/set-learn`.
 
 If the review is clean and the user is ready to integrate, present 4 options:
 1. Merge back to base branch locally
