@@ -22,6 +22,8 @@ Check `$ARGUMENTS`:
   availability gate entirely.
 - **`--use-agent-team`** → accepted as a **silent no-op alias** for the default.
   Do not warn, do not print a deprecation notice — it simply selects the default path.
+- `--autonomous` / `--verbose` — parse and strip per
+  `~/.claude/commands/references/autonomous-mode.md`.
 
 ## Before Starting
 
@@ -87,7 +89,13 @@ if [ -f Cargo.toml ]; then cargo build; fi
 Use the package manager from CLAUDE.md if specified.
 
 ### 1e: Verify clean baseline
-Run the test suite from CLAUDE.md "Build Commands". If tests fail, ask the user whether to proceed or investigate.
+Run the test suite from CLAUDE.md "Build Commands".
+
+- **Without `--autonomous`:** if tests fail, ask the user whether to proceed or investigate.
+- **With `--autonomous`:** if tests fail, record the failing baseline and proceed. A
+  pre-existing failure is not this cycle's regression, and `/set-review`'s correctness
+  lens will surface it as a `critical` finding if it matters. Report the failure count
+  on the phase-boundary line.
 
 ### 1f: Report
 ```
@@ -169,7 +177,14 @@ jq -r '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS // empty' ~/.claude/settings.js
 
 If the value is `1`, proceed to Phase B-team.
 
-If it is empty or absent, present exactly two options and wait for the user:
+If it is empty or absent:
+
+**Under `--autonomous`, do not present options or wait.** Select the
+dynamic-workflow path (Phase B-workflow, the `--use-workflow` semantics) and
+report on the phase-boundary line: `Agent Teams unavailable — using workflow path`.
+The workflow path needs no env var, so it always runs.
+
+**Without `--autonomous`,** present exactly two options and wait for the user:
 
 ```
 Agent Teams are not enabled, so /set-build cannot run its default path.
@@ -377,6 +392,13 @@ When the selected execution path returns:
 2. Present the result at the human gate. Show: tasks passed/failed (from the structured verdicts), the diff stat, and any failed-task escalations.
 3. **Frame the verification report as builder self-grading** — useful but biased by construction (a grader checking work produced by the same execution path prefers its own findings). It is never the final word. The independent audit happens in `/set-review`.
 4. Report the worktree location or current branch name.
-5. Suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
+5. Then:
+
+   - **Without `--autonomous`** — suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
+
+   - **With `--autonomous`** — do not suggest; emit the phase-boundary line and chain to
+     `/set-review` per the Chaining Contract, passing the branch/worktree location and
+     the per-task verdicts. The verification report travels as **claims to audit**,
+     exactly as in a supervised run — autonomy does not upgrade self-grading into truth.
 
 If a worktree was created, do NOT remove it — `/set-review` handles cleanup.
