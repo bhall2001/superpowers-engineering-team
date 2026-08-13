@@ -10,6 +10,15 @@ Extract and persist learnings from the most recent SET cycle.
 
 `$ARGUMENTS` is optional — a feature name or context hint. If empty, analyze the most recent build/review cycle.
 
+Parse `--verbose` per `~/.claude/commands/references/autonomous-mode.md`.
+
+`--autonomous` is an error here — `/set-learn` is the last phase. Print:
+
+> `--autonomous` has no effect on `/set-learn`: it is the last phase of the cycle.
+> Running `/set-learn` normally.
+
+Then continue normally.
+
 ## Process
 
 ### 1. Gather Context
@@ -136,6 +145,18 @@ Learnings that apply to multiple domains are **copied into each relevant shard**
 Append each learning to `.claude/set/learnings/{domain}.md` under the correct section (`## What Works` / `## What Failed` / `## Recurring Bugs`). Create the file with frontmatter if it doesn't exist.
 
 Read `references/learn-entry-format.md` for entry format rules and examples before writing any shard entries.
+
+**Autonomous-cycle tagging.** When reached via an autonomous chain, append
+` (unverified cycle)` to each entry's date prefix:
+
+```
+[2026-08-13] (unverified cycle) Some learning...
+```
+
+The tag exists because `/set-learn` runs before any human has browser-verified the
+work, so a learning captured here may encode a mistake as a pattern. Tagged entries stay
+traceable and removable rather than anonymous. Shards are plain markdown — a human can
+delete or promote the entry after verifying.
 
 #### 3f: Global-importance learnings → CLAUDE.md
 
@@ -277,6 +298,16 @@ git status --short .claude/set/
 - Any patterns that contradict previous ones (update, don't duplicate)
 - Process insights about SET itself (task sizing, specialist routing, etc.)
 - Suggestions for what to build or fix next
+
+**When reached via an autonomous chain,** emit the Autonomous Final Report from
+`~/.claude/commands/references/autonomous-mode.md` instead of the normal report,
+filling in every field from the chain: phases run, build results, review verdict,
+`rounds_spent`, `exit_condition`, `remaining_findings`, artifact paths, and the shards
+written this run.
+
+End with the two unchecked handoff items — browser verification and the push decision.
+Never present the run as done: nothing has been verified in a browser and nothing has
+been pushed.
 
 ## Maintenance Rules
 
