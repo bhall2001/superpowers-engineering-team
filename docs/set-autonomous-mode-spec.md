@@ -30,16 +30,33 @@ no-op.
 
 ### `--verbose`
 
-Independent of `--autonomous`. Valid on any pipeline command, with or without it.
+A plain flag on each of the five cycle phases (`/set-design`, `/set-plan`, `/set-build`,
+`/set-review`, `/set-learn`), with identical meaning whether or not `--autonomous` is
+set. It is not a companion to autonomous mode.
 
 - **Default (no `--verbose`):** report at phase boundaries — entering and leaving each
   phase, with the phase's headline result (spec path, task count, build verdict, review
   verdict, iterate round outcomes).
 - **`--verbose`:** additionally report each agent spawn and return.
 
-Orthogonal by design: verbosity is about observability, autonomy is about gates. A long
-unattended run is the case that most needs progress output, but a supervised run may
-want it too.
+**Supervised runs benefit at least as much as autonomous ones.** A supervised
+`/set-build` spawns an entire Agent Team and does not report until the Phase C gate; the
+window in between is opaque. The existing stall detection — three unchanged polls, then
+`SendMessage` the teammate for a status report — exists precisely because that window is
+dark. A human sitting at the terminal can act on per-agent output immediately, which is
+more than an unattended run can do with it. The same holds for `/set-review`'s lens
+fan-out.
+
+**There is no inverse switch.** Phase boundaries are the floor, not a default to be
+suppressed. A supervised run's output *is* its interface: quieter than phase boundaries
+leaves the human waiting blind for a gate prompt with nothing to decide on. No supervised
+scenario wants less, so `--quiet` would be a switch with no use case.
+
+**One asymmetry worth honoring.** In autonomous mode the emitted output is the only
+record — there is no gate at which to ask a follow-up question. So under
+`--autonomous --verbose`, the per-agent stream also includes decisions a supervised human
+could otherwise recover by asking: which specialist each review finding was routed to in
+a fix pass, and which exit condition ended the iterate loop.
 
 ## Mechanism: In-Session Chaining
 
@@ -169,9 +186,10 @@ The mechanism already exists and needs no installer changes:
 **The one binding condition: the work must land on `main`.** A feature sitting on a
 feature branch is invisible to `/set-update`.
 
-No project-side migration is required. The switches carry in the conversation only and
-write nothing to `.claude/set/`, so `/set-update`'s Step 1 project migration has nothing
-to reconcile.
+No project-side migration is required. Both switches are parsed per invocation and write
+nothing to `.claude/set/` — `--autonomous` carries in the conversation only,
+`--verbose` affects nothing beyond the invocation it is passed to. `/set-update`'s Step 1
+project migration has nothing to reconcile.
 
 ### Acceptance criteria
 
@@ -181,7 +199,8 @@ to reconcile.
    edited file.
 3. A user running `/set-update` against `main` receives the switches with no manual step
    and no migration prompt.
-4. `README.md` and `docs/commands.md` describe both switches, so an updating user can
+4. `README.md` and `docs/commands.md` describe both switches — `--verbose` documented as
+   a general-purpose flag, not as an autonomous-mode option — so an updating user can
    discover the feature without reading the command specs.
 
 ## Files Touched
@@ -190,9 +209,13 @@ to reconcile.
 - `plugins/set/commands/plan.md` — accept flags; suppress approval gate; chain to build
 - `plugins/set/commands/build.md` — accept flags; auto-select execution path; suppress Phase C gate; chain to review
 - `plugins/set/commands/review.md` — accept flags; iterate loop; fix-pass routing; chain to learn
-- `plugins/set/commands/learn.md` — accept flags (terminal); shard origin tagging; final report
+- `plugins/set/commands/learn.md` — accept `--verbose`; reject `--autonomous` (terminal); shard origin tagging; final report
 - `README.md` — document both switches; design-phase caution note
 - `docs/commands.md`, `docs/workflow.md` — switch reference
+
+`/set-init` and `/set-update` are untouched. Neither fans out agents, so `--verbose`
+would be a no-op flag there; "every pipeline command" means the five cycle phases
+(`design`, `plan`, `build`, `review`, `learn`).
 
 ## Out of Scope
 
