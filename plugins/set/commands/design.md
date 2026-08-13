@@ -23,16 +23,52 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
 
 3. **STOP before invoking writing-plans.** Unlike the standard Superpowers flow, do NOT automatically transition to writing-plans.
 
-4. Instead, tell the user:
+4. Then:
 
-> "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the build workflow."
+   - **Without `--autonomous`** — tell the user:
+
+     > "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the build workflow."
+
+   - **With `--autonomous`** — do not print the prompt above. Emit the phase-boundary line and chain to `/set-plan` per the Chaining Contract.
 
 ## Key Difference from Standard Superpowers
 
 Standard Superpowers transitions directly to `writing-plans` → `subagent-driven-development` (sequential execution). SET instead transitions to `/set-plan` which creates a plan optimized for parallel dynamic-workflow execution.
 
+## Autonomous Mode
+
+Under `--autonomous`, the brainstorming skill's interactive gates are suppressed.
+Read `~/.claude/commands/references/autonomous-mode.md` first.
+
+Run the design phase against yourself:
+
+1. Explore project context as normal.
+2. Answer your own clarifying questions from the codebase and the feature idea.
+   Where a question is genuinely underdetermined, choose the option that keeps
+   scope smallest and record the choice in the spec's Open Questions section.
+3. Propose approaches to yourself, select one on its own merits, and record the
+   rejected alternatives in the spec.
+4. Write the spec to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` as normal
+   — the artifact is unchanged, only the approval is.
+5. Run the existing spec self-review loop. Fix what it finds.
+6. Do NOT wait for human spec approval. Chain to `/set-plan` per the Chaining
+   Contract, passing the spec path plus both flags.
+
+**This is the least reliable phase to automate.** The agent authors its own
+requirements, so a poor design costs tokens twice — building it, then fixing it.
+Prefer starting autonomy at `/set-plan` from a human-approved spec.
+
 ## Input
 
 User provides the feature idea via: `/set-design $ARGUMENTS`
 
-If `$ARGUMENTS` is empty, ask: "What would you like to build?"
+Parse `--autonomous` and `--verbose` per
+`~/.claude/commands/references/autonomous-mode.md` and strip them; the remainder
+is the feature idea.
+
+If the remainder is empty **and** `--autonomous` is not set, ask: "What would you
+like to build?"
+
+If the remainder is empty **and** `--autonomous` is set, halt: an autonomous run
+has no one to ask. Print: "`/set-design --autonomous` needs a feature idea as an
+argument — there is no interactive prompt in autonomous mode."
