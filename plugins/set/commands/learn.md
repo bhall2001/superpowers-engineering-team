@@ -302,8 +302,8 @@ git status --short .claude/set/
 **When reached via an autonomous chain,** emit the Autonomous Final Report from
 `~/.claude/commands/references/autonomous-mode.md` instead of the normal report,
 filling in every field from the chain: phases run, build results, review verdict,
-`rounds_spent`, `exit_condition`, `remaining_findings`, artifact paths, and the shards
-written this run.
+`rounds_spent`, `exit_condition`, `remaining_findings`, the plan's unresolved
+questions, artifact paths, and the shards written this run.
 
 End with the two unchecked handoff items — browser verification and the push decision.
 Never present the run as done: nothing has been verified in a browser and nothing has

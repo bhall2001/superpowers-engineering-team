@@ -96,6 +96,7 @@ Emitted once, by `/set-learn`, at the end of a chained run:
 - Review verdict: {SHIP | ITERATE | BLOCK | HALTED}
 - Iterate rounds: {n} of 2 — exited on {clean | no new findings | round cap | BLOCK | lens FAILED}
 - Remaining findings: {count by severity, or "none"}
+- Unresolved questions: {list from the plan, or "none"}
 
 ### Artifacts
 - Spec: {path}

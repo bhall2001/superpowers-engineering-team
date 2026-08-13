@@ -173,7 +173,8 @@ On the synthesized verdict:
   BLOCK means something is fundamentally wrong; a `FAILED` lens means missing coverage,
   not a findings list a fix agent can act on. Neither is fixable by another round, and
   spending one produces two expensive passes papering over the real problem. Report and
-  hand back to the human.
+  hand back to the human. Check this bullet before ITERATE below — per Step 2c a
+  `FAILED` lens is capped to a synthesized verdict of ITERATE, so it must be caught here first.
 - **ITERATE** → run a fix pass (below), then a **fresh** re-review — a full Step 2
   fan-out, not a re-read of prior findings.
 
