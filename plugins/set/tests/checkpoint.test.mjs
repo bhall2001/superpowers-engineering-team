@@ -84,6 +84,17 @@ test("a verdict landing in the same instant as a checkpoint appears in exactly o
       at: ts,
     });
     assert.deepEqual(second.tasks, ["T-y"], "must not re-capture T-x nor drop T-y");
+
+    // Each task is pinned to the checkpoint that first captured it. Without
+    // this, a later checkpoint silently re-stamps earlier tasks with its own
+    // sequence and the checkpoint log stops matching the commits.
+    const captured = Object.fromEntries(
+      db
+        .prepare("SELECT task_id, captured_seq FROM task WHERE run_id = ?")
+        .all(runId)
+        .map((row) => [row.task_id, row.captured_seq]),
+    );
+    assert.deepEqual(captured, { "T-x": 1, "T-y": 2 });
     db.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
