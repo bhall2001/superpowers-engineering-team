@@ -335,6 +335,26 @@ extract_changelog_section() {
   ' "$changelog" 2>/dev/null || true
 }
 
+# changelog_headline <version> <changelog-path>
+# Prints the text after the version in "## [<ver>] — <headline>". Empty on failure.
+changelog_headline() {
+  local version="$1" changelog="$2"
+  [ -f "$changelog" ] || return 0
+  grep -m1 "^## \[$version\]" "$changelog" 2>/dev/null \
+    | sed 's/^## \[[^]]*\][[:space:]]*—[[:space:]]*//' 2>/dev/null || true
+}
+
+# changelog_digest <version> <changelog-path>
+# One "  • " line per top-level `- **lead**` bullet in the version's section.
+# A full changelog section is release-note prose; this is the scannable form.
+changelog_digest() {
+  local version="$1" changelog="$2"
+  extract_changelog_section "$version" "$changelog" \
+    | grep '^- \*\*' 2>/dev/null \
+    | sed 's/^- \*\*\(.*\)\*\*.*/  • \1/' 2>/dev/null \
+    | sed 's/[.:]$//' 2>/dev/null || true
+}
+
 # install_file <src-path-under-plugins/set/> <dest-path-under-COMMANDS_DIR>
 install_file() {
   local rel="$1" dest="$2"
@@ -365,11 +385,13 @@ if [ -n "$PLUGIN_ROOT" ]; then
   install_file "references/autonomous-mode.md"         "references/autonomous-mode.md"
 fi
 
-# Capture the changelog section while the source tree still exists — under
+# Capture the changelog digest while the source tree still exists — under
 # `curl | bash` PLUGIN_ROOT lives inside DOWNLOAD_TMP, removed on the next line.
 WHATS_NEW=""
+WHATS_NEW_HEADLINE=""
 if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
-  WHATS_NEW="$(extract_changelog_section "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
+  WHATS_NEW_HEADLINE="$(changelog_headline "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
+  WHATS_NEW="$(changelog_digest "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
 fi
 
 # Clean up any downloaded tree.
@@ -471,14 +493,30 @@ if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
   echo "$NEW_VERSION" > "$VERSION_FILE" 2>/dev/null || true
 
   if [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
+    if [ -n "$PREV_VERSION" ]; then
+      VERSION_LINE="SET updated $PREV_VERSION → $NEW_VERSION"
+    else
+      VERSION_LINE="SET $NEW_VERSION installed"
+    fi
+    [ -n "$WHATS_NEW_HEADLINE" ] && VERSION_LINE="$VERSION_LINE — $WHATS_NEW_HEADLINE"
+
+    bold ""
+    bold "$VERSION_LINE"
     if [ -n "$WHATS_NEW" ]; then
-      bold "What's new in $NEW_VERSION"
-      bold "------------------------"
       echo "$WHATS_NEW"
       echo ""
-    else
-      info "Updated to $NEW_VERSION"
+      info "Full notes: CHANGELOG.md (or the repo's Releases page)"
     fi
+    echo ""
+
+    # Hand the digest to /set-update, which reports it in the conversation —
+    # the installer's own stdout is not where a Claude Code user reads it.
+    {
+      printf '%s\n' "$VERSION_LINE"
+      [ -n "$WHATS_NEW" ] && printf '%s\n' "$WHATS_NEW"
+    } > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
+  else
+    rm -f "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
   fi
 fi
 

@@ -216,10 +216,23 @@ git check-ignore -q .claude/set/ 2>/dev/null \
 
 ### 5. Report
 
-Tell the user:
+**First, read what changed.** The installer's own output is not where a Claude Code
+user reads it — it lands in tool output they would have to expand. When the version
+changed, the installer writes a digest to `~/.claude/commands/.set-whatsnew`:
+
+```bash
+cat ~/.claude/commands/.set-whatsnew 2>/dev/null || echo "(no version change)"
+```
+
+If that file exists, **lead your report with its contents** — the version line, then its
+bullets, verbatim. Do not summarize them further or re-derive them from your own
+knowledge; they are generated from the release's changelog. Add one line pointing to
+`CHANGELOG.md` for the full notes, since the digest deliberately omits detail. If the
+file is absent, the version did not change — say the commands are current and move on.
+
+Then tell the user:
 - Which plugins were updated successfully
 - Any that failed (with suggested fix)
-- If any SET commands changed, briefly note what's new
 - Whether this project needed migration (Step 1) and what changed
 - Serena MCP status — as a neutral fact, not a warning; absent is a supported state
 - Whether learning shards are trackable by git, and if not, that learnings are being lost
