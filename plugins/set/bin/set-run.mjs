@@ -67,9 +67,11 @@ function openAt(flags) {
 const COMMANDS = {
   init(db, flags) {
     require_(flags, "worktree", "branch", "plan");
-    // Surface the holder and the recovery command rather than a raw UNIQUE
-    // violation from the partial index.
-    const live = probeHolders(db, flags.worktree).filter((holder) => !holder.dead);
+
+    // A live holder is reported with the recovery command; a dead one is cleared.
+    // Either way the partial index must never surface as a raw UNIQUE violation.
+    const holders = probeHolders(db, flags.worktree);
+    const live = holders.filter((holder) => !holder.dead);
     if (live.length > 0) {
       const holder = live[0].row;
       throw new Error(
@@ -77,6 +79,10 @@ const COMMANDS = {
           `last seen ${holder.updated_at}). Release it with: set-run.mjs release ${holder.run_id}`,
       );
     }
+    for (const stale of holders) {
+      releaseRun(db, stale.runId, "crashed");
+    }
+
     const runId = initRun(db, {
       projectPath: flags.project ?? flags.worktree,
       worktreePath: flags.worktree,
@@ -84,9 +90,13 @@ const COMMANDS = {
       planPath: flags.plan,
       specPath: flags.spec ?? null,
       entryPhase: flags.phase ?? "build",
-      sessionPid: flags.pid ? Number.parseInt(flags.pid, 10) : process.pid,
+      // Never default to process.pid: this CLI exits immediately, so its pid is
+      // dead by the next invocation and every liveness probe would report the
+      // run crashed. --pid carries the orchestrator's session pid; without it
+      // liveness is unknown, which is safer recorded as NULL than as a lie.
+      sessionPid: flags.pid ? Number.parseInt(flags.pid, 10) : null,
     });
-    return { run_id: runId };
+    return { run_id: runId, session_pid: flags.pid ? Number.parseInt(flags.pid, 10) : null };
   },
 
   claim(db, flags) {

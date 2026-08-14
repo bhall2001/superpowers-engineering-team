@@ -168,6 +168,58 @@ test("two racing processes leave exactly one running row", () => {
   }
 });
 
+// A claim contending with another writer must fail and leave nothing behind.
+//
+// Note on `BEGIN IMMEDIATE` vs `BEGIN`: swapping them is an EQUIVALENT mutation
+// here, not an untested gap. Both raise "database is locked" — IMMEDIATE at
+// transaction start, deferred at the first write — and claimWorktree writes
+// immediately inside its transaction, so nothing observable differs. IMMEDIATE
+// is kept because it fails at the cheapest point and states the intent; a test
+// asserting the difference would be asserting SQLite's internals, not ours.
+test("a claim contending with another writer fails without leaving a row", () => {
+  const dir = tempDir();
+  try {
+    const dbPath = join(dir, "runs.db");
+    const worktree = join(dir, "wt");
+    mkdirSync(worktree, { recursive: true });
+    openStore(dbPath).close();
+
+    const holder = openStore(dbPath);
+    const claimer = openStore(dbPath);
+    claimer.exec("PRAGMA busy_timeout = 150"); // fail fast; the wait is not the assertion
+
+    holder.exec("BEGIN IMMEDIATE");
+    holder.prepare("INSERT INTO agent_log VALUES ('r','t','ts','a','holding',NULL)").run();
+
+    try {
+      assert.throws(
+        () =>
+          claimWorktree(claimer, {
+            worktreePath: worktree,
+            runId: "contender",
+            deadRunIds: [],
+            seed: { projectPath: worktree, branch: "b", planPath: "p.md", entryPhase: "build" },
+          }),
+        /locked|busy/i,
+      );
+    } finally {
+      holder.exec("ROLLBACK");
+      holder.close();
+      claimer.close();
+    }
+
+    const db = openStore(dbPath);
+    assert.equal(
+      db.prepare("SELECT COUNT(*) c FROM run WHERE status = 'running'").get().c,
+      0,
+      "a contended claim must leave no row behind",
+    );
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("release frees the slot for a later run", () => {
   const dir = tempDir();
   try {

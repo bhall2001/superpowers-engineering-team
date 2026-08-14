@@ -432,6 +432,8 @@ skip set with no error surfaced.
 BIN=~/.claude/set-runs/bin/set-run.mjs
 
 # once, at build start (records the run, returns run_id)
+# --pid must be YOUR session's pid, not the CLI's — the CLI exits immediately, so
+# recording its pid would make every liveness probe report the run crashed.
 node "$BIN" init --worktree "$(git rev-parse --show-toplevel)" --branch "$(git branch --show-current)" \
                  --plan .claude/plans/{feature}.md --pid $PPID
 

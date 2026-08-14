@@ -19,30 +19,48 @@ export class WorktreeHeldError extends Error {
  * transaction never does, or two racing resumes both conclude the slot is free.
  */
 export function probeDead(pid, host = hostname()) {
-  if (pid == null) return true;
+  // No pid recorded: liveness is unknown, and unknown must not mean "free to
+  // take". The caller falls back to the heartbeat, which is what a stale run
+  // actually reveals itself by.
+  if (pid == null) return false;
   if (host !== hostname()) return false; // another machine — never assume dead
   try {
     process.kill(pid, 0);
     return false;
   } catch (err) {
+    // ESRCH: gone. EPERM: alive but owned by another user — NOT dead.
     return err.code === "ESRCH";
   }
 }
 
+/** Minutes since a run last wrote. The liveness signal when no pid is recorded. */
+export function staleMinutes(updatedAt, now = new Date()) {
+  return (now.getTime() - new Date(updatedAt).getTime()) / 60000;
+}
+
 /** Rows holding this worktree, with the timestamp to compare-and-swap against. */
-export function probeHolders(db, worktreePath) {
+export const STALE_AFTER_MINUTES = 15;
+
+export function probeHolders(db, worktreePath, { staleAfter = STALE_AFTER_MINUTES } = {}) {
   return db
     .prepare(
       `SELECT run_id, session_pid, hostname, updated_at
          FROM run WHERE worktree_path = ? AND status = 'running'`,
     )
     .all(canonicalPath(worktreePath))
-    .map((row) => ({
-      runId: row.run_id,
-      updatedAt: row.updated_at,
-      dead: probeDead(row.session_pid, row.hostname),
-      row,
-    }));
+    .map((row) => {
+      const pidDead = probeDead(row.session_pid, row.hostname);
+      // With no pid the pid probe cannot answer, so the heartbeat decides. Both
+      // signals must agree that the run is gone before its slot is taken.
+      const stale = staleMinutes(row.updated_at) >= staleAfter;
+      return {
+        runId: row.run_id,
+        updatedAt: row.updated_at,
+        dead: row.session_pid == null ? stale : pidDead,
+        stale,
+        row,
+      };
+    });
 }
 
 /**
