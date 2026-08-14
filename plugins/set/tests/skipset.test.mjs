@@ -133,6 +133,9 @@ test("a checkpoint on an abandoned branch is not counted", () => {
   }
 });
 
+// The `separator=` argument is an EQUIVALENT mutation, not an untested gap:
+// it only applies when a key repeats within one commit, and SET-Tasks appears
+// once. Verified — corrupting it leaves the output byte-identical.
 test("trailer values are trimmed", () => {
   const dir = tempRepo();
   try {
@@ -144,6 +147,49 @@ test("trailer values are trimmed", () => {
     assert.deepEqual(commits[0].tasks, ["T-a", "T-b"]);
     assert.equal(commits[0].run, "runA");
     assert.equal(commits[0].sequence, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("slugs survive whitespace around the trailer's commas", () => {
+  const dir = tempRepo();
+  try {
+    // A hand-edited or line-wrapped trailer puts spaces after the commas.
+    // Untrimmed, the slugs carry them, never match the plan's, and completed
+    // work is silently re-dispatched.
+    writeFileSync(join(dir, "a.txt"), "a\n");
+    git(dir, "add", "-A");
+    git(
+      dir,
+      "commit",
+      "-q",
+      "-m",
+      ["cp", "", "SET-Run: runA", "SET-Checkpoint: 1", "SET-Tasks: T-a, T-b , T-c"].join("\n"),
+    );
+
+    const { skip } = resolveSkipSet(dir, "runA");
+    assert.deepEqual([...skip].sort(), ["T-a", "T-b", "T-c"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a revert identified by an abbreviated sha still drops its slugs", () => {
+  const dir = tempRepo();
+  try {
+    const cp = checkpoint(dir, { run: "runA", seq: 1, tasks: ["T-x"], file: "x.txt" });
+    const short = cp.slice(0, 8);
+
+    // `git revert` writes a full sha, but a hand-written or squashed revert
+    // message may abbreviate it. The scan must still match.
+    writeFileSync(join(dir, "undo.txt"), "undo\n");
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", `Revert the schema work\n\nThis reverts commit ${short}.`);
+
+    const { skip, reverted } = resolveSkipSet(dir, "runA");
+    assert.ok(!skip.has("T-x"), "an abbreviated revert must still drop the slug");
+    assert.ok(reverted.length > 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
