@@ -22,6 +22,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
+RUNS_BIN_DIR="$CLAUDE_DIR/set-runs/bin"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
 # Marketplace sources
@@ -267,7 +268,7 @@ mkdir -p "$COMMANDS_DIR/references"
 
 # Single source of truth for reference files — the install loop and the Step 5
 # verify loop both read this. Adding a reference means editing this line only.
-SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode"
+SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode run-store"
 
 # ERRORS may be referenced before Step 5 initializes it; ensure it exists.
 ERRORS=${ERRORS:-0}
@@ -434,6 +435,34 @@ if [ -n "$PLUGIN_ROOT" ]; then
   for ref in $SET_REFERENCES; do
     install_file "references/$ref.md" "references/$ref.md"
   done
+
+  # Durable run store. Needs node:sqlite — stable on Node 24, flagged on Node 22.
+  # A failure here is not fatal: the other six commands do not touch the store.
+  if [ -d "$PLUGIN_ROOT/bin" ]; then
+    SQLITE_FLAG=""
+    if node -e "require('node:sqlite')" >/dev/null 2>&1; then
+      SQLITE_OK=1
+    elif node --experimental-sqlite -e "require('node:sqlite')" >/dev/null 2>&1; then
+      SQLITE_OK=1
+      SQLITE_FLAG="--experimental-sqlite"
+    else
+      SQLITE_OK=0
+    fi
+
+    if [ "$SQLITE_OK" -eq 1 ]; then
+      mkdir -p "$RUNS_BIN_DIR"
+      cp "$PLUGIN_ROOT"/bin/*.mjs "$PLUGIN_ROOT"/bin/*.sql "$RUNS_BIN_DIR/" 2>/dev/null || true
+      chmod +x "$RUNS_BIN_DIR"/*.mjs 2>/dev/null || true
+      if [ -n "$SQLITE_FLAG" ]; then
+        info "Installed run store (node:sqlite needs $SQLITE_FLAG on this Node)"
+      else
+        info "Installed run store"
+      fi
+    else
+      warn "node:sqlite unavailable — durable/resumable runs are OFF."
+      warn "  Everything else works. Node 24 has it built in; Node 22 needs --experimental-sqlite."
+    fi
+  fi
 fi
 
 # Capture the changelog digest while the source tree still exists — under
