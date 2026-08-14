@@ -35,6 +35,12 @@ Identical whether or not `--autonomous` is set.
 ◀ SET {phase} — {headline result}
 ```
 
+`N` = the total number of phases in the chain being run: the entry phase through
+`/set-learn` inclusive. `n` = this phase's 1-based position in that chain. Both are
+fixed at the entry phase and never recomputed. Entering at `/set-design` gives `N` = 5
+(`[1/5]` … `[5/5]`); entering at `/set-review` gives `N` = 2 (`[1/2]`, `[2/2]`).
+Without `--autonomous` there is no chain — omit `[n/N]`.
+
 The headline result per phase: design → spec path; plan → task count and
 plan path; build → tasks passed/failed and diff stat; review → verdict;
 learn → shards written.
@@ -70,6 +76,13 @@ after a crash; recovery is a manual re-invoke from the last completed phase.
 Each phase still writes its normal artifacts (spec, plan, commits, shards).
 Those artifacts are the handoff between phases, exactly as in a supervised run.
 
+**Each phase also accumulates the Final Report payload and passes it forward**, on top of
+whatever its successor specifically needs. The payload starts at the entry phase and only
+grows: the entry phase name, the phases run so far, and each phase's headline result and
+artifact paths — spec path, plan path, per-task verdicts and diff stat, branch/worktree
+location, review verdict and iterate-loop outcome. `/set-learn` renders it as the
+Autonomous Final Report; anything dropped mid-chain is missing from what the user reads.
+
 ## Hard Boundaries
 
 `--autonomous` NEVER:
@@ -101,13 +114,19 @@ Emitted once, by `/set-learn`, at the end of a chained run:
 ### Artifacts
 - Spec: {path}
 - Plan: {path}
-- Branch/worktree: {location}
+- Branch/worktree: {location} — still on disk, yours to keep or remove
 - Shards written: {list}
 
 ### Not done for you
 - [ ] Browser-verify the change
 - [ ] Push / open a PR (never done autonomously)
+- [ ] Remove the build worktree at {location} when you are done with it
 ```
+
+The branch/worktree location is **required**, not optional. No autonomous phase removes a
+worktree — the work is unreviewed, so deleting it is destructive. Reporting the location
+is what keeps it from being an orphan the user never learns about. If the run used no
+worktree, say so on that line rather than omitting it.
 
 If the chain halted early, say which phase and why in place of the missing
 sections. Never present a halted run as a completed one.

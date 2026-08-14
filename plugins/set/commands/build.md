@@ -66,6 +66,11 @@ If **disabled**: skip Step 1. Run 1d (project setup) and 1e (baseline tests) on 
 ### 1a: Select worktree directory
 Priority: `.worktrees/` → `worktrees/` → CLAUDE.md specified → ask the user.
 
+- **Without `--autonomous`:** if none of the first three resolve, ask the user.
+- **With `--autonomous`:** never ask — there is no one to answer. Default to
+  `.worktrees/` and report the choice on the phase-boundary line:
+  `Worktree dir not configured — defaulting to .worktrees/`.
+
 ### 1b: Verify directory is git-ignored
 ```bash
 git check-ignore -q .worktrees 2>/dev/null
@@ -354,7 +359,9 @@ request shutdown, and report the blocker to the user.
 2. Run the full test suite one final time.
 3. Collect the per-task verdicts and hand them to Phase C.
 4. Report the worktree location or branch name. Do **not** remove the worktree —
-   `/set-review` handles cleanup.
+   `/set-review` handles cleanup. Under `--autonomous`, `/set-review` does not clean up
+   either; it carries the location forward to `/set-learn`, which hands it to the user in
+   the Final Report. Either way, pass the location along.
 
 ### Agent Teams limitations to keep in mind
 
@@ -400,5 +407,8 @@ When the selected execution path returns:
      `/set-review` per the Chaining Contract, passing the branch/worktree location and
      the per-task verdicts. The verification report travels as **claims to audit**,
      exactly as in a supervised run — autonomy does not upgrade self-grading into truth.
+     The branch/worktree location must reach the end of the chain: it is reported to the
+     user in the Autonomous Final Report as an artifact they own.
 
-If a worktree was created, do NOT remove it — `/set-review` handles cleanup.
+If a worktree was created, do NOT remove it — `/set-review` handles cleanup (and under
+`--autonomous`, no phase removes it; the user is handed the location instead).

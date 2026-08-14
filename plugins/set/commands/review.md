@@ -166,29 +166,47 @@ Only as an explicit **second** pass, AFTER independent findings are recorded abo
 
 Skipped entirely without `--autonomous`.
 
-On the synthesized verdict:
+**"Halt" in this section means: stop iterating, and chain to `/set-learn` carrying the
+exit condition. It NEVER means stop the chain.** `/set-learn` is the only producer of the
+Autonomous Final Report, so the user gets that report on every path — including halted
+ones. There is no exit from this loop that does not reach `/set-learn`.
 
-- **SHIP / clean** → chain to `/set-learn`.
-- **BLOCK, or any lens returned `FAILED`** → **halt immediately, iterations unspent.**
-  BLOCK means something is fundamentally wrong; a `FAILED` lens means missing coverage,
-  not a findings list a fix agent can act on. Neither is fixable by another round, and
-  spending one produces two expensive passes papering over the real problem. Report and
-  hand back to the human. Check this bullet before ITERATE below — per Step 2c a
-  `FAILED` lens is capped to a synthesized verdict of ITERATE, so it must be caught here first.
-- **ITERATE** → run a fix pass (below), then a **fresh** re-review — a full Step 2
-  fan-out, not a re-read of prior findings.
+Initialize `rounds_spent = 0` before the first fix pass.
+
+**Verdict dispatch.** Evaluate in this order, on the synthesized verdict from Step 3:
+
+1. **BLOCK, or any lens returned `FAILED`** → halt, iterations unspent, with
+   `exit_condition` = `BLOCK` or `lens FAILED`. BLOCK means something is fundamentally
+   wrong; a `FAILED` lens means missing coverage, not a findings list a fix agent can act
+   on. Neither is fixable by another round, and spending one produces two expensive passes
+   papering over the real problem. Check this first — per Step 2c a `FAILED` lens is capped
+   to a synthesized verdict of ITERATE, so it would otherwise fall through to ITERATE below.
+2. Otherwise, check the **exit conditions** below. If one fires, halt with its
+   `exit_condition`.
+3. Otherwise (**ITERATE**) → if `rounds_spent` is already 2, halt with
+   `exit_condition` = `round cap`. Else run a fix pass (below), then a **fresh**
+   re-review — a full Step 2 fan-out, not a re-read of prior findings. Increment
+   `rounds_spent` by 1, then re-enter this same dispatch at step 1 with the re-review's
+   synthesized verdict.
 
 ### Loop exit conditions
 
 Stop on whichever comes first:
 
-1. **Review comes back clean** → chain to `/set-learn`.
-2. **No new findings** — every finding this round was already reported last round,
-   matched on file + issue. A shrinking list of known findings means the fix pass works
-   but is incomplete: report and hand back rather than spend a round on diminishing
-   returns.
-3. **2 rounds spent** → halt. A loop still surfacing genuinely new issues after two
-   rounds is itself the signal.
+1. **Review comes back clean** → `exit_condition` = `clean`. This requires **both**:
+   all four lenses returned (no lens is `FAILED` — a `FAILED` lens is caught at dispatch
+   step 1, never here) **and** the combined findings across all four lenses are empty.
+   Three empty lenses plus one `FAILED` lens is NOT clean.
+2. **No new findings** — every finding this round names the same file and the **same
+   underlying defect** as a finding from last round. This is a **judgment call you make**:
+   compare what the two findings are actually about, not their wording. Lens agents run in
+   fresh contexts and phrase the same defect differently every round, so never compare
+   `issue` strings byte-for-byte. If the round surfaced no defect you had not already seen,
+   the condition fires. `exit_condition` = `no new findings`. A shrinking list of known
+   findings means the fix pass works but is incomplete: halt rather than spend a round on
+   diminishing returns.
+3. **2 rounds spent** → `exit_condition` = `round cap`. A loop still surfacing genuinely
+   new issues after two rounds is itself the signal.
 
 The cap is a ceiling, not a target; condition 2 is expected to fire more often than 3.
 
@@ -211,14 +229,25 @@ The re-review is a fresh independent four-lens run, so a lens never reviews code
 helped fix — the independence guaranteed by the Step 2b return contract holds across
 rounds.
 
-Carry forward to `/set-learn`: `rounds_spent`, `exit_condition`
-(`clean` | `no new findings` | `round cap` | `BLOCK` | `lens FAILED`), and
-`remaining_findings`.
+### Every exit chains to `/set-learn`
+
+Whichever exit fired — `clean`, `no new findings`, `round cap`, `BLOCK`, `lens FAILED` —
+chain to `/set-learn` per the Chaining Contract. Carry forward: `rounds_spent`,
+`exit_condition`, `remaining_findings`, the **branch and worktree location** received from
+`/set-build`, and everything accumulated down the chain that the Autonomous Final Report
+needs (entry phase, phases run, each phase's headline results and artifact paths).
+
+Nothing here hands back to a human directly. `/set-learn` emits the Final Report, which is
+what the human reads.
 
 ## Step 4: Route the Verdict
 
 **Under `--autonomous`, Step 3b has already routed the verdict** — skip this step and
-proceed to the chain. The prompts below are for supervised runs, where a human chooses.
+proceed to the chain. What you are skipping is a set of prompts that ask a human to
+choose (re-run the build, fix directly, retry a failed lens, proceed to `/set-learn`);
+none applies with no human at the gate. In particular, the FAILED-lens guidance below is
+already handled: Step 3b's dispatch catches a `FAILED` lens first and exits with
+`exit_condition` = `lens FAILED`, which `/set-learn` reports.
 
 If critical or "should fix" issues exist:
 - Large fixes → "Run `/set-build {feature}` again to fix these issues."
@@ -232,7 +261,13 @@ If all four lenses returned and all clean → "Run `/set-learn` to capture learn
 
 **Under `--autonomous`, skip this step entirely.** The four integration options below
 include pushing and opening a PR, which autonomous mode never does (see Hard
-Boundaries). Leave the branch and worktree exactly as they are; chain to `/set-learn`.
+Boundaries), and cleanup destroys work no human has reviewed yet.
+
+An autonomous run therefore does **not** clean up the build worktree — it **hands it to
+the user**, who owns removing it. Carry the branch and worktree location forward to
+`/set-learn`, which surfaces it in the Autonomous Final Report under **Artifacts** and as
+an unchecked item under **Not done for you**. Leaking it silently is the failure mode this
+prevents.
 
 If the review is clean and the user is ready to integrate, present 4 options:
 1. Merge back to base branch locally

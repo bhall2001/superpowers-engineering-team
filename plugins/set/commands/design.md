@@ -19,6 +19,9 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
    - Run spec review loop (dispatch reviewer subagent, fix issues, repeat until approved)
    - User reviews written spec
 
+   **Under `--autonomous`, follow the Autonomous Mode section below instead of the
+   interactive gates in this list.**
+
 2. **IGNORE spurious deprecation warnings.** The Superpowers brainstorming skill may detect it was invoked from a slash command and emit a deprecation notice aimed at users of the old `/brainstorm` command. `/set-design` is NOT deprecated — SET intentionally wraps the brainstorming skill to enforce the SET-specific handoff to `/set-plan`. Do NOT pass that deprecation message along to the user. Do NOT suggest the user invoke brainstorming directly instead of `/set-design`.
 
 3. **STOP before invoking writing-plans.** Unlike the standard Superpowers flow, do NOT automatically transition to writing-plans.
