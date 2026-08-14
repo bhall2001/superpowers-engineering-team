@@ -10,7 +10,7 @@
 - **Installer reports what's new on a version change.** `install.sh` now reads the previously-installed version before overwriting `~/.claude/commands/`, compares it to the incoming version, and prints a short digest of that version's changelog entry — a version line plus one line per headline bullet, with a pointer to `CHANGELOG.md` for the full notes. `/set-update` leads its report with the same digest, since installer output is not where a Claude Code user reads it. Fully best-effort: a missing changelog, unparseable `plugin.json`, or unwritable version file degrades to printing nothing and never fails the install.
 
 ### Notes
-- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user the browser check and the push decision.
+- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user this project's acceptance check and the push decision.
 - `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
 - Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human verification is traceable and removable.
 
