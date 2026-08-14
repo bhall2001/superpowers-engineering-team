@@ -658,9 +658,15 @@ rename.
    failed task re-dispatches regardless.
 2. **Backstop default.** 30 minutes, from reasoning rather than data. Recorded gaps will
    make this empirical after a few real runs.
-3. **`session_pid` source.** The Claude Code session pid as seen by the orchestrator's
-   shell. `process.ppid` from a short-lived script walks to the shell, not the session —
-   verify during build.
+3. **`session_pid` source.** ~~Open~~ **Resolved during build, 2026-08-14.** The script
+   must **not** infer it: `set-run.mjs` runs as a subprocess, so `process.ppid` reports
+   its immediate shell parent, not the Claude Code session. The orchestrator passes the
+   pid explicitly (`initRun`'s `sessionPid` parameter, defaulting to `process.pid` only
+   for tests).
+
+   Liveness is probed with `process.kill(pid, 0)` — true for a live pid, `ESRCH` for a
+   dead one. Verified. This needs no `ps`, which matters because `ps` is absent in some
+   sandboxes and containers.
 4. **Slug collision across re-plans.** ~~Open~~ **Resolved:** content-hash suffix instead
    of an ordinal, so disambiguation is position-independent.
 7. **Checkpoint instruction concreteness.** "Commits when the work has reached a meaningful
