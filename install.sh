@@ -295,6 +295,9 @@ if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/plugins/set" ]; then
   info "Using local checkout: $PLUGIN_ROOT"
 else
   # No checkout (curl | bash). Download the repo ONCE.
+  # KNOWN LIMITATION: this tarball is unauthenticated — a mutable refs/heads/main
+  # with no pinned ref, checksum, or signature. Everything it carries, CHANGELOG.md
+  # included, is untrusted input (see sanitize_digest).
   info "No local checkout — downloading SET once..."
   # Tolerate a blocked/failed mktemp (e.g. a sandbox) without aborting under set -e,
   # so we reach the clear guidance below instead of dying on a cryptic mktemp error.
@@ -331,6 +334,29 @@ if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; th
   NEW_VERSION="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
 fi
 
+# Digest bounds. CHANGELOG.md arrives with the unauthenticated tarball above, so
+# treat its text as untrusted: it is printed to a terminal and handed to
+# /set-update, which relays it into an LLM's context.
+DIGEST_MAX_BULLETS=10
+DIGEST_MAX_LINE=120
+
+# sanitize_digest — stdin to stdout. Strips ANSI escape sequences and control
+# characters, caps line length and line count. Never fails.
+sanitize_digest() {
+  LC_ALL=C sed 's/'$'\033''\[[0-9;?]*[ -\/]*[@-~]//g; s/'$'\033''[@-Z\\-_]//g' 2>/dev/null \
+    | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177' 2>/dev/null \
+    | awk -v max_line="$DIGEST_MAX_LINE" -v max_bullets="$DIGEST_MAX_BULLETS" '
+        n >= max_bullets { truncated = 1; next }
+        {
+          # ASCII marker only — awk length() counts bytes, so a multibyte "…" would overshoot max_line.
+          if (length($0) > max_line) $0 = substr($0, 1, max_line - 3) "..."
+          print
+          n++
+        }
+        END { if (truncated) print "  • ...more changes - see CHANGELOG.md" }
+      ' 2>/dev/null || true
+}
+
 # extract_changelog_section <version> <changelog-path>
 # Prints the body of "## [<version>]" up to (not including) the next "## [".
 # Empty output + zero exit on any failure (missing file, no matching section) —
@@ -362,18 +388,20 @@ changelog_headline() {
       if (sub(/^[[:space:]]*(—|-)[[:space:]]*/, "", rest) && rest != "") print rest
       exit
     }
-  ' "$changelog" 2>/dev/null || true
+  ' "$changelog" 2>/dev/null | sanitize_digest || true
 }
 
 # changelog_digest <version> <changelog-path>
-# One "  • " line per top-level `- **lead**` bullet in the version's section.
-# A full changelog section is release-note prose; this is the scannable form.
+# One "  • " line per top-level `- **lead**` bullet in the version's section,
+# bounded and sanitized. A full changelog section is release-note prose; this is
+# the scannable form.
 changelog_digest() {
   local version="$1" changelog="$2"
   extract_changelog_section "$version" "$changelog" \
     | grep '^- \*\*' 2>/dev/null \
     | sed 's/^- \*\*\([^*]*\)\*\*.*/  • \1/' 2>/dev/null \
-    | sed 's/[.:]$//' 2>/dev/null || true
+    | sed 's/[.:]$//' 2>/dev/null \
+    | sanitize_digest || true
 }
 
 # install_file <src-path-under-plugins/set/> <dest-path-under-COMMANDS_DIR>
@@ -509,6 +537,11 @@ echo ""
 
 # Version notification. Write-after-success + "What's new" — never allowed to
 # fail or affect ERRORS/exit code; every step is guarded.
+#
+# .set-whatsnew is written on EVERY successful run, carrying an explicit
+# STATUS line, so /set-update can tell "installed, nothing changed" from
+# "install failed" — the file is absent only when this run failed or the
+# commands dir was unwritable.
 if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
   echo "$NEW_VERSION" > "$VERSION_FILE" 2>/dev/null || true
 
@@ -532,10 +565,21 @@ if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
     # Hand the digest to /set-update, which reports it in the conversation —
     # the installer's own stdout is not where a Claude Code user reads it.
     {
+      printf 'STATUS: install-ok version-changed\n'
       printf '%s\n' "$VERSION_LINE"
       [ -n "$WHATS_NEW" ] && printf '%s\n' "$WHATS_NEW"
     } > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
+  else
+    {
+      printf 'STATUS: install-ok no-change\n'
+      printf 'SET %s reinstalled — already current, no changelog entry to report.\n' "$NEW_VERSION"
+    } > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
   fi
+elif [ "$ERRORS" -eq 0 ]; then
+  # Clean install, but the incoming version was unreadable — record the success
+  # without claiming a version.
+  printf 'STATUS: install-ok version-unknown\n' \
+    > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
 fi
 
 if [ "$ERRORS" -ne 0 ]; then
