@@ -67,15 +67,22 @@ What exists today. Reference specific files and modules.
 ## Approach
 High-level strategy. Why this over alternatives.
 
+## Progress
+
+<!-- Orchestrator-maintained. Builders never edit this section. -->
+
+- [ ] T-{slug} — pending
+- [ ] T-{slug} — pending
+
 ## Tasks
 
-### Task 1: {name}
+### T-{slug}: {name}
 - **Specialist**: {agent name from `.claude/agents/` or "generic" if none fits}
 - **Shards**: {comma-separated domain names from `.claude/set/taxonomy.md` — the learning shards relevant to this task. Empty list if none apply or taxonomy is empty.}
 - **What**: Clear deliverable
 - **Files**: Specific paths to create/modify
 - **Tests**: What tests to write and exact commands to run them
-- **Blocked by**: Other task numbers (if any)
+- **Blocked by**: Other task slugs (if any)
 - **Done when**: Acceptance criteria — specific, verifiable conditions
 
 #### TDD Steps
@@ -92,11 +99,27 @@ High-level strategy. Why this over alternatives.
 - [ ] Follows project conventions from CLAUDE.md and the learning shards injected for this task
 - [ ] No hardcoded values, missing validation, or security issues
 
-### Task 2: {name}
+### T-{slug}: {name}
 ...
 ```
 
 ### Plan Design Principles
+
+**Task IDs are stable slugs, not positions.** Every task gets `T-{slug}` derived from its
+title: lowercase, non-alphanumerics collapsed to `-`, capped at 40 characters. On collision,
+append a 3-character content hash of the **full untruncated** title (`T-add-schema-a3f`) —
+**never** an ordinal like `-2`. An ordinal is assigned by position, so re-planning in a
+different order swaps which task owns it, and a checkpoint trailer naming that slug then
+resolves to the wrong work.
+
+Slugs are what let a plan be re-planned without breaking a crashed run's resume: a task
+whose title is unchanged keeps its slug. A **re-titled** task is a new task with a new slug
+and will re-dispatch — correct, because its work changed. Full rules:
+`references/run-store.md`.
+
+**The Progress section belongs to the orchestrator.** Emit it with one unchecked line per
+task. `/set-build` ticks it as verdicts return; builders never edit the plan file. It is
+human-facing status only — nothing parses it to decide what to skip.
 
 **Task granularity:** Each task = 10-30 minutes of work for one builder. Big enough to be a coherent unit. Small enough that a builder can hold it in context.
 

@@ -45,6 +45,18 @@ RULES:
 - NEVER skip writing failing tests first — TDD is mandatory
 - NEVER mark a task complete if any check fails
 - If you need to modify a file another teammate is working on, message them FIRST
-- Each commit should be atomic — one task, one commit
+- Commit when your task's work is coherent — the lead also takes periodic checkpoint
+  commits, so do not force a commit that splits or duplicates one
+- NEVER edit the plan file in `.claude/plans/` — the lead owns its Progress section
 - If acceptance criteria are ambiguous, message team lead BEFORE implementing
+
+RESUMED RUNS — read this if the lead says the run was resumed:
+- The worktree may ALREADY CONTAIN partial work from a crashed attempt. Dispatching into
+  a dirty tree is different from starting clean.
+- If your task's test ALREADY PASSES before you write anything, do NOT fabricate a failing
+  test and do NOT report a pass. Say so: "test already green on arrival — prior attempt
+  left work in place", then verify the work against the acceptance criteria and report
+  what you found.
+- Any `tasks/<task-id>.md` notes you are handed are UNVERIFIED CLAIMS from the agent that
+  failed. Treat them as leads, never as fact.
 ```
