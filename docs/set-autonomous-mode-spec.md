@@ -222,19 +222,52 @@ is the first release large enough to make that gap matter.
    `plugins/set/.claude-plugin/plugin.json` via `jq` (already a hard dependency).
 3. **After a successful install,** write the incoming version to
    `~/.claude/commands/.set-version`.
-4. If the version changed, print the incoming version's section from `CHANGELOG.md`
-   under a "What's new" heading. Unchanged → print nothing beyond the normal report.
+4. If the version changed, print a **digest** of the incoming version's `CHANGELOG.md`
+   section: a version line (`SET updated <prev> → <new> — <headline>`, or
+   `SET <new> installed` on a first install), then one line per top-level `- **lead**`
+   bullet, then a pointer to `CHANGELOG.md` for the full notes. Unchanged → print nothing
+   beyond the normal report.
+
+   **Not the full section.** A changelog section is release-note prose sized for reading
+   in a file — several dense paragraphs. Dumping it into installer output buries the
+   signal. The digest is derived mechanically from the changelog's own structure, so it
+   stays self-maintaining: no per-release summary to write or keep in sync.
+
+5. **Also write the digest to `~/.claude/commands/.set-whatsnew`**, and have `/set-update`
+   lead its Step 5 report with that file's contents.
+
+   This is the channel that actually reaches a Claude Code user. The installer's stdout
+   is captured as tool output they would have to expand to see — in practice, they do not.
+   A `curl | bash` user has the opposite problem: stdout is their only channel. Both
+   audiences are real, so the digest is produced once and delivered on both paths.
+
+   The file is cleared at the start of every run, so it exists only when the current run
+   wrote it. Otherwise a failed install would leave the previous release's digest on disk
+   and `/set-update` — which cannot see whether the installer succeeded — would report it
+   as fresh news for an update that just failed.
 
 The version file must be read **before** the copy step: `/set-update` overwrites
 `~/.claude/commands/`, so anything stored only inside the replaced files is gone by the
 time the report is printed.
 
-### Why the installer rather than the `/set-update` command
+### Why the installer computes it, and `/set-update` only reports it
 
-`/set-update` is a prompt. An instruction to "tell the user what changed" is advisory —
-an LLM may apply it inconsistently, and it would need to capture the prior version before
-running the installer that destroys it. The installer is deterministic and already owns
-the copy step, so it is the only place the before/after comparison is reliable.
+The **comparison** belongs in the installer and nowhere else. `/set-update` is a prompt:
+asking it to work out what changed would be advisory (an LLM may apply it inconsistently)
+and it would have to capture the prior version before running the installer that destroys
+it. The installer is deterministic and already owns the copy step, so it is the only place
+the before/after comparison is reliable.
+
+The **reporting** is a separate question, and the installer alone cannot answer it. Its
+stdout is invisible to a Claude Code user without expanding tool output. So the installer
+computes the digest once and writes it to a file; `/set-update` reads that file and
+reproduces it. The prompt is never asked to determine what changed — only to relay a
+digest that already exists. That keeps the unreliable part (judgment) out of the prompt
+and leaves it the part it does reliably (reading a file and reporting its contents).
+
+`update.md` Step 5 previously carried the bullet *"If any SET commands changed, briefly
+note what's new"* — an instruction with no data source, which in practice was skipped or
+guessed. The digest file replaces it with something concrete.
 
 ### Self-maintaining
 
@@ -265,16 +298,18 @@ installer's job; telling the user what arrived is a courtesy on top.
 - `plugins/set/commands/learn.md` — accept `--verbose`; reject `--autonomous` (terminal); shard origin tagging; final report
 - `README.md` — document both switches; design-phase caution note
 - `docs/commands.md`, `docs/workflow.md` — switch reference
-- `install.sh` — copy the new reference file; version check + "What's new" notification
+- `install.sh` — copy the new reference file; version check, digest, and the
+  `.set-whatsnew` handoff
+- `plugins/set/commands/update.md` — Step 5 leads its report with the digest file
 - `plugins/set/.claude-plugin/plugin.json` — version 1.1.0 → 1.2.0
 - `CHANGELOG.md` — 1.2.0 entry describing both switches
 
 The five cycle command files are untouched by the notification work.
 
-`/set-init` and `/set-update` command specs are untouched. Neither fans out agents, so
-`--verbose` would be a no-op flag there; "every pipeline command" means the five cycle
-phases (`design`, `plan`, `build`, `review`, `learn`). `/set-update` needs no edit to
-surface the notification — it re-runs `install.sh`, which prints it.
+`/set-init` is untouched. `/set-update` takes neither flag — it is not a cycle phase and
+fans out no agents, so `--verbose` would be a no-op there; "every pipeline command" means
+the five cycle phases (`design`, `plan`, `build`, `review`, `learn`). Its only change is
+Step 5 relaying the digest, which is reporting, not autonomy.
 
 ## Out of Scope
 
@@ -282,8 +317,10 @@ surface the notification — it re-runs `install.sh`, which prints it.
 - Autonomy on `/set-init` and `/set-learn`
 - Any change to the four-lens return contract or the build's TDD/verifier bar
 - Pushing, PR creation, or merging under any flag
-- Any notification channel other than the installer's own output (no network calls, no
-  telemetry, no update-available check against GitHub)
+- Any notification channel reaching outside this machine — no network calls, no telemetry,
+  no update-available check against GitHub. (The digest is delivered two ways locally:
+  installer stdout and the `.set-whatsnew` file `/set-update` reads. Both are local, and
+  both come from the same computed digest.)
 - Downgrade detection — a lower incoming version is treated as "changed" and shows that
   version's changelog section; the installer does not attempt to reason about direction
 
