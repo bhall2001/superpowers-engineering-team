@@ -187,7 +187,9 @@ exit condition. It NEVER means stop the chain.** `/set-learn` is the only produc
 Autonomous Final Report, so the user gets that report on every path — including halted
 ones. There is no exit from this loop that does not reach `/set-learn`.
 
-Initialize `rounds_spent = 0` before the first fix pass.
+Initialize `rounds_spent = 0`. It counts rounds **started**: increment it as a round
+begins, immediately before the fix pass, never after. So `rounds_spent = 0` means no fix
+pass has run yet, and the cap of 2 allows at most 2 fix passes and 2 re-reviews.
 
 **Verdict dispatch.** Evaluate in this order, on the synthesized verdict from Step 3:
 
@@ -198,12 +200,16 @@ Initialize `rounds_spent = 0` before the first fix pass.
    papering over the real problem. Check this first — per Step 2c a `FAILED` lens is capped
    to a synthesized verdict of ITERATE, so it would otherwise fall through to ITERATE below.
 2. Otherwise, check the **exit conditions** below. If one fires, halt with its
-   `exit_condition`.
-3. Otherwise (**ITERATE**) → if `rounds_spent` is already 2, halt with
-   `exit_condition` = `round cap`. Else run a fix pass (below), then a **fresh**
-   re-review — a full Step 2 fan-out, not a re-read of prior findings. Increment
-   `rounds_spent` by 1, then re-enter this same dispatch at step 1 with the re-review's
-   synthesized verdict.
+   `exit_condition`. **When `rounds_spent = 0` only condition 1 can fire** — condition 2
+   compares against a prior round, and on the first pass there is none.
+3. Otherwise (**ITERATE**) → if `rounds_spent = 2`, halt with
+   `exit_condition` = `round cap`. Else increment `rounds_spent` by 1, run a fix pass
+   (below), then a **fresh** re-review — a full Step 2 fan-out, not a re-read of prior
+   findings — and re-enter this same dispatch at step 1 with the re-review's synthesized
+   verdict.
+
+This is the only statement of the cap. An ITERATE with `rounds_spent = 0` always reaches
+step 3 and always runs a fix pass; a verdict of ITERATE is never a no-op.
 
 ### Loop exit conditions
 
@@ -213,18 +219,18 @@ Stop on whichever comes first:
    all four lenses returned (no lens is `FAILED` — a `FAILED` lens is caught at dispatch
    step 1, never here) **and** the combined findings across all four lenses are empty.
    Three empty lenses plus one `FAILED` lens is NOT clean.
-2. **No new findings** — every finding this round names the same file and the **same
-   underlying defect** as a finding from last round. This is a **judgment call you make**:
-   compare what the two findings are actually about, not their wording. Lens agents run in
-   fresh contexts and phrase the same defect differently every round, so never compare
-   `issue` strings byte-for-byte. If the round surfaced no defect you had not already seen,
-   the condition fires. `exit_condition` = `no new findings`. A shrinking list of known
-   findings means the fix pass works but is incomplete: halt rather than spend a round on
-   diminishing returns.
-3. **2 rounds spent** → `exit_condition` = `round cap`. A loop still surfacing genuinely
-   new issues after two rounds is itself the signal.
+2. **No new findings** — **only evaluated when `rounds_spent ≥ 1`; skip it entirely when
+   `rounds_spent = 0`, where "last round" does not exist and this condition can never
+   fire.** Every finding this round names the same file and the **same underlying defect**
+   as a finding from last round. This is a **judgment call you make**: compare what the two
+   findings are actually about, not their wording. Lens agents run in fresh contexts and
+   phrase the same defect differently every round, so never compare `issue` strings
+   byte-for-byte. If the round surfaced no defect you had not already seen, the condition
+   fires. `exit_condition` = `no new findings`. A shrinking list of known findings means the
+   fix pass works but is incomplete: halt rather than spend a round on diminishing returns.
 
-The cap is a ceiling, not a target; condition 2 is expected to fire more often than 3.
+`round cap` is not listed here — dispatch step 3 is its only statement. The cap is a
+ceiling, not a target; condition 2 is expected to fire more often than the cap.
 
 ### The fix pass routes findings by domain
 

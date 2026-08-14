@@ -22,7 +22,9 @@ Flags may appear in any order and in combination with existing flags
 > `--autonomous` has no effect on `/set-learn`: it is the last phase of the
 > cycle. Running `/set-learn` normally.
 
-Then continue normally. Do not silently ignore it.
+Then continue normally. Do not silently ignore it. This is for a user who typed the flag;
+the chain never sends it — see the Chaining Contract for how `/set-learn` recognizes a
+chained arrival instead.
 
 ## Verbosity Levels
 
@@ -63,6 +65,18 @@ Instead it reads the next command file and continues executing it in the same
 session, carrying both flags forward.
 
 Chain order: `design` → `plan` → `build` → `review` → `learn`.
+
+**Exception at the last hop.** `--autonomous` is not a valid flag on `/set-learn` (see
+Flag Parsing), so the chain does NOT pass it there — passing it would trip the error
+message. `--verbose` still carries forward; it is valid on every phase.
+
+**How `/set-learn` knows it was reached via an autonomous chain.** Not from a flag —
+from the handoff. `/set-review` chains into `/set-learn` and hands it the accumulated
+Final Report payload (below). **The presence of that payload IS the signal**, and it is
+the condition `/set-learn` means by "reached via an autonomous chain": tag shards
+`(unverified cycle)`, emit the Autonomous Final Report in place of its normal report, and
+apply the halted-run handling. A user who types `/set-learn` themselves arrives with no
+payload and takes the normal path.
 
 Resolve the next command from `~/.claude/commands/set-{phase}.md`. If that file
 is missing, halt and report the missing file — do not attempt the phase from
