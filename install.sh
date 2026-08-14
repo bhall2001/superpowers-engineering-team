@@ -271,6 +271,11 @@ ERRORS=${ERRORS:-0}
 VERSION_FILE="$COMMANDS_DIR/.set-version"
 PREV_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || true)"
 
+# Clear any prior digest up front: /set-update reads this file with no knowledge
+# of whether THIS run succeeded, so a leftover would be reported as fresh news
+# for an install that just failed. It exists only when this run writes it.
+rm -f "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
+
 # Resolve the directory this script lives in (empty/unreliable under curl|bash).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 PLUGIN_ROOT=""
@@ -351,7 +356,7 @@ changelog_digest() {
   local version="$1" changelog="$2"
   extract_changelog_section "$version" "$changelog" \
     | grep '^- \*\*' 2>/dev/null \
-    | sed 's/^- \*\*\(.*\)\*\*.*/  • \1/' 2>/dev/null \
+    | sed 's/^- \*\*\([^*]*\)\*\*.*/  • \1/' 2>/dev/null \
     | sed 's/[.:]$//' 2>/dev/null || true
 }
 
@@ -515,8 +520,6 @@ if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
       printf '%s\n' "$VERSION_LINE"
       [ -n "$WHATS_NEW" ] && printf '%s\n' "$WHATS_NEW"
     } > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
-  else
-    rm -f "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
   fi
 fi
 
