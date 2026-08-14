@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Status:** Design (autonomous — not human-approved)
 **Author:** Claude (autonomous `/set-design`)
-**Revision:** 8 — checkpoint commits; skip set from trailers; revert-aware
+**Revision:** 9 — reconciled with the shipped code after the four-lens review
 
 ## Problem
 
@@ -53,7 +53,7 @@ Human-directed and binding:
 4. **Task IDs are stable content slugs**, not positions.
 5. **The dirty tree is left in place** — the forensic record of where the team broke.
 6. **Truth for run mechanics lives in SQLite.** Liveness, worktree exclusion, checkpoint
-   sequence, agent logs.
+   sequence, task verdicts.
 7. **Concurrency is untouched.** No serialization, no per-task worktrees, no attribution.
 
 ## Three artifacts, three roles
@@ -104,7 +104,7 @@ position:
 Rules, stated exactly because two builders would otherwise diverge:
 
 - Prefix `T-`, then kebab-case derived from the task title: lowercase, non-alphanumerics
-  to `-`, collapse runs, trim, cap at 40 chars.
+  to `-`, collapse runs, trim, capped at 36 chars (leaving room for a collision suffix within 40).
 - **On collision, append a 3-char content hash** of the *full untruncated* title
   (`T-add-the-checkpoint-table-to-schema-sql-a3f`) — **never an ordinal**. Two long titles
   sharing their first 40 characters is not hypothetical:
@@ -152,9 +152,29 @@ So the honest statement, rather than an unenforceable "never mid-write" rule:
   `1e`'s baseline tests to fail for reasons unrelated to any task, and must report that as
   a resumed-from-partial-checkpoint condition rather than a task regression.
 
-`git add` is scoped to the repo root with `.gitignore` honored — never `-A` from an
-arbitrary cwd, which would sweep `.worktrees/`, editor scratch, and anything a human left
-lying around.
+**A checkpoint commits an explicit allow-list, never `git add -A`.** `.gitignore` alone is
+not protection: a build shares the human's worktree, and `-A` sweeps whatever is lying
+there — an unignored `.env.local`, personal scratch notes, another worktree — into an
+agent's commit on their branch. Verified during the build, before the guard existed.
+
+`checkpoint --files` carries the union of the captured tasks' plan `Files`. Everything
+else changed in the tree is returned as `foreign` and left alone. Three refusals:
+
+| Result | Meaning |
+|---|---|
+| `no-file-scope` | No `--files` given. Commits nothing rather than guessing — per-task attribution was abandoned deliberately, so the run must be told what it owns. |
+| `partial-staging` | The index holds content the run did not create (a human mid-`git add -p`). Committing would fold their unstaged hunks into an agent's commit. |
+| `nothing-to-commit` | Nothing in scope changed. |
+
+A directory scope must end in `/`. Credentials (`.env*`, keys, `.npmrc`, `.aws/`, `.ssh/`)
+are excluded from every scope regardless, because a directory-shaped allow entry would
+otherwise sweep in untracked secrets beneath it — and `Files` is model-generated.
+
+**Durability is bounded by that scope.** A file a builder creates that the plan did not
+predict is reported `foreign` and left uncommitted, while its task's slug still lands in
+`SET-Tasks` and is skipped on resume. This is the one path by which a task can be skipped
+with its work absent, which is why the orchestrator must inspect `foreign` rather than log
+it.
 
 ### The time backstop
 
@@ -293,16 +313,13 @@ CREATE TABLE task (
   PRIMARY KEY (run_id, task_id)
 );
 
-CREATE TABLE agent_log (
-  run_id  TEXT NOT NULL,
-  task_id TEXT NOT NULL,
-  ts      TEXT NOT NULL,
-  agent   TEXT NOT NULL,
-  event   TEXT NOT NULL,
-  detail  TEXT
-);
-CREATE INDEX agent_log_lookup ON agent_log(run_id, task_id, ts);
 ```
+
+**No `agent_log` table.** Earlier revisions specified one for agents to write their own
+progress rows, but nothing writes it, and an unused table in a v1 schema is a migration
+liability — the store holds mechanics, not aspirations. Agent scratch lives in
+`tasks/<task-id>.md` under the run directory instead (`set-run scratch --run --task`
+returns the path and creates it), which is advisory and never parsed.
 
 **`captured_seq` is in-run bookkeeping, not a second source of durability.** Durability is
 read from git at resume; this column exists only so the *next* checkpoint knows which
@@ -330,7 +347,6 @@ resume forever. `>=` fails the other way, double-naming a task in two trailers.
 Explicit marking has no clock in it, so neither boundary exists. This is also why the
 column is worth having: it is what makes the trailer *computable* at all.
 
-`agent_log` is append-only diagnostic output — **never** read for control flow.
 
 ## Writing the plan's checkboxes
 
@@ -452,7 +468,7 @@ stale record can never silently re-enter autonomous mode.
 | Hazard | Mechanism |
 |---|---|
 | Concurrent writers | WAL + `busy_timeout`; probed 1600/1600, no lost writes |
-| Agents writing progress | `agent_log` append-only rows |
+| Agents writing progress | `tasks/<task-id>.md` scratch files, one per task |
 | Two runs, one worktree | Partial unique index + atomic claim (step 2) |
 | Path spelling variants | `fs.realpathSync` before store and compare |
 | Pipes/newlines in notes | `TEXT` column; probed |
@@ -481,7 +497,8 @@ node --experimental-sqlite -e "require('node:sqlite')" # flagged → record in c
 
 If neither succeeds, install reports that durable runs are unavailable and continues — SET's
 other commands do not depend on this. The flag, if needed, is written to
-`.claude/set/config.json` as `sqlite_flag` and read by `set-run.mjs` on every invocation.
+a generated `set-run` shim at `~/.claude/set-runs/bin/` with the flag baked in, so commands
+invoke one path and no config read can be forgotten.
 
 Declaring the requirement at install time is honest; shipping a second store to avoid
 declaring it is not.
@@ -512,7 +529,7 @@ a `SubagentStop` writer is out; the design makes forgetting **harmless** instead
 | Build start | `run` row + `pending` task rows | orchestrator |
 | Verdict returns | `task` row; plan checkbox | orchestrator |
 | Checkpoint taken or declined | `checkpoint` row; commit if taken | orchestrator |
-| During a task | `agent_log` rows, `tasks/<id>.md` scratch | agent |
+| During a task | `tasks/<task-id>.md` scratch | agent |
 | Phase boundary | `updated_at` touch, mandatory checkpoint | orchestrator |
 
 Writes ride on the `▶`/`◀` boundary lines and the verdict-return point — instructions
@@ -571,7 +588,7 @@ reviewer does not read a test directory as enforced coverage.
   produce exactly one `running` row; a run reviving between probe and commit is not
   clobbered.
 - **Path canonicalization** — `/wt/x`, `/wt/x/`, `/wt/./x` collapse to one slot.
-- **Concurrent writers** — N processes on `task` and `agent_log`; no lost writes.
+- **Concurrent writers** — N processes writing `task` rows; no lost writes.
 - **Note round-trip** — `expected 'a' | 'b'` with newlines survives.
 - **Location assertion** — wrong repo, wrong branch, detached HEAD refuse distinctly.
 - **Migration gate** — `user_version` newer than code → refuse, do not write.

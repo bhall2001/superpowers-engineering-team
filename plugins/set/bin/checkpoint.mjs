@@ -251,7 +251,14 @@ export function takeCheckpoint(
         WHERE run_id = ? AND status = 'passed' AND captured_seq IS NULL`,
     ).run(sequence, runId);
 
-    db.prepare("UPDATE run SET updated_at = ? WHERE run_id = ?").run(at, runId);
+    // Advance the phase here: a checkpoint is the only point that reliably knows
+    // it, and `list` reporting a permanently-entry phase would mislead anyone
+    // diagnosing a stuck run.
+    db.prepare("UPDATE run SET updated_at = ?, current_phase = ? WHERE run_id = ?").run(
+      at,
+      phase,
+      runId,
+    );
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");

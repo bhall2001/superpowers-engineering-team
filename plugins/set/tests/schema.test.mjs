@@ -21,12 +21,11 @@ test("applies every table and index on first open", () => {
       .all()
       .map((r) => r.name);
 
-    for (const table of ["run", "checkpoint", "task", "agent_log"]) {
+    for (const table of ["run", "checkpoint", "task"]) {
       assert.ok(names.includes(table), `missing table: ${table}`);
     }
-    for (const index of ["one_live_run_per_worktree", "agent_log_lookup"]) {
-      assert.ok(names.includes(index), `missing index: ${index}`);
-    }
+    assert.ok(names.includes("one_live_run_per_worktree"), "missing partial unique index");
+    assert.ok(!names.includes("agent_log"), "agent_log has no writer and must not ship");
     db.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });

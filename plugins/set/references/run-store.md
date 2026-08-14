@@ -27,9 +27,15 @@ is on disk but uncommitted, so resume re-dispatches it.
 ```
 ~/.claude/set-runs/
   runs.db                          the store (SQLite, WAL)
+  bin/set-run                      generated shim (see Requirements)
   <project-slug>/<run-id>/
     tasks/<task-id>.md             agent scratch — advisory, never parsed
 ```
+
+`set-run scratch --run <id> --task <slug>` prints the scratch path for a task, creating
+its directory. Builders write there; resume hands the file to the re-dispatched agent
+**labeled as unverified claims**. Nothing parses it, and its absence is not an error — a
+crashed agent that wrote nothing simply leaves none.
 
 The store lives **outside** the worktree, and a stray copy inside a repo is excluded by
 pathspec so it can never be swept into a checkpoint.
@@ -45,11 +51,25 @@ It also refuses (`partial-staging`) when the index holds content the run did not
 committing over a human's `git add -p` session would fold their unstaged hunks into an
 agent's commit and destroy the index they curated.
 
+**A directory scope must end in `/`.** `src/lib/` owns everything beneath it; `src/lib`
+owns nothing. The trailing slash is what stops `src/lib` from also claiming
+`src/library.ts`.
+
+**Durability is bounded by `--files`.** A task's work is protected only to the extent the
+plan's `Files` enumerated it. A file a builder creates that the plan did not predict is
+reported as `foreign` and left uncommitted — yet the task's slug still lands in
+`SET-Tasks` and is skipped on resume. This is the one path by which a task can be skipped
+with its work absent, and it is why `build.md` requires the orchestrator to inspect
+`foreign` rather than log it. Credentials are excluded from any scope regardless
+(`.env*`, keys, `.npmrc`, `.aws/`, `.ssh/`), so a directory scope can never sweep them in.
+
 ## Requirements
 
 `node:sqlite` — stable on Node 24, behind `--experimental-sqlite` on Node 22. `install.sh`
-probes once and records the flag in `.claude/set/config.json` as `sqlite_flag` if needed.
-If neither works, durable runs are unavailable and the rest of SET is unaffected.
+probes once and generates a `set-run` shim at `~/.claude/set-runs/bin/` with whatever flag
+this machine needs already baked in. Commands invoke the shim, never `node` directly, so
+there is no conditional for the orchestrator to forget. If neither form works, durable runs
+are unavailable and the rest of SET is unaffected.
 
 ## The CLI
 
@@ -65,6 +85,13 @@ Every command prints JSON on stdout; errors print JSON on stderr with a non-zero
 Pass `--store <path>` or set `SET_RUN_STORE` to override the default
 `~/.claude/set-runs/runs.db`. Invocations: `build.md`, "How to take one".
 
+Arguments are validated at the boundary, before any git or store write: `--reason`,
+`--status`, and `--release --status` must be in their domains, `--minutes` must be a
+non-negative number, and a flag given no value is rejected by name. This matters because
+`takeCheckpoint` commits to git *before* writing its row — safe for a crash, but an
+invalid argument would otherwise leave a trailer-bearing commit on the branch that the
+skip set counts as durable while the store has no record of it.
+
 ## Schema
 
 `plugins/set/bin/schema.sql`. Pragmas on every connection: `journal_mode = WAL`,
@@ -78,7 +105,6 @@ Pass `--store <path>` or set `SET_RUN_STORE` to override the default
 | `run` | One row per run: worktree, branch, plan, status, `session_pid`, `hostname` |
 | `checkpoint` | One row per checkpoint, taken **or declined** |
 | `task` | Per-task status, verdict JSON, `captured_seq` |
-| `agent_log` | Append-only agent scratch; never read for control flow |
 
 Two rules are constraints, not prose:
 

@@ -189,7 +189,14 @@ test("a claim contending with another writer fails without leaving a row", () =>
     claimer.exec("PRAGMA busy_timeout = 150"); // fail fast; the wait is not the assertion
 
     holder.exec("BEGIN IMMEDIATE");
-    holder.prepare("INSERT INTO agent_log VALUES ('r','t','ts','a','holding',NULL)").run();
+    holder
+      .prepare(
+        `INSERT INTO run (run_id, project_slug, project_path, worktree_path, branch,
+                          plan_path, entry_phase, current_phase, status, hostname,
+                          started_at, updated_at)
+         VALUES ('lock-holder','s','/p','/elsewhere','b','pl','build','build','complete','h','t','t')`,
+      )
+      .run();
 
     try {
       assert.throws(

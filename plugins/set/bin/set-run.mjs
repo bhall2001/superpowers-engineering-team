@@ -87,8 +87,17 @@ function assertRunExists(db, runId) {
   if (!row) throw new Error(`no such run: ${runId}`);
 }
 
+function storePath(flags) {
+  return flags.store ?? process.env.SET_RUN_STORE ?? DEFAULT_STORE;
+}
+
+/** Run artifacts live beside the store, so an overridden store keeps them together. */
+function storeRoot(flags) {
+  return dirname(storePath(flags));
+}
+
 function openAt(flags) {
-  const path = flags.store ?? process.env.SET_RUN_STORE ?? DEFAULT_STORE;
+  const path = storePath(flags);
   mkdirSync(dirname(path), { recursive: true });
   return openStore(path);
 }
@@ -249,6 +258,20 @@ const COMMANDS = {
     const status = oneOf(flags, "status", ["complete", "crashed"], "complete");
     releaseRun(db, flags.run, status);
     return { run_id: flags.run, status };
+  },
+
+  /**
+   * Where a builder writes its working notes. Advisory: resume hands the file to
+   * a re-dispatched agent as unverified claims, and nothing ever parses it.
+   */
+  scratch(db, flags) {
+    require_(flags, "run", "task");
+    const run = db.prepare("SELECT project_slug FROM run WHERE run_id = ?").get(flags.run);
+    if (!run) throw new Error(`no such run: ${flags.run}`);
+
+    const dir = join(storeRoot(flags), run.project_slug, flags.run, "tasks");
+    mkdirSync(dir, { recursive: true });
+    return { path: join(dir, `${flags.task}.md`) };
   },
 
   list(db) {

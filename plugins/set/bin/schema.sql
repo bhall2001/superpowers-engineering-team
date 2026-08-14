@@ -45,13 +45,6 @@ CREATE TABLE IF NOT EXISTS task (
   PRIMARY KEY (run_id, task_id)
 );
 
-CREATE TABLE IF NOT EXISTS agent_log (
-  run_id  TEXT NOT NULL,
-  task_id TEXT NOT NULL,
-  ts      TEXT NOT NULL,
-  agent   TEXT NOT NULL,
-  event   TEXT NOT NULL,
-  detail  TEXT
-);
-
-CREATE INDEX IF NOT EXISTS agent_log_lookup ON agent_log (run_id, task_id, ts);
+-- No agent_log table: nothing writes one. An unused table in a v1 schema is a
+-- migration liability, and the store holds mechanics, not aspirations. Add it
+-- together with its writer if agents ever need to record their own progress.
