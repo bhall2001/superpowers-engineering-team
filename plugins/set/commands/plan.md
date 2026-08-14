@@ -17,6 +17,21 @@ User provides: `/set-plan $ARGUMENTS`
 - A path to a design spec file
 - Empty — search `docs/superpowers/specs/` for the most recent spec and confirm with user
 
+Parse `--autonomous` and `--verbose` per
+`~/.claude/commands/references/autonomous-mode.md` and strip them before
+interpreting the remainder as the spec name or path.
+
+**Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
+Verbosity Levels format from that reference: the `▶ SET plan — starting` line once flags
+are parsed, and the `◀ SET plan — {task count}, {plan path}` line as the phase ends. Under
+`--autonomous` the same lines carry the chain annotation and `[n/N]`; without it, omit
+both. Emit each line once per run. This phase dispatches no agents, so `--verbose` adds
+no per-agent lines here.
+
+Under `--autonomous` with an empty remainder, do not "confirm with user" — take
+the most recent spec in `docs/superpowers/specs/` and report which one was chosen
+on the phase-boundary line.
+
 ## Process
 
 ### 1. Load the Design Spec
@@ -107,11 +122,19 @@ After writing, review critically:
 
 ### 5. Present for Approval
 
-Show the plan. Wait for user to approve, modify, or reject.
+**Without `--autonomous`:** Show the plan. Wait for user to approve, modify, or reject.
 
 After approval:
 
 > "Plan saved to `.claude/plans/{feature-name}.md`. Ready to build? Run `/set-build {feature-name}` to execute it as a native Agent Team by default (or `/set-build {feature-name} --use-workflow` for the dynamic-workflow path)."
+
+**With `--autonomous`:** Do not wait. Re-read the plan against the Step 4 review
+criteria (parallelism marks are real, acceptance criteria are verifiable, TDD steps
+make sense, no missing tasks) and fix what fails. Then, after the closing phase-boundary
+line, chain to `/set-build {feature-name}` per the Chaining Contract.
+
+Carry the plan's Unresolved Questions into the chain: they are reported in the
+Autonomous Final Report rather than blocking, since there is no human to answer them.
 
 ## Unresolved Questions
 

@@ -10,6 +10,25 @@ Extract and persist learnings from the most recent SET cycle.
 
 `$ARGUMENTS` is optional — a feature name or context hint. If empty, analyze the most recent build/review cycle.
 
+Parse `--verbose` per `~/.claude/commands/references/autonomous-mode.md`.
+
+**Emit phase-boundary lines on every run**, whether or not this phase was reached via a
+chain, in the Verbosity Levels format from that reference: the `▶ SET learn — starting`
+line once flags are parsed, and the `◀ SET learn — {shards written}` line as the phase
+ends, before the Step 8 report. In a chained run the same lines carry the chain annotation
+and `[n/N]`; otherwise omit both. Emit each line once per run. This phase dispatches no
+agents, so `--verbose` adds no per-agent lines here.
+
+**`--autonomous` is valid here.** `/set-learn` is the last phase, so it chains nowhere —
+but this phase asks the user to approve a taxonomy, approve new domains, and approve
+agent updates. Those gates need suppressing whether the phase was chained into or invoked
+directly with the flag.
+
+`--autonomous` and "reached via an autonomous chain" have the **same effect** on this
+phase: apply the taxonomy, new domains, and agent updates without asking, and report
+everything applied so the human can review it after. Treat either as sufficient; the rest
+of this file says "in an autonomous chain" to mean both.
+
 ## Process
 
 ### 1. Gather Context
@@ -89,12 +108,15 @@ If `.claude/set/learnings.md` exists, auto-split it:
 
 1. Read the full file
 2. Propose a taxonomy (5-15 domains typical) by grouping entries by topic. Use project-specific names — `security`, `pg-drizzle`, `react-components`, etc.
-3. Show the proposed taxonomy to the user:
-   > "Proposed taxonomy from existing learnings:
-   > - {domain1}: {short description}
-   > ...
-   > Approve, edit, or reject."
-4. After approval, write `.claude/set/taxonomy.md`:
+3. Then:
+   - **Without an autonomous chain:** show the proposed taxonomy to the user:
+     > "Proposed taxonomy from existing learnings:
+     > - {domain1}: {short description}
+     > ...
+     > Approve, edit, or reject."
+   - **In an autonomous chain:** adopt the proposed taxonomy without asking, and list the
+     domains it created in the Final Report so the human can review them.
+4. Then write `.claude/set/taxonomy.md`:
    ```markdown
    # Learning Taxonomy
 
@@ -125,7 +147,10 @@ For each new learning from this cycle:
 1. Read `.claude/set/taxonomy.md`. If empty, propose an initial taxonomy from this cycle's learnings (same approval flow as 3b step 3).
 2. Match the learning against domain names + descriptions. Pick the best-fit domain(s).
 3. If the learning spans multiple domains, assign to ALL relevant domains (duplication is expected — see 3d).
-4. If NO existing domain fits, propose a new domain name + description. Ask user to approve before adding to `taxonomy.md`.
+4. If NO existing domain fits, propose a new domain name + description.
+   - **Without an autonomous chain:** ask the user to approve before adding it to `taxonomy.md`.
+   - **In an autonomous chain:** add it without asking, and name every domain added this
+     run in the Final Report.
 
 #### 3d: Duplicate cross-domain learnings
 
@@ -136,6 +161,18 @@ Learnings that apply to multiple domains are **copied into each relevant shard**
 Append each learning to `.claude/set/learnings/{domain}.md` under the correct section (`## What Works` / `## What Failed` / `## Recurring Bugs`). Create the file with frontmatter if it doesn't exist.
 
 Read `references/learn-entry-format.md` for entry format rules and examples before writing any shard entries.
+
+**Autonomous-cycle tagging.** When reached via an autonomous chain, append
+` (unverified cycle)` to each entry's date prefix:
+
+```
+[2026-08-13] (unverified cycle) Some learning...
+```
+
+The tag exists because `/set-learn` runs before any human has browser-verified the
+work, so a learning captured here may encode a mistake as a pattern. Tagged entries stay
+traceable and removable rather than anonymous. Shards are plain markdown — a human can
+delete or promote the entry after verifying.
 
 #### 3f: Global-importance learnings → CLAUDE.md
 
@@ -213,7 +250,11 @@ For each agent with findings, propose additions to its `.md` file:
 
 #### 6c: Apply updates
 
-- Show the user each proposed change before writing. Get confirmation.
+- **Without an autonomous chain:** show the user each proposed change before writing.
+  Get confirmation.
+- **In an autonomous chain:** apply the updates without asking — there is no one to
+  confirm. List every agent file changed in the Final Report so the human reviews them
+  alongside the shards.
 - NEVER remove existing content — only append or update.
 - Date new entries with `[YYYY-MM-DD]`.
 - If an agent file exceeds ~100 lines, suggest splitting domain knowledge into a referenced file.
@@ -277,6 +318,28 @@ git status --short .claude/set/
 - Any patterns that contradict previous ones (update, don't duplicate)
 - Process insights about SET itself (task sizing, specialist routing, etc.)
 - Suggestions for what to build or fix next
+
+**When reached via an autonomous chain,** emit the Autonomous Final Report from
+`~/.claude/commands/references/autonomous-mode.md` instead of the normal report,
+filling in every field from the chain: phases run, build results, review verdict,
+`rounds_spent`, `exit_condition`, `remaining_findings`, the plan's unresolved
+questions, artifact paths, and the shards written this run.
+
+**A halted run still reaches you, and still gets a report.** `/set-review` chains here
+on every exit — including `BLOCK` and `lens FAILED`. Do NOT treat those as a chain abort
+or skip the report. Instead:
+
+- Lead with the halt: name the `exit_condition` and what it means before anything else.
+  A `BLOCK` or `lens FAILED` run has unreviewed or fundamentally broken work in it.
+- Capture learnings as usual, but only from what actually completed. Do not mine a
+  halted phase for patterns — a `lens FAILED` exit means that area was never reviewed,
+  so there is nothing verified to learn from.
+- Fill the report's remaining fields normally. Say which phase halted and why in place
+  of any section the chain never produced.
+
+End with the unchecked handoff items the template carries — browser verification, the
+push decision, and removing the build worktree. Never present the run as done: nothing
+has been verified in a browser and nothing has been pushed.
 
 ## Maintenance Rules
 

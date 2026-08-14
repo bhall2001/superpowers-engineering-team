@@ -150,3 +150,43 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 ```
 
 Run periodically to get improvements and bug fixes.
+
+---
+
+## Switches
+
+### `--autonomous`
+
+Valid on all five cycle phases. Runs that phase and every remaining phase through
+`/set-learn` without stopping at human gates.
+
+On `/set-learn` there is nothing left to chain to, but the flag still suppresses that
+phase's own gates — it otherwise asks you to approve the taxonomy, each new domain, and
+every agent update. Under the flag it applies them and reports what it applied.
+
+```bash
+/set-plan my-feature --autonomous
+```
+
+On an `ITERATE` verdict, `/set-review` runs a bounded fix-and-re-review loop: findings
+are routed to the specialist owning each domain, then re-reviewed by a fresh four-lens
+pass. It stops when the review is clean, when a round turns up no new findings, or after
+2 rounds. A `BLOCK` verdict or a failed lens halts immediately.
+
+An autonomous run **never pushes, opens a PR, merges, or claims the work verified.** It
+ends by handing you the browser check and the push decision.
+
+Autonomy carries in the session only — nothing is written to disk, so a later manual
+command is never silently auto-chained. Runs are not resumable after a crash; re-invoke
+from the last completed phase.
+
+### `--verbose`
+
+Valid on all five cycle phases, with or without `--autonomous`.
+
+Default output is one line entering and leaving each phase. `--verbose` adds each agent
+spawn and return — useful on a supervised `/set-build`, which otherwise runs an entire
+Agent Team silently between spawn and the final gate.
+
+There is no `--quiet`: phase boundaries are the floor, since a supervised run's output is
+what you act on at the gate.

@@ -2,6 +2,10 @@
 
 This walkthrough shows what a complete SET cycle looks like for a real feature request.
 
+From any phase below, adding `--autonomous` chains the remaining phases through
+`/set-learn` in one session instead of stopping at each gate. See
+[`docs/commands.md`](commands.md#switches) for the full switch reference.
+
 ## Scenario: Add a CSV export feature
 
 ### Phase 0: Initialize (first time only)

@@ -22,6 +22,16 @@ Check `$ARGUMENTS`:
   availability gate entirely.
 - **`--use-agent-team`** → accepted as a **silent no-op alias** for the default.
   Do not warn, do not print a deprecation notice — it simply selects the default path.
+- `--autonomous` / `--verbose` — parse and strip per
+  `~/.claude/commands/references/autonomous-mode.md`.
+
+**Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
+Verbosity Levels format from that reference: the `▶ SET build — starting` line once flags
+are parsed, and the `◀ SET build — {tasks passed/failed}, {diff stat}` line at the end of
+Phase C. Under `--autonomous` the same lines carry the chain annotation and `[n/N]`;
+without it, omit both. Emit each line once per run. The `--autonomous`-only reports below
+(worktree dir default, failing baseline, Agent Teams unavailable) are annotations on that
+one opening line, not extra boundary lines.
 
 ## Before Starting
 
@@ -64,6 +74,11 @@ If **disabled**: skip Step 1. Run 1d (project setup) and 1e (baseline tests) on 
 ### 1a: Select worktree directory
 Priority: `.worktrees/` → `worktrees/` → CLAUDE.md specified → ask the user.
 
+- **Without `--autonomous`:** if none of the first three resolve, ask the user.
+- **With `--autonomous`:** never ask — there is no one to answer. Default to
+  `.worktrees/` and report the choice on the phase-boundary line:
+  `Worktree dir not configured — defaulting to .worktrees/`.
+
 ### 1b: Verify directory is git-ignored
 ```bash
 git check-ignore -q .worktrees 2>/dev/null
@@ -87,7 +102,13 @@ if [ -f Cargo.toml ]; then cargo build; fi
 Use the package manager from CLAUDE.md if specified.
 
 ### 1e: Verify clean baseline
-Run the test suite from CLAUDE.md "Build Commands". If tests fail, ask the user whether to proceed or investigate.
+Run the test suite from CLAUDE.md "Build Commands".
+
+- **Without `--autonomous`:** if tests fail, ask the user whether to proceed or investigate.
+- **With `--autonomous`:** if tests fail, record the failing baseline and proceed. A
+  pre-existing failure is not this cycle's regression, and `/set-review`'s correctness
+  lens will surface it as a `critical` finding if it matters. Report the failure count
+  on the phase-boundary line.
 
 ### 1f: Report
 ```
@@ -169,7 +190,14 @@ jq -r '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS // empty' ~/.claude/settings.js
 
 If the value is `1`, proceed to Phase B-team.
 
-If it is empty or absent, present exactly two options and wait for the user:
+If it is empty or absent:
+
+**Under `--autonomous`, do not present options or wait.** Select the
+dynamic-workflow path (Phase B-workflow, the `--use-workflow` semantics) and
+report on the phase-boundary line: `Agent Teams unavailable — using workflow path`.
+The workflow path needs no env var, so it always runs.
+
+**Without `--autonomous`,** present exactly two options and wait for the user:
 
 ```
 Agent Teams are not enabled, so /set-build cannot run its default path.
@@ -268,6 +296,9 @@ specialists over duplicate generic builders.
 Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt. QA's remit
 is unchanged from previous SET versions — it is a peer role, **not** the verifier.
 
+Under `--verbose`, emit `→ spawn {Specialist} :: {task name}` as each builder and the QA
+teammate is spawned, and `← {Specialist} :: {pass/fail}` as each reports back.
+
 Read both reference files before spawning anything.
 
 Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
@@ -305,6 +336,9 @@ Agent({
 A verifier writes no code, so it can never verify its own work — this preserves the
 fresh-verifier guarantee the workflow path gets from a separate `agent({schema})` call.
 
+Under `--verbose`, emit `→ spawn verifier-{task-id} :: {task name}` at each verifier spawn
+and `← verifier-{task-id} :: {passed/failed}` when its verdict returns.
+
 **Concurrency ceiling of 4.** Spawn a verifier when its builder reports the task
 complete. If 4 verifiers are already running, queue the rest and spawn as earlier ones
 finish. This bounds token cost and file contention on large plans without serializing
@@ -339,7 +373,9 @@ request shutdown, and report the blocker to the user.
 2. Run the full test suite one final time.
 3. Collect the per-task verdicts and hand them to Phase C.
 4. Report the worktree location or branch name. Do **not** remove the worktree —
-   `/set-review` handles cleanup.
+   `/set-review` handles cleanup. Under `--autonomous`, `/set-review` does not clean up
+   either; it carries the location forward to `/set-learn`, which hands it to the user in
+   the Final Report. Either way, pass the location along.
 
 ### Agent Teams limitations to keep in mind
 
@@ -365,6 +401,11 @@ Invoke the **`Workflow` tool** with a script that executes the brief. The script
 
 Author the workflow script to keep intermediate builder output in script variables — do not pull every builder transcript into your context. You receive only the final verdicts + diff.
 
+Under `--verbose`, have the script emit `→ spawn {agentType} :: {task name}` at each
+builder and verifier `agent()` call and `← {agentType} :: {passed/failed}` on return.
+These lines are the only per-agent output that crosses back — the transcripts still stay
+in script variables.
+
 **Same MCP rule as the team path: builders and verifiers must NOT call `mcp__serena__*`.** A dynamic workflow runs many `agent()` calls concurrently against the *same* single Serena process, so it has the identical hazard described in Phase B-team — one shared, mutable `_active_project` pointer with no per-caller isolation, in a worktree where Serena often starts unactivated. Serena is queried once in Phase A (lead) and injected into each task bundle as text. For code navigation, workflow agents use Claude Code's built-in LSP tool.
 
 > SET no longer implements "max 5 retries / escalate after 3." The workflow's native verify-and-revise loop subsumes it. You specified the bar (A4) and the escalation policy (A5); the workflow runs the loop.
@@ -377,6 +418,16 @@ When the selected execution path returns:
 2. Present the result at the human gate. Show: tasks passed/failed (from the structured verdicts), the diff stat, and any failed-task escalations.
 3. **Frame the verification report as builder self-grading** — useful but biased by construction (a grader checking work produced by the same execution path prefers its own findings). It is never the final word. The independent audit happens in `/set-review`.
 4. Report the worktree location or current branch name.
-5. Suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
+5. Then:
 
-If a worktree was created, do NOT remove it — `/set-review` handles cleanup.
+   - **Without `--autonomous`** — suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
+
+   - **With `--autonomous`** — do not suggest; after the closing phase-boundary line, chain
+     to `/set-review` per the Chaining Contract, passing the branch/worktree location and
+     the per-task verdicts. The verification report travels as **claims to audit**,
+     exactly as in a supervised run — autonomy does not upgrade self-grading into truth.
+     The branch/worktree location must reach the end of the chain: it is reported to the
+     user in the Autonomous Final Report as an artifact they own.
+
+If a worktree was created, do NOT remove it — `/set-review` handles cleanup (and under
+`--autonomous`, no phase removes it; the user is handed the location instead).

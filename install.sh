@@ -46,6 +46,9 @@ warn()  { echo -e "${YELLOW}[SET]${NC} $1"; }
 error() { echo -e "${RED}[SET]${NC} $1"; }
 bold()  { echo -e "${BOLD}$1${NC}"; }
 
+# Bold WITHOUT escape interpretation — for lines carrying changelog-derived text.
+bold_literal() { printf '%b%s%b\n' "$BOLD" "$1" "$NC"; }
+
 # ---------------------------------------------------------------------------
 # Preflight checks
 # ---------------------------------------------------------------------------
@@ -262,8 +265,25 @@ bold "-------------------------------"
 #      via `curl | bash`. One network call instead of one-per-file.
 mkdir -p "$COMMANDS_DIR/references"
 
+# Single source of truth for reference files — the install loop and the Step 5
+# verify loop both read this. Adding a reference means editing this line only.
+SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode"
+
 # ERRORS may be referenced before Step 5 initializes it; ensure it exists.
 ERRORS=${ERRORS:-0}
+
+# Version notification: read the PREVIOUSLY installed version before the copy
+# step below overwrites it. Never allowed to fail the install — every read
+# degrades to empty on any error.
+VERSION_FILE="$COMMANDS_DIR/.set-version"
+# First line only, reduced to version-safe characters: a CRLF file would otherwise
+# never compare equal, and this value is printed to a terminal.
+PREV_VERSION="$(head -n1 "$VERSION_FILE" 2>/dev/null | tr -cd 'A-Za-z0-9.+_-' || true)"
+
+# Clear any prior digest up front: /set-update reads this file with no knowledge
+# of whether THIS run succeeded, so a leftover would be reported as fresh news
+# for an install that just failed. It exists only when this run writes it.
+rm -f "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
 
 # Resolve the directory this script lives in (empty/unreliable under curl|bash).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
@@ -275,6 +295,9 @@ if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/plugins/set" ]; then
   info "Using local checkout: $PLUGIN_ROOT"
 else
   # No checkout (curl | bash). Download the repo ONCE.
+  # KNOWN LIMITATION: this tarball is unauthenticated — a mutable refs/heads/main
+  # with no pinned ref, checksum, or signature. Everything it carries, CHANGELOG.md
+  # included, is untrusted input (see sanitize_digest).
   info "No local checkout — downloading SET once..."
   # Tolerate a blocked/failed mktemp (e.g. a sandbox) without aborting under set -e,
   # so we reach the clear guidance below instead of dying on a cryptic mktemp error.
@@ -305,6 +328,85 @@ else
   fi
 fi
 
+# Incoming version from the source tree, now that PLUGIN_ROOT is resolved.
+# plugin.json arrives with the unauthenticated tarball, so the version is untrusted:
+# same whitelist as PREV_VERSION, since it reaches both the printed banner and disk.
+NEW_VERSION=""
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
+  NEW_VERSION="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null \
+    | head -n1 | tr -cd 'A-Za-z0-9.+_-' || true)"
+fi
+
+# Digest bounds. CHANGELOG.md arrives with the unauthenticated tarball above, so
+# treat its text as untrusted: it is printed to a terminal and handed to
+# /set-update, which relays it into an LLM's context.
+DIGEST_MAX_BULLETS=10
+DIGEST_MAX_LINE=120
+
+# sanitize_digest — stdin to stdout. Strips ANSI escape sequences and control
+# characters, caps line length and line count. Never fails.
+sanitize_digest() {
+  LC_ALL=C sed 's/'$'\033''\[[0-9;?]*[ -\/]*[@-~]//g; s/'$'\033''[@-Z\\-_]//g' 2>/dev/null \
+    | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177' 2>/dev/null \
+    | awk -v max_line="$DIGEST_MAX_LINE" -v max_bullets="$DIGEST_MAX_BULLETS" '
+        n >= max_bullets { truncated = 1; next }
+        {
+          # ASCII marker only — awk length() counts bytes, so a multibyte "…" would overshoot max_line.
+          if (length($0) > max_line) $0 = substr($0, 1, max_line - 3) "..."
+          print
+          n++
+        }
+        END { if (truncated) print "  • ...more changes - see CHANGELOG.md" }
+      ' 2>/dev/null || true
+}
+
+# extract_changelog_section <version> <changelog-path>
+# Prints the body of "## [<version>]" up to (not including) the next "## [".
+# Empty output + zero exit on any failure (missing file, no matching section) —
+# this notification must never fail the install.
+extract_changelog_section() {
+  local version="$1" changelog="$2"
+  [ -f "$changelog" ] || return 0
+  awk -v ver="$version" '
+    BEGIN { found=0; heading="## [" ver "]" }
+    /^## \[/ {
+      if (found) exit
+      if (index($0, heading) == 1) { found=1; next }
+      next
+    }
+    found { print }
+  ' "$changelog" 2>/dev/null || true
+}
+
+# changelog_headline <version> <changelog-path>
+# Prints the text after the separator in "## [<ver>] — <headline>" (em-dash or
+# ASCII hyphen). Empty when the heading carries no separated headline.
+changelog_headline() {
+  local version="$1" changelog="$2"
+  [ -f "$changelog" ] || return 0
+  awk -v ver="$version" '
+    BEGIN { heading="## [" ver "]" }
+    index($0, heading) == 1 {
+      rest = substr($0, length(heading) + 1)
+      if (sub(/^[[:space:]]*(—|-)[[:space:]]*/, "", rest) && rest != "") print rest
+      exit
+    }
+  ' "$changelog" 2>/dev/null | sanitize_digest || true
+}
+
+# changelog_digest <version> <changelog-path>
+# One "  • " line per top-level `- **lead**` bullet in the version's section,
+# bounded and sanitized. A full changelog section is release-note prose; this is
+# the scannable form.
+changelog_digest() {
+  local version="$1" changelog="$2"
+  extract_changelog_section "$version" "$changelog" \
+    | grep '^- \*\*' 2>/dev/null \
+    | sed 's/^- \*\*\([^*]*\)\*\*.*/  • \1/' 2>/dev/null \
+    | sed 's/[.:]$//' 2>/dev/null \
+    | sanitize_digest || true
+}
+
 # install_file <src-path-under-plugins/set/> <dest-path-under-COMMANDS_DIR>
 install_file() {
   local rel="$1" dest="$2"
@@ -329,9 +431,18 @@ if [ -n "$PLUGIN_ROOT" ]; then
   install_file "commands/update.md" "set-update.md"
 
   # Reference files (under plugins/set/references/, installed under references/).
-  install_file "references/enhanced-builder-prompt.md" "references/enhanced-builder-prompt.md"
-  install_file "references/enhanced-qa-prompt.md"      "references/enhanced-qa-prompt.md"
-  install_file "references/learn-entry-format.md"      "references/learn-entry-format.md"
+  for ref in $SET_REFERENCES; do
+    install_file "references/$ref.md" "references/$ref.md"
+  done
+fi
+
+# Capture the changelog digest while the source tree still exists — under
+# `curl | bash` PLUGIN_ROOT lives inside DOWNLOAD_TMP, removed on the next line.
+WHATS_NEW=""
+WHATS_NEW_HEADLINE=""
+if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
+  WHATS_NEW_HEADLINE="$(changelog_headline "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
+  WHATS_NEW="$(changelog_digest "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
 fi
 
 # Clean up any downloaded tree.
@@ -403,7 +514,7 @@ for cmd in set-init set-design set-plan set-build set-review set-learn set-updat
   fi
 done
 
-for ref in enhanced-builder-prompt enhanced-qa-prompt learn-entry-format; do
+for ref in $SET_REFERENCES; do
   if [ -f "$COMMANDS_DIR/references/$ref.md" ]; then
     info "Reference: $ref.md"
   else
@@ -426,6 +537,53 @@ else
 fi
 bold "============================================"
 echo ""
+
+# Version notification. Write-after-success + "What's new" — never allowed to
+# fail or affect ERRORS/exit code; every step is guarded.
+#
+# .set-whatsnew is written on EVERY successful run, carrying an explicit
+# STATUS line, so /set-update can tell "installed, nothing changed" from
+# "install failed" — the file is absent only when this run failed or the
+# commands dir was unwritable.
+if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
+  echo "$NEW_VERSION" > "$VERSION_FILE" 2>/dev/null || true
+
+  if [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
+    if [ -n "$PREV_VERSION" ]; then
+      VERSION_LINE="SET updated $PREV_VERSION → $NEW_VERSION"
+    else
+      VERSION_LINE="SET $NEW_VERSION installed"
+    fi
+    [ -n "$WHATS_NEW_HEADLINE" ] && VERSION_LINE="$VERSION_LINE — $WHATS_NEW_HEADLINE"
+
+    bold ""
+    bold_literal "$VERSION_LINE"
+    if [ -n "$WHATS_NEW" ]; then
+      printf '%s\n' "$WHATS_NEW"
+      echo ""
+      info "Full notes: CHANGELOG.md (or the repo's Releases page)"
+    fi
+    echo ""
+
+    # Hand the digest to /set-update, which reports it in the conversation —
+    # the installer's own stdout is not where a Claude Code user reads it.
+    {
+      printf 'STATUS: install-ok version-changed\n'
+      printf '%s\n' "$VERSION_LINE"
+      [ -n "$WHATS_NEW" ] && printf '%s\n' "$WHATS_NEW"
+    } > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
+  else
+    {
+      printf 'STATUS: install-ok no-change\n'
+      printf 'SET %s reinstalled — already current, no changelog entry to report.\n' "$NEW_VERSION"
+    } > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
+  fi
+elif [ "$ERRORS" -eq 0 ]; then
+  # Clean install, but the incoming version was unreadable — record the success
+  # without claiming a version.
+  printf 'STATUS: install-ok version-unknown\n' \
+    > "$COMMANDS_DIR/.set-whatsnew" 2>/dev/null || true
+fi
 
 if [ "$ERRORS" -ne 0 ]; then
   error "SET did not install cleanly. Check the problems listed above. Common causes:"
