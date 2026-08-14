@@ -169,10 +169,10 @@ Read `references/learn-entry-format.md` for entry format rules and examples befo
 [2026-08-13] (unverified cycle) Some learning...
 ```
 
-The tag exists because `/set-learn` runs before any human has browser-verified the
-work, so a learning captured here may encode a mistake as a pattern. Tagged entries stay
-traceable and removable rather than anonymous. Shards are plain markdown — a human can
-delete or promote the entry after verifying.
+The tag exists because `/set-learn` runs before any human has checked the work against
+this project's acceptance bar, so a learning captured here may encode a mistake as a
+pattern. Tagged entries stay traceable and removable rather than anonymous. Shards are
+plain markdown — a human can delete or promote the entry after verifying.
 
 #### 3f: Global-importance learnings → CLAUDE.md
 
@@ -337,9 +337,11 @@ or skip the report. Instead:
 - Fill the report's remaining fields normally. Say which phase halted and why in place
   of any section the chain never produced.
 
-End with the unchecked handoff items the template carries — browser verification, the
-push decision, and removing the build worktree. Never present the run as done: nothing
-has been verified in a browser and nothing has been pushed.
+End with the unchecked handoff items the template carries — this project's acceptance
+check, the push decision, and removing the build worktree. Name the acceptance check
+concretely from `CLAUDE.md` (run the CLI, hit the endpoint, exercise the page, run the
+notebook); never assume a browser. Never present the run as done: no human has verified
+it and nothing has been pushed.
 
 ## Maintenance Rules
 

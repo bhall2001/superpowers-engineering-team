@@ -113,7 +113,15 @@ Autonomous Final Report; anything dropped mid-chain is missing from what the use
 - claims the work is done or verified
 
 These come from project policy, not from supervision. The chain ends by handing
-the human the browser check and the push decision.
+the human the acceptance check and the push decision.
+
+**The acceptance check is whatever THIS project uses to decide a change actually
+works.** Automated tests are not it — the builders already ran those, and the run is
+reporting its own homework. Read `CLAUDE.md` for how the project defines done and name
+that specific step: exercising the feature in a browser for a web app, running the CLI
+for a command-line tool, hitting the endpoint for a service, running the notebook, doing
+the manual QA pass. If `CLAUDE.md` says nothing, write "Verify the change works" and let
+the human decide what that means. Never assume a browser.
 
 ## Autonomous Final Report
 
@@ -138,7 +146,7 @@ Emitted once, by `/set-learn`, at the end of a chained run:
 - Shards written: {list}
 
 ### Not done for you
-- [ ] Browser-verify the change
+- [ ] {this project's acceptance check — see above; never assume a browser}
 - [ ] Push / open a PR (never done autonomously)
 - [ ] Remove the build worktree at {location} when you are done with it
 ```

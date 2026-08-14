@@ -174,7 +174,10 @@ pass. It stops when the review is clean, when a round turns up no new findings, 
 2 rounds. A `BLOCK` verdict or a failed lens halts immediately.
 
 An autonomous run **never pushes, opens a PR, merges, or claims the work verified.** It
-ends by handing you the browser check and the push decision.
+ends by handing you your project's acceptance check and the push decision — whatever
+`CLAUDE.md` says decides that a change actually works: running the CLI, hitting the
+endpoint, exercising the page, a manual QA pass. Automated tests do not count; the run
+already ran those and would be grading its own homework.
 
 Autonomy carries in the session only — nothing is written to disk, so a later manual
 command is never silently auto-chained. Runs are not resumable after a crash; re-invoke

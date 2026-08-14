@@ -99,8 +99,10 @@ for per-agent progress output.
 > and again fixing it. Prefer starting autonomy at `/set-plan`, from a human-approved
 > spec.
 
-Autonomous runs never push, open a PR, or merge. They end by handing you the browser
-check and the push decision.
+Autonomous runs never push, open a PR, or merge. They end by handing you your project's
+acceptance check and the push decision — whatever `CLAUDE.md` says decides a change
+actually works, be that running the CLI, hitting the endpoint, exercising the page, or a
+manual QA pass.
 
 See [`docs/commands.md`](docs/commands.md#switches) for the full switch reference.
 
