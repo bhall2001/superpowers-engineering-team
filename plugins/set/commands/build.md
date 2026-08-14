@@ -392,7 +392,7 @@ request shutdown, and report the blocker to the user.
 Invoke the **`Workflow` tool** with a script that executes the brief. The script must:
 
 1. **Respect the dependency graph.** Tasks with no `Blocked by` run in parallel; dependent tasks wait. Use `pipeline()` / `parallel()` honoring each task's `Blocked by`.
-2. **Spawn one builder `agent()` per task**, passing `agentType` = the task's `Specialist` (omit / generic builder when "generic"). Inject the task's Phase-A context bundle as the prompt. Instruct the builder to run the TDD loop (red → green → refactor → lint → typecheck → self-review) and commit atomically on success.
+2. **Spawn one builder `agent()` per task**, passing `agentType` = the task's `Specialist` (omit / generic builder when "generic"). Inject the task's Phase-A context bundle as the prompt. Instruct the builder to run the TDD loop (red → green → refactor → lint → typecheck → self-review) and commit when its work is coherent — **not** one forced commit per task, since you also take checkpoint commits and the two would split or duplicate each other.
 3. **Verify each output against the rubric before folding back**, using a verifier `agent({schema})` so each task returns a validated structured verdict, e.g.:
    ```
    { task: string, passed: boolean, tdd_followed: boolean, spec_compliant: boolean,
@@ -419,7 +419,44 @@ You take **checkpoint commits** as the build proceeds. They are the only thing t
 crashed run resumable: a task is durable when a checkpoint on the branch names it, not when
 its verdict says it passed.
 
-Full contract: `references/run-store.md`. What you must do:
+**Read `references/run-store.md` before your first checkpoint.**
+
+### How to take one
+
+Checkpoints are taken by the CLI, never by hand-written git commands — it writes the
+commit *and* the store row together, with the trailers resume depends on. A plain
+`git commit -m "checkpoint"` produces no trailers, and every resume then finds an empty
+skip set with no error surfaced.
+
+```bash
+BIN=~/.claude/set-runs/bin/set-run.mjs
+
+# once, at build start (records the run, returns run_id)
+node "$BIN" init --worktree "$(git rev-parse --show-toplevel)" --branch "$(git branch --show-current)" \
+                 --plan .claude/plans/{feature}.md --pid $PPID
+
+# after each verdict returns
+node "$BIN" task --run {run-id} --task T-{slug} --status passed|failed
+
+# at a checkpoint
+node "$BIN" checkpoint --run {run-id} --phase {phase} --reason phase-boundary|judgment|backstop
+
+# when you decline one — records why, so a long gap is diagnosable
+node "$BIN" checkpoint --run {run-id} --phase {phase} --decline --rationale "2 trivial tasks"
+
+# is the 30-minute backstop due?
+node "$BIN" due --run {run-id}
+
+# at the end
+node "$BIN" release --run {run-id}
+```
+
+Run these **from the repo root** — `checkpoint` stages relative to the worktree it was
+given. If `.claude/set/config.json` has `sqlite_flag`, pass it to `node` before the script
+path. Every command prints JSON; a non-zero exit means the store write failed, so report it
+rather than continuing silently.
+
+What you must do:
 
 **At every phase boundary — mandatory.** All tasks have returned, the tree is coherent.
 Never skip this one.
@@ -461,23 +498,62 @@ under parallel builders. A resumed run must expect baseline tests to fail for re
 unrelated to any task, and must report that as a resumed-from-partial-checkpoint condition,
 not a task regression.
 
-**Ticking the plan.** After each verdict returns, update the plan's `## Progress` section:
-`- [x] T-{slug} — passed {ISO time} (checkpoint {n})`. This is human-facing status only —
-nothing parses it. Builders never edit the plan file.
+**Ticking the plan.** After each verdict returns, update the plan's `## Progress` section.
+At verdict time there is no checkpoint number yet, so write it without one:
+
+```
+- [x] T-{slug} — passed {ISO time}                    ← verified, not yet durable
+- [x] T-{slug} — passed {ISO time} (checkpoint 3)     ← after a checkpoint captures it
+- [ ] T-{slug} — failed {ISO time}: {one-line reason}
+```
+
+Add the `(checkpoint n)` annotation to the tasks a checkpoint just captured — the CLI
+returns their slugs in its `tasks` array. A tick without one means "verified but not yet
+durable", which is exactly what resume will re-dispatch.
+
+This is human-facing status only — nothing parses it. Builders never edit the plan file.
 
 ## Resuming a Crashed Run
 
+### What runs and what is skipped
+
+`--resume` enters differently from a fresh build. Explicitly:
+
+| Section | On `--resume` |
+|---|---|
+| Before Starting (Serena, plan, CLAUDE.md, agents) | **Runs** — you still need the plan and the agent roster |
+| Resolve Worktree Mode + Step 1 (create worktree) | **SKIPPED** — the worktree already exists; `git worktree add` on an existing branch fails |
+| 1d/1e (install deps, baseline tests) | **Runs**, as resume step 4 below |
+| Agent Team Availability Gate | **Runs**, unless `--use-workflow` was passed |
+| Phase A (compile the brief) | **Runs** — but only for tasks being re-dispatched |
+| Phase B / C | Normal |
+
+Resume steps 1-3 run **before** Phase A, since Phase A only needs briefs for tasks that
+survive the skip set.
+
 With `--resume {run-id}`, you rebuild state instead of starting fresh. In order:
 
-1. **Assert location.** `git rev-parse --show-toplevel` must equal the run's
-   `worktree_path`; the current branch must equal its `branch`. Wrong worktree, wrong
-   branch, and detached HEAD each refuse with a distinct message. Do not proceed — a
+Steps 1-3 are one CLI call — it asserts location, claims the worktree, and returns the
+skip set:
+
+```bash
+node ~/.claude/set-runs/bin/set-run.mjs resume --run {run-id} --tasks T-a,T-b,T-c
+```
+
+Pass every task slug from the plan, comma-separated. It returns `durable`, `redispatch`,
+`unknown`, `reverted`, `rewritten`, `checkpoint_sha`, and `dirty_files`.
+
+1. **Assert location.** Compares `git rev-parse --show-toplevel` (resolved through
+   symlinks — `/tmp` is `/private/tmp` on macOS) against the run's `worktree_path`, and
+   the current branch against its `branch`. Wrong worktree, wrong branch, and detached
+   HEAD each refuse with a distinct message. A non-zero exit here means **stop** — a
    resume in the wrong repo dispatches builders onto whatever branch is checked out.
-2. **Probe liveness, then claim the worktree.** If a live run holds it, refuse and name the
-   holder plus `set-run.mjs release {run-id}`.
-3. **Build the skip set** from checkpoint trailers on the current branch. Tasks named there
-   are durable. An amended or rebased checkpoint still resolves — a stale sha is advisory,
-   never a refusal. A reverted checkpoint has its tasks dropped and re-dispatched.
+2. **Claim the worktree.** If a live run holds it, the call refuses and names the holder;
+   report that plus `node ~/.claude/set-runs/bin/set-run.mjs release {run-id}`.
+3. **Skip set** comes back in `durable`. An amended or rebased checkpoint still resolves —
+   a stale sha appears in `rewritten` as advisory, never a refusal. A reverted checkpoint
+   appears in `reverted` and its tasks move to `redispatch`. Slugs in `unknown` were
+   committed but are absent from the current plan: report them, schedule nothing.
 4. **Run setup before anything else** — dependency install and baseline tests. An
    interrupted install may have left dependencies half-written. Re-run the Agent Team
    Availability Gate; it is deliberately not persisted.
@@ -494,8 +570,10 @@ With `--resume {run-id}`, you rebuild state instead of starting fresh. In order:
 run requires `--autonomous` again, explicitly — a stale run record can never silently
 re-enter autonomous mode.
 
-Report on the opening phase-boundary line: `Resumed {run-id} — {n} tasks durable, {m} to
-re-dispatch`.
+The counts are not known when the `▶` line is emitted (flags are parsed before step 3), so
+report them as an **annotation** on that line once step 3 returns — the same treatment as
+the other `--autonomous`-only reports: `Resumed {run-id} — {n} tasks durable, {m} to
+re-dispatch`. Do not emit a second boundary line.
 
 ## Phase C — Build Gate-Back (you own this)
 

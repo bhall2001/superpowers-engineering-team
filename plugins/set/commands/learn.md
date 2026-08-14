@@ -212,8 +212,12 @@ If the project structure changed (new directories, new major modules), update `C
 Derive which agents actually worked this cycle from git log — do NOT read all agent files:
 
 ```bash
-git log --oneline -20 --format="%s %b"
+git log --oneline -20 --format="%s %b" --invert-grep --grep="^checkpoint: "
 ```
+
+**Exclude checkpoint commits** — the lead authors those during a build, and on a run that
+checkpoints often they crowd builder commits out of the 20-commit window, leaving no agents
+identifiable and silently skipping agent evolution.
 
 Look for agent names in commit messages (builders sign commits with their agent name or task descriptions reference specialists). Task history may also help — from `TaskList()` on the default Agent Team path, or the workflow's per-task verdicts in a `--use-workflow` run — if available; `git log` is the primary signal.
 

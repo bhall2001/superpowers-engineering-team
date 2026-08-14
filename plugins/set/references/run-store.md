@@ -40,10 +40,19 @@ pathspec, so a stray copy inside a repo is never swept into a checkpoint.
 probes once and records the flag in `.claude/set/config.json` as `sqlite_flag` if needed.
 If neither works, durable runs are unavailable and the rest of SET is unaffected.
 
-> **Build status.** `plugins/set/bin/` is implemented and tested. The orchestrator side —
-> checkpoint policy in `build.md`, `sqlite_flag` in `install.sh` — is not yet wired, so
-> `checkpoint_backstop_minutes` and `sqlite_flag` describe the intended contract rather
-> than shipped behavior. Remove this note when both land.
+## The CLI
+
+Everything below is driven through one entry point, installed at
+`~/.claude/set-runs/bin/set-run.mjs`. The orchestrator is a model running a slash command:
+it cannot import modules, only shell out.
+
+```
+init | claim | task | checkpoint | due | resume | heartbeat | release | list
+```
+
+Every command prints JSON on stdout; errors print JSON on stderr with a non-zero exit.
+Pass `--store <path>` or set `SET_RUN_STORE` to override the default
+`~/.claude/set-runs/runs.db`. Invocations: `build.md`, "How to take one".
 
 ## Schema
 
@@ -70,12 +79,23 @@ Two rules are constraints, not prose:
 
 `/set-plan` assigns each task a slug derived from its **title**, not its position:
 
-- `T-` prefix, kebab-case, lowercase, non-alphanumerics collapsed to `-`, capped at 40
-  characters.
-- **On collision, append a 3-character content hash of the full untruncated title** —
-  never an ordinal. An ordinal is assigned by position, so re-planning in a different
-  order swaps which task owns `-2`, and a trailer naming it then resolves to the wrong
-  work.
+Exact algorithm (a slug that differs between runs silently re-dispatches finished work):
+
+1. Lowercase the title.
+2. Replace every run of `[^a-z0-9]+` with a single `-`.
+3. Strip leading and trailing `-`.
+4. Truncate to **36** characters.
+5. Strip any trailing `-` again.
+6. Prefix `T-`.
+
+**On collision within the same plan**, append `-` plus the first 3 hex characters of
+`sha256(exact original title)` to **both** colliding slugs — never an ordinal. An ordinal
+is assigned by position, so re-planning in a different order swaps which task owns `-2`,
+and a trailer naming it then resolves to the wrong work.
+
+```bash
+printf '%s' "$TITLE" | shasum -a 256 | cut -c1-3
+```
 - A task whose title is unchanged keeps its slug across re-planning. A **re-titled** task
   is a new task and gets a new slug — correct, since its work changed, but it will
   re-dispatch.

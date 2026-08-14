@@ -14,7 +14,7 @@ path, branch range).
 - `--verbose` — report each agent spawn and return.
 
 Flags may appear in any order and in combination with existing flags
-(`--light`, `--use-workflow`, `--no-worktree`).
+(`--light`, `--use-workflow`, `--no-worktree`, `--resume`).
 
 `--autonomous` is valid on all five cycle phases: `/set-design`, `/set-plan`,
 `/set-build`, `/set-review`, and `/set-learn`.
@@ -88,10 +88,22 @@ Resolve the next command from `~/.claude/commands/set-{phase}.md`. If that file
 is missing, halt and report the missing file — do not attempt the phase from
 memory.
 
-**No state is written to disk.** The flags live in the conversation only. A
+**Autonomy is never written to disk.** The flags live in the conversation only. A
 session that ends drops autonomy naturally, so a later manual `/set-build` can
-never be silently auto-chained. Autonomous runs are therefore NOT resumable
-after a crash; recovery is a manual re-invoke from the last completed phase.
+never be silently auto-chained.
+
+**Run state is a separate matter, and it IS durable.** `/set-build` records progress
+in `~/.claude/set-runs/` and takes checkpoint commits as it goes, so a crashed build
+resumes with `/set-build --resume {run-id}` instead of redoing finished work. See
+`references/run-store.md`.
+
+The two do not conflict, because resuming never restores autonomy: `--resume` alone
+runs supervised, and continuing an autonomous chain requires typing `--autonomous`
+again. A stale run record can never silently re-enter autonomous mode — which is the
+property the conversation-only flag was protecting.
+
+Phases other than `/set-build` are not resumable; recovery there is a manual re-invoke
+from the last completed phase.
 
 Each phase still writes its normal artifacts (spec, plan, commits, shards).
 Those artifacts are the handoff between phases, exactly as in a supervised run.

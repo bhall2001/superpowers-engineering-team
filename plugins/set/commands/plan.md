@@ -105,12 +105,32 @@ High-level strategy. Why this over alternatives.
 
 ### Plan Design Principles
 
-**Task IDs are stable slugs, not positions.** Every task gets `T-{slug}` derived from its
-title: lowercase, non-alphanumerics collapsed to `-`, capped at 40 characters. On collision,
-append a 3-character content hash of the **full untruncated** title (`T-add-schema-a3f`) —
-**never** an ordinal like `-2`. An ordinal is assigned by position, so re-planning in a
-different order swaps which task owns it, and a checkpoint trailer naming that slug then
-resolves to the wrong work.
+**Task IDs are stable slugs, not positions.** Compute `T-{slug}` from the task title with
+this exact algorithm — a slug that differs between two runs silently re-dispatches
+finished work, so follow it literally:
+
+1. Lowercase the title.
+2. Replace every run of `[^a-z0-9]+` with a single `-`.
+3. Strip leading and trailing `-`.
+4. Truncate to **36** characters.
+5. Strip any trailing `-` again (truncation may have left one).
+6. Prefix `T-`. The final ID is at most 38 characters, leaving room for a suffix.
+
+**On collision with another task in the same plan**, append `-` plus the first 3 hex
+characters of `sha256(exact original title, UTF-8, untrimmed)` to **both** colliding
+slugs — never to just one, and **never** an ordinal like `-2`. An ordinal is assigned by
+position, so re-planning in a different order swaps which task owns it and a checkpoint
+trailer then resolves to the wrong work.
+
+```bash
+# the hash, exactly:
+printf '%s' "$TITLE" | shasum -a 256 | cut -c1-3
+```
+
+Collision is judged **within the current plan only**. If a re-plan introduces a task that
+collides with an existing one, both get suffixes — the pre-existing task's slug changes,
+so its completed work re-dispatches once. Prefer distinct titles in the first 36 characters
+to avoid this.
 
 Slugs are what let a plan be re-planned without breaking a crashed run's resume: a task
 whose title is unchanged keeps its slug. A **re-titled** task is a new task with a new slug
