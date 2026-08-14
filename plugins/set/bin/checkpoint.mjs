@@ -52,22 +52,71 @@ function nextSequence(db, runId) {
   return row.seq + 1;
 }
 
-// A stray run store inside a worktree must never land in a checkpoint. The `**/`
-// forms matter: a nested copy escapes a bare `runs.db-wal` pathspec.
+// Never committable, whatever the allow list says. The `**/` forms matter: a
+// nested copy escapes a bare pathspec.
+//
+// Credentials are here because a directory-shaped allow entry ("src/") would
+// otherwise sweep in any untracked secret beneath it, and plan `Files` fields
+// are model-generated — "src/" is a natural way for a model to write one.
 const NEVER_COMMIT = [
-  ":(glob,exclude)**/runs.db",
-  ":(glob,exclude)**/runs.db-wal",
-  ":(glob,exclude)**/runs.db-shm",
-  ":(glob,exclude)runs.db",
-  ":(glob,exclude)runs.db-wal",
-  ":(glob,exclude)runs.db-shm",
-  ":(glob,exclude)**/.worktrees/**",
-  ":(glob,exclude).worktrees/**",
-];
+  "runs.db",
+  "runs.db-wal",
+  "runs.db-shm",
+  ".worktrees/**",
+  "**/runs.db",
+  "**/runs.db-wal",
+  "**/runs.db-shm",
+  "**/.worktrees/**",
+  ".env",
+  ".env.*",
+  "**/.env",
+  "**/.env.*",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/*.keystore",
+  "**/id_rsa*",
+  "**/id_dsa*",
+  "**/id_ecdsa*",
+  "**/id_ed25519*",
+  "**/.npmrc",
+  "**/.netrc",
+  "**/.pgpass",
+  "**/credentials",
+  "**/.aws/**",
+  "**/.ssh/**",
+].map((pattern) => `:(glob,exclude)${pattern}`);
 
 /** Repo root, so pathspecs never depend on the caller's cwd. */
 function repoRoot(cwd) {
   return git(cwd, ["rev-parse", "--show-toplevel"]);
+}
+
+/**
+ * Parse `git status --porcelain=v1 -z` into { index, worktree, paths }.
+ *
+ * A rename or copy emits TWO NUL-separated records: `R  <new>` then a BARE
+ * `<old>` with no XY prefix. Splitting flatly and slicing 3 off every record
+ * mangles the origin path — `src/old.ts` became `/old.ts`, which then looked
+ * like partial staging and blocked every checkpoint for the rest of the run.
+ */
+export function parsePorcelainZ(out) {
+  const records = out.split("\0");
+  const entries = [];
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    if (record.length < 4) continue;
+    const index = record[0];
+    const worktree = record[1];
+    if (index === "!" && worktree === "!") continue; // ignored
+    const paths = [record.slice(3)];
+    if (index === "R" || index === "C" || worktree === "R" || worktree === "C") {
+      const origin = records[++i];
+      if (origin) paths.push(origin);
+    }
+    entries.push({ index, worktree, paths });
+  }
+  return entries;
 }
 
 /**
@@ -95,22 +144,22 @@ export function checkpointPaths(cwd, allow = null) {
     ...NEVER_COMMIT,
   ]);
 
-  const changed = [];
-  for (const entry of out.split("\0")) {
-    if (entry.length < 4) continue;
-    if (entry.slice(0, 2) === "!!") continue; // ignored
-    changed.push(entry.slice(3));
-  }
+  // A rename's origin path is already staged as a deletion and no longer exists
+  // on disk, so `git add` would fail on it. It still belongs in `changed` for
+  // ownership reporting, but never in the add list.
+  const entries = parsePorcelainZ(out);
+  const changed = entries.flatMap((entry) => entry.paths);
+  const addable = new Set(entries.map((entry) => entry.paths[0]));
 
   if (!allow) return { root, paths: [], foreign: changed, unscoped: true };
 
   const owned = new Set(allow);
-  const isOwned = (path) =>
-    owned.has(path) || [...owned].some((entry) => entry.endsWith("/") && path.startsWith(entry));
+  const dirs = [...owned].filter((entry) => entry.endsWith("/"));
+  const isOwned = (path) => owned.has(path) || dirs.some((entry) => path.startsWith(entry));
 
   return {
     root,
-    paths: changed.filter(isOwned),
+    paths: changed.filter((path) => isOwned(path) && addable.has(path)),
     foreign: changed.filter((path) => !isOwned(path)),
     unscoped: false,
   };
@@ -125,13 +174,12 @@ export function foreignStagedPaths(cwd) {
   const root = repoRoot(cwd);
   const out = git(root, ["status", "--porcelain=v1", "-z", "--", "."]);
   const staged = [];
-  for (const entry of out.split("\0")) {
-    if (entry.length < 4) continue;
-    const index = entry[0];
-    const worktree = entry[1];
+  for (const { index, worktree, paths } of parsePorcelainZ(out)) {
     // Index differs from HEAD *and* worktree differs from index: partial staging.
+    // A rename is a fully-staged move, not partial work, so it is not a conflict.
+    if (index === "R" || index === "C") continue;
     if (index !== " " && index !== "?" && worktree !== " " && worktree !== "?") {
-      staged.push(entry.slice(3));
+      staged.push(paths[0]);
     }
   }
   return staged;

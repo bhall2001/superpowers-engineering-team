@@ -20,7 +20,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { openStore } from "./store.mjs";
-import { initRun, heartbeat, listRuns } from "./run.mjs";
+import { initRun, heartbeat, listRuns, canonicalPath } from "./run.mjs";
 import { claimWorktree, probeHolders, releaseRun } from "./claim.mjs";
 import {
   recordVerdict,
@@ -56,6 +56,35 @@ function require_(flags, ...names) {
   if (missing.length > 0) {
     throw new Error(`missing required flag${missing.length > 1 ? "s" : ""}: --${missing.join(", --")}`);
   }
+  // `--branch` with no value parses as boolean true and would bind as a
+  // non-bindable JS boolean, surfacing as "cannot be bound to SQLite parameter 5"
+  // — a message naming a positional index tells no one which flag was wrong.
+  const valueless = names.filter((name) => flags[name] === true);
+  if (valueless.length > 0) {
+    throw new Error(`missing value for flag${valueless.length > 1 ? "s" : ""}: --${valueless.join(", --")}`);
+  }
+}
+
+function oneOf(flags, name, allowed, fallback = undefined) {
+  const value = flags[name] ?? fallback;
+  if (!allowed.includes(value)) {
+    throw new Error(`--${name} must be ${allowed.join("|")}, got: ${flags[name]}`);
+  }
+  return value;
+}
+
+function positiveNumber(flags, name, fallback) {
+  const raw = flags[name] ?? fallback;
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`--${name} must be a non-negative number, got: ${flags[name]}`);
+  }
+  return value;
+}
+
+function assertRunExists(db, runId) {
+  const row = db.prepare("SELECT 1 FROM run WHERE run_id = ?").get(runId);
+  if (!row) throw new Error(`no such run: ${runId}`);
 }
 
 function openAt(flags) {
@@ -110,6 +139,9 @@ const COMMANDS = {
 
   task(db, flags) {
     require_(flags, "run", "task", "status");
+    // Unvalidated, `--status pass` records a PASSING task as failed and reports
+    // the typo back as accepted — its work is then redone on resume.
+    oneOf(flags, "status", ["passed", "failed", "running"]);
     if (flags.status === "running") {
       markRunning(db, flags.run, flags.task);
       return { task: flags.task, status: "running" };
@@ -126,6 +158,11 @@ const COMMANDS = {
 
   checkpoint(db, flags) {
     require_(flags, "run", "phase");
+    // Validate BEFORE any git call. takeCheckpoint commits to git and only then
+    // inserts the row, which is safe for a crash but not for a caller error: an
+    // invalid reason left a trailer-bearing commit on the branch that
+    // resolveSkipSet counts as durable, while the DB had no checkpoint at all.
+    oneOf(flags, "reason", ["phase-boundary", "judgment", "backstop"], "judgment");
     if (flags.decline) {
       require_(flags, "rationale");
       const declined = declineCheckpoint(db, flags.run, {
@@ -137,6 +174,14 @@ const COMMANDS = {
     }
     const run = db.prepare("SELECT worktree_path FROM run WHERE run_id = ?").get(flags.run);
     if (!run) throw new Error(`no such run: ${flags.run}`);
+    // --cwd must stay inside the run's own worktree. Unchecked, a checkpoint
+    // re-roots its pathspecs to another repository and commits there, bypassing
+    // the worktree claim entirely (the lock is keyed on worktree_path).
+    if (flags.cwd && canonicalPath(flags.cwd) !== canonicalPath(run.worktree_path)) {
+      throw new Error(
+        `--cwd ${flags.cwd} is outside run ${flags.run}'s worktree (${run.worktree_path})`,
+      );
+    }
     return takeCheckpoint(db, flags.run, {
       phase: flags.phase,
       reason: flags.reason ?? "judgment",
@@ -153,7 +198,9 @@ const COMMANDS = {
 
   due(db, flags) {
     require_(flags, "run");
-    const limit = Number.parseFloat(flags.minutes ?? "30");
+    // NaN made `elapsed >= limit` always false, so the backstop silently never
+    // fired for the rest of the run — the exact failure it exists to prevent.
+    const limit = positiveNumber(flags, "minutes", "30");
     const elapsed = minutesSinceCheckpoint(db, flags.run);
     return { minutes_since: Math.round(elapsed * 10) / 10, backstop: limit, due: elapsed >= limit };
   },
@@ -188,14 +235,20 @@ const COMMANDS = {
 
   heartbeat(db, flags) {
     require_(flags, "run");
+    // A bare UPDATE on a typo'd id reported ok:true forever while the real run
+    // went stale and lost its worktree — the silent failure the heartbeat exists
+    // to detect, defeated by the API surface.
+    assertRunExists(db, flags.run);
     heartbeat(db, flags.run);
     return { run_id: flags.run, ok: true };
   },
 
   release(db, flags) {
     require_(flags, "run");
-    releaseRun(db, flags.run, flags.status ?? "complete");
-    return { run_id: flags.run, status: flags.status ?? "complete" };
+    assertRunExists(db, flags.run);
+    const status = oneOf(flags, "status", ["complete", "crashed"], "complete");
+    releaseRun(db, flags.run, status);
+    return { run_id: flags.run, status };
   },
 
   list(db) {

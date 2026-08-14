@@ -7,7 +7,13 @@ import { execFileSync } from "node:child_process";
 
 import { openStore } from "../bin/store.mjs";
 import { initRun } from "../bin/run.mjs";
-import { recordVerdict, takeCheckpoint, declineCheckpoint, pendingCapture } from "../bin/checkpoint.mjs";
+import {
+  recordVerdict,
+  takeCheckpoint,
+  declineCheckpoint,
+  pendingCapture,
+  foreignStagedPaths,
+} from "../bin/checkpoint.mjs";
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -214,9 +220,10 @@ test("a checkpoint never sweeps unrelated files out of the user's worktree", () 
     const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
     assert.deepEqual(files, ["real.txt"], "only the run's own files may be committed");
 
-    for (const untouched of [".env.local", "scratch.txt"]) {
-      assert.ok(cp.foreign.includes(untouched), `must report what it left behind: ${untouched}`);
-    }
+    // scratch.txt is reported as left-behind; .env.local is excluded outright by
+    // NEVER_COMMIT, so it never even reaches the scan.
+    assert.ok(cp.foreign.includes("scratch.txt"), "must report what it left behind");
+    assert.ok(!cp.foreign.includes(".env.local"), "credentials are excluded, not merely unowned");
     // The store and other worktrees are excluded outright, never even reported.
     assert.ok(!cp.foreign.some((f) => f.includes("runs.db")));
     assert.ok(!cp.foreign.some((f) => f.startsWith(".worktrees/")));
@@ -279,6 +286,110 @@ test("gitignored files stay out of a checkpoint", () => {
     db.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a renamed file does not corrupt the path scan or block checkpointing", () => {
+  const dir = tempRepo();
+  try {
+    const db = openStore(storePath(dir));
+    const runId = seed(db, dir);
+
+    execFileSync("sh", [
+      "-c",
+      `cd ${JSON.stringify(dir)} && mkdir -p src && echo old > src/old.ts &&
+       git add -A && git commit -q -m seed && git mv src/old.ts src/new.ts`,
+    ]);
+    recordVerdict(db, runId, "T-a", { passed: true });
+
+    // `-z` emits a rename as `R  <new>` followed by a BARE <old>. Slicing 3 off
+    // that second record mangled it into "/old.ts", which then read as partial
+    // staging and refused every checkpoint for the rest of the run.
+    assert.deepEqual(foreignStagedPaths(dir), [], "a clean rename is not partial staging");
+
+    const cp = takeCheckpoint(db, runId, {
+      phase: "build",
+      reason: "judgment",
+      cwd: dir,
+      files: ["src/"],
+    });
+    assert.equal(cp.taken, true, "a rename must not block the checkpoint");
+
+    const files = git(dir, "show", "--name-status", "--format=", "HEAD");
+    assert.match(files, /src\/new\.ts/);
+    assert.ok(!cp.foreign.some((f) => f.startsWith("/")), `mangled path in foreign: ${cp.foreign}`);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a directory scope never sweeps in untracked credentials", () => {
+  const dir = tempRepo();
+  try {
+    const db = openStore(storePath(dir));
+    const runId = seed(db, dir);
+    recordVerdict(db, runId, "T-a", { passed: true });
+
+    execFileSync("sh", [
+      "-c",
+      `cd ${JSON.stringify(dir)} && mkdir -p src/config && echo 'AWS_SECRET=x' > src/.env &&
+       echo key > src/config/id_rsa && echo pem > src/config/server.pem && echo work > src/real.ts`,
+    ]);
+
+    // "src/" is a natural way for a model to write a plan's Files field.
+    const cp = takeCheckpoint(db, runId, {
+      phase: "build",
+      reason: "judgment",
+      cwd: dir,
+      files: ["src/"],
+    });
+
+    const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
+    assert.ok(files.includes("src/real.ts"));
+    for (const secret of ["src/.env", "src/config/id_rsa", "src/config/server.pem"]) {
+      assert.ok(!files.includes(secret), `credential committed: ${secret}`);
+    }
+    assert.equal(cp.taken, true);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a checkpoint captures only its own run's tasks", () => {
+  const dirA = tempRepo();
+  const dirB = tempRepo();
+  try {
+    // One machine-level store shared by every project — a checkpoint in run A
+    // must not stamp captured_seq on run B's pending tasks, or B's trailer
+    // silently omits them and its work is redone on resume.
+    const store = storePath(dirA);
+    const db = openStore(store);
+    const runA = seed(db, dirA);
+    const runB = seed(db, dirB);
+
+    recordVerdict(db, runA, "T-a", { passed: true });
+    recordVerdict(db, runB, "T-b", { passed: true });
+
+    execFileSync("sh", ["-c", `echo work > ${JSON.stringify(join(dirA, "a.txt"))}`]);
+    takeCheckpoint(db, runA, {
+      phase: "build",
+      reason: "judgment",
+      cwd: dirA,
+      files: ["a.txt"],
+    });
+
+    assert.deepEqual(pendingCapture(db, runB), ["T-b"], "run B's task must stay uncaptured");
+    assert.equal(
+      db.prepare("SELECT captured_seq FROM task WHERE run_id = ? AND task_id = 'T-b'").get(runB)
+        .captured_seq,
+      null,
+    );
+    db.close();
+  } finally {
+    rmSync(dirA, { recursive: true, force: true });
+    rmSync(dirB, { recursive: true, force: true });
   }
 });
 
