@@ -265,6 +265,12 @@ mkdir -p "$COMMANDS_DIR/references"
 # ERRORS may be referenced before Step 5 initializes it; ensure it exists.
 ERRORS=${ERRORS:-0}
 
+# Version notification: read the PREVIOUSLY installed version before the copy
+# step below overwrites it. Never allowed to fail the install — every read
+# degrades to empty on any error.
+VERSION_FILE="$COMMANDS_DIR/.set-version"
+PREV_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || true)"
+
 # Resolve the directory this script lives in (empty/unreliable under curl|bash).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 PLUGIN_ROOT=""
@@ -304,6 +310,30 @@ else
     ERRORS=$((ERRORS + 1))
   fi
 fi
+
+# Incoming version from the source tree, now that PLUGIN_ROOT is resolved.
+NEW_VERSION=""
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
+  NEW_VERSION="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
+fi
+
+# extract_changelog_section <version> <changelog-path>
+# Prints the body of "## [<version>]" up to (not including) the next "## [".
+# Empty output + zero exit on any failure (missing file, no matching section) —
+# this notification must never fail the install.
+extract_changelog_section() {
+  local version="$1" changelog="$2"
+  [ -f "$changelog" ] || return 0
+  awk -v ver="$version" '
+    BEGIN { found=0 }
+    /^## \[/ {
+      if (found) exit
+      if ($0 ~ "^## \\[" ver "\\]") { found=1; next }
+      next
+    }
+    found { print }
+  ' "$changelog" 2>/dev/null || true
+}
 
 # install_file <src-path-under-plugins/set/> <dest-path-under-COMMANDS_DIR>
 install_file() {
@@ -427,6 +457,25 @@ else
 fi
 bold "============================================"
 echo ""
+
+# Version notification. Write-after-success + "What's new" — never allowed to
+# fail or affect ERRORS/exit code; every step is guarded.
+if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
+  echo "$NEW_VERSION" > "$VERSION_FILE" 2>/dev/null || true
+
+  if [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
+    CHANGELOG_PATH="$PLUGIN_ROOT/../../CHANGELOG.md"
+    WHATS_NEW="$(extract_changelog_section "$NEW_VERSION" "$CHANGELOG_PATH")"
+    if [ -n "$WHATS_NEW" ]; then
+      bold "What's new in $NEW_VERSION"
+      bold "------------------------"
+      echo "$WHATS_NEW"
+      echo ""
+    else
+      info "Updated to $NEW_VERSION"
+    fi
+  fi
+fi
 
 if [ "$ERRORS" -ne 0 ]; then
   error "SET did not install cleanly. Check the problems listed above. Common causes:"

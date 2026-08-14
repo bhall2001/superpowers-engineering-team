@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] — Autonomous mode + `--verbose`
+
+### Added
+- **`--autonomous` on `/set-design`, `/set-plan`, `/set-build`, `/set-review`.** Runs that phase and every remaining phase through `/set-learn` without stopping at human gates — chained in-session by reading the next phase's command file directly, nothing written to disk. Carries only for the current conversation: not resumable after a crash, and a stale flag can never leak into a later manual invocation.
+- **Bounded iterate loop in `/set-review --autonomous`.** On ITERATE, findings are compiled into a fix brief and routed to the specialist that owns each finding's domain — including specialists the original build never spawned (e.g. a security finding in a build that only touched UI and DB tasks still gets a security-owning fixer). Fix agents run in fresh contexts, followed by a fresh, independent four-lens re-review. The loop exits on whichever comes first: clean review, no new findings vs. the prior round, or 2 rounds spent. BLOCK, or any lens returning `FAILED`, halts immediately with iterations unspent — neither is something another round can fix.
+- **`--verbose`** — standalone flag on all five cycle phases (`/set-design`, `/set-plan`, `/set-build`, `/set-review`, `/set-learn`), valid with or without `--autonomous`. Default output reports phase boundaries only (entering/leaving each phase with its headline result); `--verbose` adds per-agent spawn/return. There is no `--quiet` — phase boundaries are the floor a supervised run needs to follow along, not a default to suppress.
+- **Installer reports what's new on a version change.** `install.sh` now reads the previously-installed version before overwriting `~/.claude/commands/`, compares it to the incoming version, and prints that version's `CHANGELOG.md` section under a "What's new" heading. Fully best-effort: a missing changelog, unparseable `plugin.json`, or unwritable version file degrades to printing nothing and never fails the install.
+
+### Notes
+- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user the browser check and the push decision.
+- `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
+- `/set-learn` rejects `--autonomous` with an explanatory message — it's the terminal phase, nothing follows it to chain to. Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human browser-verification is traceable and removable.
+
 ## [1.1.0] — Agent Teams by default
 
 ### Changed
