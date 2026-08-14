@@ -89,9 +89,10 @@ After this one-time upgrade you'll have the v1 `/set-update`, and from then on *
 
 ### Autonomous runs
 
-Add `--autonomous` to `/set-design`, `/set-plan`, `/set-build`, or `/set-review` to run
-that phase and everything after it through `/set-learn` without stopping at gates. Add
-`--verbose` (independently) for per-agent progress output.
+Add `--autonomous` to any cycle phase to run that phase and everything after it through
+`/set-learn` without stopping at gates. On `/set-learn` itself it suppresses that phase's
+approval prompts (taxonomy, new domains, agent updates). Add `--verbose` (independently)
+for per-agent progress output.
 
 > **Caution: `--autonomous` on `/set-design` is not currently best practice.** The agent
 > authors its own requirements, so a poor design costs tokens twice — once building it,

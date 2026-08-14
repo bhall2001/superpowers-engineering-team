@@ -24,9 +24,14 @@ Accepted on `/set-design`, `/set-plan`, `/set-build`, `/set-review`.
 Means: **run this phase and every remaining phase through `/set-learn` without stopping
 at human gates.**
 
-Not accepted on `/set-init` (nothing follows it in a cycle) or `/set-learn` (it is the
-terminal phase). Passing it there is an error with a one-line explanation, not a silent
-no-op.
+Accepted on all five cycle phases, `/set-learn` included. It chains nowhere from the
+terminal phase, but it still suppresses that phase's own gates — `/set-learn` asks the
+user to approve a taxonomy, approve each new domain, and approve every agent update, and
+an autonomous run stalls at all three. Under the flag it applies them and reports what it
+applied. A chained arrival and a directly-typed flag behave identically there.
+
+Not accepted on `/set-init` or `/set-update`: neither is a cycle phase, neither fans out
+agents, and neither has a chain to continue.
 
 ### `--verbose`
 

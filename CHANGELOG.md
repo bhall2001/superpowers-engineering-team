@@ -11,7 +11,7 @@
 ### Notes
 - Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user the browser check and the push decision.
 - `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
-- `/set-learn` rejects `--autonomous` with an explanatory message — it's the terminal phase, nothing follows it to chain to. Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human browser-verification is traceable and removable.
+- `--autonomous` works on `/set-learn` too. It chains nowhere from the terminal phase, but it suppresses that phase's own approval prompts — the taxonomy, each new domain, and every agent update — which an autonomous run would otherwise stall on. Everything applied is listed in the Final Report for review after. Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human verification is traceable and removable.
 
 ## [1.1.0] — Agent Teams by default
 

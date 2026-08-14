@@ -19,12 +19,15 @@ ends, before the Step 8 report. In a chained run the same lines carry the chain 
 and `[n/N]`; otherwise omit both. Emit each line once per run. This phase dispatches no
 agents, so `--verbose` adds no per-agent lines here.
 
-`--autonomous` is an error here — `/set-learn` is the last phase. Print:
+**`--autonomous` is valid here.** `/set-learn` is the last phase, so it chains nowhere —
+but this phase asks the user to approve a taxonomy, approve new domains, and approve
+agent updates. Those gates need suppressing whether the phase was chained into or invoked
+directly with the flag.
 
-> `--autonomous` has no effect on `/set-learn`: it is the last phase of the cycle.
-> Running `/set-learn` normally.
-
-Then continue normally.
+`--autonomous` and "reached via an autonomous chain" have the **same effect** on this
+phase: apply the taxonomy, new domains, and agent updates without asking, and report
+everything applied so the human can review it after. Treat either as sufficient; the rest
+of this file says "in an autonomous chain" to mean both.
 
 ## Process
 
@@ -105,12 +108,15 @@ If `.claude/set/learnings.md` exists, auto-split it:
 
 1. Read the full file
 2. Propose a taxonomy (5-15 domains typical) by grouping entries by topic. Use project-specific names — `security`, `pg-drizzle`, `react-components`, etc.
-3. Show the proposed taxonomy to the user:
-   > "Proposed taxonomy from existing learnings:
-   > - {domain1}: {short description}
-   > ...
-   > Approve, edit, or reject."
-4. After approval, write `.claude/set/taxonomy.md`:
+3. Then:
+   - **Without an autonomous chain:** show the proposed taxonomy to the user:
+     > "Proposed taxonomy from existing learnings:
+     > - {domain1}: {short description}
+     > ...
+     > Approve, edit, or reject."
+   - **In an autonomous chain:** adopt the proposed taxonomy without asking, and list the
+     domains it created in the Final Report so the human can review them.
+4. Then write `.claude/set/taxonomy.md`:
    ```markdown
    # Learning Taxonomy
 
@@ -141,7 +147,10 @@ For each new learning from this cycle:
 1. Read `.claude/set/taxonomy.md`. If empty, propose an initial taxonomy from this cycle's learnings (same approval flow as 3b step 3).
 2. Match the learning against domain names + descriptions. Pick the best-fit domain(s).
 3. If the learning spans multiple domains, assign to ALL relevant domains (duplication is expected — see 3d).
-4. If NO existing domain fits, propose a new domain name + description. Ask user to approve before adding to `taxonomy.md`.
+4. If NO existing domain fits, propose a new domain name + description.
+   - **Without an autonomous chain:** ask the user to approve before adding it to `taxonomy.md`.
+   - **In an autonomous chain:** add it without asking, and name every domain added this
+     run in the Final Report.
 
 #### 3d: Duplicate cross-domain learnings
 

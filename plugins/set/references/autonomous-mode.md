@@ -16,15 +16,21 @@ path, branch range).
 Flags may appear in any order and in combination with existing flags
 (`--light`, `--use-workflow`, `--no-worktree`).
 
-`--autonomous` is valid on `/set-design`, `/set-plan`, `/set-build`,
-`/set-review`. On `/set-learn` it is an error — print exactly:
+`--autonomous` is valid on all five cycle phases: `/set-design`, `/set-plan`,
+`/set-build`, `/set-review`, and `/set-learn`.
 
-> `--autonomous` has no effect on `/set-learn`: it is the last phase of the
-> cycle. Running `/set-learn` normally.
+On `/set-learn` it chains nowhere — nothing follows it — but it still **suppresses that
+phase's own gates**, which is the point. `/set-learn` otherwise asks the user to approve a
+taxonomy, approve each new domain, and approve every agent update; an autonomous run stalls
+at all three. Under the flag it applies them and reports what it applied.
 
-Then continue normally. Do not silently ignore it. This is for a user who typed the flag;
-the chain never sends it — see the Chaining Contract for how `/set-learn` recognizes a
-chained arrival instead.
+So `/set-learn` treats `--autonomous` and a chained arrival identically — see the Chaining
+Contract for how it recognizes the latter. A user who types the flag directly gets the same
+gate suppression as the chain does.
+
+It is **not** valid on `/set-init` or `/set-update`. Neither is a cycle phase, neither
+fans out agents, and neither has a chain to continue. Passing it there does nothing; those
+commands need no flag handling.
 
 ## Verbosity Levels
 

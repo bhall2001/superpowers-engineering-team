@@ -157,8 +157,12 @@ Run periodically to get improvements and bug fixes.
 
 ### `--autonomous`
 
-Valid on `/set-design`, `/set-plan`, `/set-build`, `/set-review`. Runs that phase and
-every remaining phase through `/set-learn` without stopping at human gates.
+Valid on all five cycle phases. Runs that phase and every remaining phase through
+`/set-learn` without stopping at human gates.
+
+On `/set-learn` there is nothing left to chain to, but the flag still suppresses that
+phase's own gates — it otherwise asks you to approve the taxonomy, each new domain, and
+every agent update. Under the flag it applies them and reports what it applied.
 
 ```bash
 /set-plan my-feature --autonomous
