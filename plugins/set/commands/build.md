@@ -24,6 +24,9 @@ Check `$ARGUMENTS`:
   Do not warn, do not print a deprecation notice — it simply selects the default path.
 - `--autonomous` / `--verbose` — parse and strip per
   `~/.claude/commands/references/autonomous-mode.md`.
+- **`--resume {run-id}`** → resume a crashed run instead of starting a new one. See
+  "Resuming a Crashed Run". Parse and strip it like the others; the remainder is still the
+  feature name.
 
 **Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
 Verbosity Levels format from that reference: the `▶ SET build — starting` line once flags
@@ -409,6 +412,90 @@ in script variables.
 **Same MCP rule as the team path: builders and verifiers must NOT call `mcp__serena__*`.** A dynamic workflow runs many `agent()` calls concurrently against the *same* single Serena process, so it has the identical hazard described in Phase B-team — one shared, mutable `_active_project` pointer with no per-caller isolation, in a worktree where Serena often starts unactivated. Serena is queried once in Phase A (lead) and injected into each task bundle as text. For code navigation, workflow agents use Claude Code's built-in LSP tool.
 
 > SET no longer implements "max 5 retries / escalate after 3." The workflow's native verify-and-revise loop subsumes it. You specified the bar (A4) and the escalation policy (A5); the workflow runs the loop.
+
+## Checkpoints — Making the Run Resumable
+
+You take **checkpoint commits** as the build proceeds. They are the only thing that makes a
+crashed run resumable: a task is durable when a checkpoint on the branch names it, not when
+its verdict says it passed.
+
+Full contract: `references/run-store.md`. What you must do:
+
+**At every phase boundary — mandatory.** All tasks have returned, the tree is coherent.
+Never skip this one.
+
+**Within a phase — your judgment.** When a batch of parallel tasks returns verdicts and the
+work has reached a meaningful point, commit. This is the part no rule can decide for you,
+so here is the calibration:
+
+*Take a checkpoint:*
+- Three builders returned passing verdicts and their work compiles together — the natural
+  "this much is done" moment.
+- A task finished that everything downstream depends on (the schema, the shared type, the
+  new module's public surface). Losing it costs the most.
+- A long-running task just returned after 20+ minutes of work.
+- You are about to start something risky — a large refactor, a dependency bump — and want a
+  clean point to reason from.
+
+*Decline, and record why:*
+- Two trivial tasks returned (a docs tweak, a comment fix) and the last checkpoint was
+  four minutes ago. Record: `2 trivial tasks, cheap to redo`.
+- A batch returned but half its tasks failed; the tree is mid-repair. Record:
+  `batch incoherent, 2 of 4 failed`.
+- You checkpointed 90 seconds ago and nothing material changed since.
+
+**Never mid-task.** Only at a verdict-return boundary. Committing while a builder is
+writing captures a half-written file.
+
+**The 30-minute backstop.** If 30 minutes pass with no checkpoint, the next verdict return
+takes one regardless of judgment — worst-case loss is 30 minutes plus one task. Read
+`checkpoint_backstop_minutes` from `.claude/set/config.json` if set.
+
+**Record declined checkpoints too.** A checkpoint you considered and skipped is written
+with `taken = 0` and a one-line rationale. This is what makes a 40-minute gap diagnosable
+instead of looking like you forgot.
+
+**In-phase checkpoints may capture in-flight work**, including files that do not parse.
+That is accepted — the alternative needs per-task file attribution, which does not work
+under parallel builders. A resumed run must expect baseline tests to fail for reasons
+unrelated to any task, and must report that as a resumed-from-partial-checkpoint condition,
+not a task regression.
+
+**Ticking the plan.** After each verdict returns, update the plan's `## Progress` section:
+`- [x] T-{slug} — passed {ISO time} (checkpoint {n})`. This is human-facing status only —
+nothing parses it. Builders never edit the plan file.
+
+## Resuming a Crashed Run
+
+With `--resume {run-id}`, you rebuild state instead of starting fresh. In order:
+
+1. **Assert location.** `git rev-parse --show-toplevel` must equal the run's
+   `worktree_path`; the current branch must equal its `branch`. Wrong worktree, wrong
+   branch, and detached HEAD each refuse with a distinct message. Do not proceed — a
+   resume in the wrong repo dispatches builders onto whatever branch is checked out.
+2. **Probe liveness, then claim the worktree.** If a live run holds it, refuse and name the
+   holder plus `set-run.mjs release {run-id}`.
+3. **Build the skip set** from checkpoint trailers on the current branch. Tasks named there
+   are durable. An amended or rebased checkpoint still resolves — a stale sha is advisory,
+   never a refusal. A reverted checkpoint has its tasks dropped and re-dispatched.
+4. **Run setup before anything else** — dependency install and baseline tests. An
+   interrupted install may have left dependencies half-written. Re-run the Agent Team
+   Availability Gate; it is deliberately not persisted.
+5. **Re-dispatch everything not in the skip set**, including tasks whose verdict says
+   `passed` but that no checkpoint captured. Their work may be on disk, uncommitted; that
+   is not durable.
+6. **Leave the tree dirty.** Never reset, stash, or discard — it is the record of where the
+   team broke. Brief each re-dispatched builder with the advisory diff since the last
+   checkpoint, and tell it explicitly that the tree already contains partial work. Hand any
+   prior `tasks/<task-id>.md` notes over labeled as **unverified claims**.
+7. **Rewrite the plan's Progress section** so the human sees true state immediately.
+
+**Autonomy is never persisted.** `--resume` alone runs supervised. Resuming an autonomous
+run requires `--autonomous` again, explicitly — a stale run record can never silently
+re-enter autonomous mode.
+
+Report on the opening phase-boundary line: `Resumed {run-id} — {n} tasks durable, {m} to
+re-dispatch`.
 
 ## Phase C — Build Gate-Back (you own this)
 
