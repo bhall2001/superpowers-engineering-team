@@ -46,6 +46,9 @@ warn()  { echo -e "${YELLOW}[SET]${NC} $1"; }
 error() { echo -e "${RED}[SET]${NC} $1"; }
 bold()  { echo -e "${BOLD}$1${NC}"; }
 
+# Bold WITHOUT escape interpretation — for lines carrying changelog-derived text.
+bold_literal() { printf '%b%s%b\n' "$BOLD" "$1" "$NC"; }
+
 # ---------------------------------------------------------------------------
 # Preflight checks
 # ---------------------------------------------------------------------------
@@ -262,6 +265,10 @@ bold "-------------------------------"
 #      via `curl | bash`. One network call instead of one-per-file.
 mkdir -p "$COMMANDS_DIR/references"
 
+# Single source of truth for reference files — the install loop and the Step 5
+# verify loop both read this. Adding a reference means editing this line only.
+SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode"
+
 # ERRORS may be referenced before Step 5 initializes it; ensure it exists.
 ERRORS=${ERRORS:-0}
 
@@ -269,7 +276,9 @@ ERRORS=${ERRORS:-0}
 # step below overwrites it. Never allowed to fail the install — every read
 # degrades to empty on any error.
 VERSION_FILE="$COMMANDS_DIR/.set-version"
-PREV_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || true)"
+# First line only, reduced to version-safe characters: a CRLF file would otherwise
+# never compare equal, and this value is printed to a terminal.
+PREV_VERSION="$(head -n1 "$VERSION_FILE" 2>/dev/null | tr -cd 'A-Za-z0-9.+_-' || true)"
 
 # Clear any prior digest up front: /set-update reads this file with no knowledge
 # of whether THIS run succeeded, so a leftover would be reported as fresh news
@@ -330,10 +339,10 @@ extract_changelog_section() {
   local version="$1" changelog="$2"
   [ -f "$changelog" ] || return 0
   awk -v ver="$version" '
-    BEGIN { found=0 }
+    BEGIN { found=0; heading="## [" ver "]" }
     /^## \[/ {
       if (found) exit
-      if ($0 ~ "^## \\[" ver "\\]") { found=1; next }
+      if (index($0, heading) == 1) { found=1; next }
       next
     }
     found { print }
@@ -341,12 +350,19 @@ extract_changelog_section() {
 }
 
 # changelog_headline <version> <changelog-path>
-# Prints the text after the version in "## [<ver>] — <headline>". Empty on failure.
+# Prints the text after the separator in "## [<ver>] — <headline>" (em-dash or
+# ASCII hyphen). Empty when the heading carries no separated headline.
 changelog_headline() {
   local version="$1" changelog="$2"
   [ -f "$changelog" ] || return 0
-  grep -m1 "^## \[$version\]" "$changelog" 2>/dev/null \
-    | sed 's/^## \[[^]]*\][[:space:]]*—[[:space:]]*//' 2>/dev/null || true
+  awk -v ver="$version" '
+    BEGIN { heading="## [" ver "]" }
+    index($0, heading) == 1 {
+      rest = substr($0, length(heading) + 1)
+      if (sub(/^[[:space:]]*(—|-)[[:space:]]*/, "", rest) && rest != "") print rest
+      exit
+    }
+  ' "$changelog" 2>/dev/null || true
 }
 
 # changelog_digest <version> <changelog-path>
@@ -384,10 +400,9 @@ if [ -n "$PLUGIN_ROOT" ]; then
   install_file "commands/update.md" "set-update.md"
 
   # Reference files (under plugins/set/references/, installed under references/).
-  install_file "references/enhanced-builder-prompt.md" "references/enhanced-builder-prompt.md"
-  install_file "references/enhanced-qa-prompt.md"      "references/enhanced-qa-prompt.md"
-  install_file "references/learn-entry-format.md"      "references/learn-entry-format.md"
-  install_file "references/autonomous-mode.md"         "references/autonomous-mode.md"
+  for ref in $SET_REFERENCES; do
+    install_file "references/$ref.md" "references/$ref.md"
+  done
 fi
 
 # Capture the changelog digest while the source tree still exists — under
@@ -468,7 +483,7 @@ for cmd in set-init set-design set-plan set-build set-review set-learn set-updat
   fi
 done
 
-for ref in enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode; do
+for ref in $SET_REFERENCES; do
   if [ -f "$COMMANDS_DIR/references/$ref.md" ]; then
     info "Reference: $ref.md"
   else
@@ -506,9 +521,9 @@ if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
     [ -n "$WHATS_NEW_HEADLINE" ] && VERSION_LINE="$VERSION_LINE — $WHATS_NEW_HEADLINE"
 
     bold ""
-    bold "$VERSION_LINE"
+    bold_literal "$VERSION_LINE"
     if [ -n "$WHATS_NEW" ]; then
-      echo "$WHATS_NEW"
+      printf '%s\n' "$WHATS_NEW"
       echo ""
       info "Full notes: CHANGELOG.md (or the repo's Releases page)"
     fi
