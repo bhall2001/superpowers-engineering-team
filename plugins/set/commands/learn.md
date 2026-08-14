@@ -312,9 +312,21 @@ filling in every field from the chain: phases run, build results, review verdict
 `rounds_spent`, `exit_condition`, `remaining_findings`, the plan's unresolved
 questions, artifact paths, and the shards written this run.
 
-End with the two unchecked handoff items — browser verification and the push decision.
-Never present the run as done: nothing has been verified in a browser and nothing has
-been pushed.
+**A halted run still reaches you, and still gets a report.** `/set-review` chains here
+on every exit — including `BLOCK` and `lens FAILED`. Do NOT treat those as a chain abort
+or skip the report. Instead:
+
+- Lead with the halt: name the `exit_condition` and what it means before anything else.
+  A `BLOCK` or `lens FAILED` run has unreviewed or fundamentally broken work in it.
+- Capture learnings as usual, but only from what actually completed. Do not mine a
+  halted phase for patterns — a `lens FAILED` exit means that area was never reviewed,
+  so there is nothing verified to learn from.
+- Fill the report's remaining fields normally. Say which phase halted and why in place
+  of any section the chain never produced.
+
+End with the unchecked handoff items the template carries — browser verification, the
+push decision, and removing the build worktree. Never present the run as done: nothing
+has been verified in a browser and nothing has been pushed.
 
 ## Maintenance Rules
 
