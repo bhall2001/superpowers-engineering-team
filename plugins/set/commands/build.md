@@ -25,6 +25,14 @@ Check `$ARGUMENTS`:
 - `--autonomous` / `--verbose` — parse and strip per
   `~/.claude/commands/references/autonomous-mode.md`.
 
+**Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
+Verbosity Levels format from that reference: the `▶ SET build — starting` line once flags
+are parsed, and the `◀ SET build — {tasks passed/failed}, {diff stat}` line at the end of
+Phase C. Under `--autonomous` the same lines carry the chain annotation and `[n/N]`;
+without it, omit both. Emit each line once per run. The `--autonomous`-only reports below
+(worktree dir default, failing baseline, Agent Teams unavailable) are annotations on that
+one opening line, not extra boundary lines.
+
 ## Before Starting
 
 ### 0. Resolve Serena State (Lazy Detection)
@@ -288,6 +296,9 @@ specialists over duplicate generic builders.
 Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt. QA's remit
 is unchanged from previous SET versions — it is a peer role, **not** the verifier.
 
+Under `--verbose`, emit `→ spawn {Specialist} :: {task name}` as each builder and the QA
+teammate is spawned, and `← {Specialist} :: {pass/fail}` as each reports back.
+
 Read both reference files before spawning anything.
 
 Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
@@ -324,6 +335,9 @@ Agent({
 
 A verifier writes no code, so it can never verify its own work — this preserves the
 fresh-verifier guarantee the workflow path gets from a separate `agent({schema})` call.
+
+Under `--verbose`, emit `→ spawn verifier-{task-id} :: {task name}` at each verifier spawn
+and `← verifier-{task-id} :: {passed/failed}` when its verdict returns.
 
 **Concurrency ceiling of 4.** Spawn a verifier when its builder reports the task
 complete. If 4 verifiers are already running, queue the rest and spawn as earlier ones
@@ -387,6 +401,11 @@ Invoke the **`Workflow` tool** with a script that executes the brief. The script
 
 Author the workflow script to keep intermediate builder output in script variables — do not pull every builder transcript into your context. You receive only the final verdicts + diff.
 
+Under `--verbose`, have the script emit `→ spawn {agentType} :: {task name}` at each
+builder and verifier `agent()` call and `← {agentType} :: {passed/failed}` on return.
+These lines are the only per-agent output that crosses back — the transcripts still stay
+in script variables.
+
 **Same MCP rule as the team path: builders and verifiers must NOT call `mcp__serena__*`.** A dynamic workflow runs many `agent()` calls concurrently against the *same* single Serena process, so it has the identical hazard described in Phase B-team — one shared, mutable `_active_project` pointer with no per-caller isolation, in a worktree where Serena often starts unactivated. Serena is queried once in Phase A (lead) and injected into each task bundle as text. For code navigation, workflow agents use Claude Code's built-in LSP tool.
 
 > SET no longer implements "max 5 retries / escalate after 3." The workflow's native verify-and-revise loop subsumes it. You specified the bar (A4) and the escalation policy (A5); the workflow runs the loop.
@@ -403,8 +422,8 @@ When the selected execution path returns:
 
    - **Without `--autonomous`** — suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
 
-   - **With `--autonomous`** — do not suggest; emit the phase-boundary line and chain to
-     `/set-review` per the Chaining Contract, passing the branch/worktree location and
+   - **With `--autonomous`** — do not suggest; after the closing phase-boundary line, chain
+     to `/set-review` per the Chaining Contract, passing the branch/worktree location and
      the per-task verdicts. The verification report travels as **claims to audit**,
      exactly as in a supervised run — autonomy does not upgrade self-grading into truth.
      The branch/worktree location must reach the end of the chain: it is reported to the

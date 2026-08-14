@@ -12,6 +12,13 @@ Extract and persist learnings from the most recent SET cycle.
 
 Parse `--verbose` per `~/.claude/commands/references/autonomous-mode.md`.
 
+**Emit phase-boundary lines on every run**, whether or not this phase was reached via a
+chain, in the Verbosity Levels format from that reference: the `▶ SET learn — starting`
+line once flags are parsed, and the `◀ SET learn — {shards written}` line as the phase
+ends, before the Step 8 report. In a chained run the same lines carry the chain annotation
+and `[n/N]`; otherwise omit both. Emit each line once per run. This phase dispatches no
+agents, so `--verbose` adds no per-agent lines here.
+
 `--autonomous` is an error here — `/set-learn` is the last phase. Print:
 
 > `--autonomous` has no effect on `/set-learn`: it is the last phase of the cycle.

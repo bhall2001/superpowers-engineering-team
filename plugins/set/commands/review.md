@@ -15,6 +15,15 @@ If the user provides a branch/PR/commit range with `$ARGUMENTS`, use that. Other
 
 ## Step 1: Gather Context
 
+Check `$ARGUMENTS` for `--light`. Parse and strip `--autonomous` and `--verbose` per
+`~/.claude/commands/references/autonomous-mode.md`.
+
+**Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
+Verbosity Levels format from that reference: the `▶ SET review — starting` line once flags
+are parsed, and the `◀ SET review — {verdict}` line once Step 3 synthesizes (or, under
+`--autonomous`, once Step 3b exits its loop). Under `--autonomous` the same lines carry
+the chain annotation and `[n/N]`; without it, omit both. Emit each line once per run.
+
 ```bash
 git diff main...HEAD --stat
 git log --oneline main..HEAD
@@ -40,8 +49,7 @@ So load everything once, here, in the lead:
 
 Inject each lens's bucket into its prompt as **text**. Lens agents receive learnings; they never fetch them. For code navigation, lens agents use Claude Code's built-in LSP tool, which is per-session and safe under parallel agents.
 
-Check `$ARGUMENTS` for `--light`. Parse and strip `--autonomous` and `--verbose`
-per `~/.claude/commands/references/autonomous-mode.md`.
+The flags were already parsed and stripped in Step 1; `--light` selects the mode below.
 
 ### Step 2b: The Lens Return Contract (binding on both modes)
 
@@ -77,6 +85,10 @@ SET is geared for heavy work, so the default uses the **`Workflow` tool**. Autho
 
 Keep intermediate findings in script variables; you receive only the aggregated reports.
 
+Under `--verbose`, have the script emit `→ spawn {lens} :: {module}` at each lens `agent()`
+call and `← {lens} :: {finding count}` on return, including retries from Step 2c. These
+lines are reporting only — they do not replace or relax the Step 2b return contract.
+
 ### `--light` — Four Parallel Subagents
 
 For small diffs, skip the workflow. Spawn **4 independent `Agent` subagents in a single message** (one per lens, fresh contexts), each with its lens rubric below. Same independence semantics — none of them wrote the code.
@@ -96,6 +108,10 @@ shape — no preamble, no markdown fences, no commentary before or after:
 If you found no issues, return the same object with "findings": [].
 Do not end your turn with a summary, a status update, or a question.
 ```
+
+Under `--verbose`, emit `→ spawn {lens} :: {module}` as each of the four subagents is
+spawned and `← {lens} :: {finding count}` as each returns, including Step 2c retries.
+Reporting only — the prompt contract above is unchanged.
 
 Then handle missing returns per Step 2c.
 
@@ -223,7 +239,9 @@ A fix pass is **NOT** a build re-run.
    finding rather than handing everything back to the original builders.
 3. Spawn fix agents in **fresh contexts**, each receiving only its own findings plus the
    relevant learning shards.
-4. Under `--verbose`, report each finding's routing decision.
+4. Under `--verbose`, report each finding's routing decision, and emit
+   `→ spawn {specialist} :: {finding count}` at each fix agent spawn with
+   `← {specialist} :: {fixed/failed}` on return.
 
 The re-review is a fresh independent four-lens run, so a lens never reviews code it
 helped fix — the independence guaranteed by the Step 2b return contract holds across

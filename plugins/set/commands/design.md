@@ -17,6 +17,7 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
    - Present design in sections, get approval after each
    - Write design doc to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
    - Run spec review loop (dispatch reviewer subagent, fix issues, repeat until approved)
+     — under `--verbose`, emit `→ spawn` / `← ` lines for each reviewer dispatch and return
    - User reviews written spec
 
    **Under `--autonomous`, follow the Autonomous Mode section below instead of the
@@ -32,7 +33,7 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
 
      > "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the build workflow."
 
-   - **With `--autonomous`** — do not print the prompt above. Emit the phase-boundary line and chain to `/set-plan` per the Chaining Contract.
+   - **With `--autonomous`** — do not print the prompt above. After the closing phase-boundary line, chain to `/set-plan` per the Chaining Contract.
 
 ## Key Difference from Standard Superpowers
 
@@ -68,6 +69,12 @@ User provides the feature idea via: `/set-design $ARGUMENTS`
 Parse `--autonomous` and `--verbose` per
 `~/.claude/commands/references/autonomous-mode.md` and strip them; the remainder
 is the feature idea.
+
+**Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
+Verbosity Levels format from that reference: the `▶ SET design — starting` line once
+flags are parsed, and the `◀ SET design — {spec path}` line as the phase ends. Under
+`--autonomous` the same lines carry the chain annotation and `[n/N]`; without it, omit
+both. Emit each line once per run — the Autonomous Mode section below does not repeat it.
 
 If the remainder is empty **and** `--autonomous` is not set, ask: "What would you
 like to build?"
