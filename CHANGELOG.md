@@ -1,10 +1,18 @@
 # Changelog
 
-## [1.2.1] — Acceptance checks are project-defined
+## [1.2.1] — Autonomous mode + `--verbose`
 
-### Fixed
-- **The autonomous run's handoff no longer assumes a browser.** 1.2.0 ended every run by telling the user to "browser-verify the change" — wording that leaked out of a web project's own `CLAUDE.md` and into SET's shared contract, where it reached Python, .NET, CLI, and library projects that have no browser in the loop. The Final Report's handoff item is now this project's acceptance check, read from `CLAUDE.md`: run the CLI, hit the endpoint, exercise the page, run the notebook, do the manual QA pass. Where `CLAUDE.md` is silent it says "Verify the change works" and leaves the definition to the human. Automated tests still do not count as the check — the builders already ran those, so the run would be grading its own homework.
-- **`/set-learn` now appears in the 1.2.0 digest.** The installer's "what's new" digest extracts only the bolded lead of each top-level changelog bullet, so the `/set-learn` gate-suppression change — written under `### Notes` — was invisible to it, while the lead bullet still listed four phases. An updating user was told the flag does not work on `/set-learn` when it does.
+### Added
+- **`--autonomous` on all five cycle phases.** Runs that phase and every remaining phase through `/set-learn` without stopping at human gates — chained in-session by reading the next phase's command file directly, nothing written to disk. Carries only for the current conversation: not resumable after a crash, and a stale flag can never leak into a later manual invocation. Valid on `/set-design`, `/set-plan`, `/set-build`, `/set-review`, and `/set-learn`; `/set-init` and `/set-update` take neither switch.
+- **`/set-learn` no longer stops to ask.** It chains nowhere from the terminal phase, but it otherwise asks you to approve a proposed taxonomy, approve each new domain, and approve every agent update — three gates an autonomous run would stall on. Under `--autonomous`, or when reached via a chain, it applies them and lists everything applied in the Final Report, so you review after instead of approving up front.
+- **Bounded iterate loop in `/set-review --autonomous`.** On ITERATE, findings are compiled into a fix brief and routed to the specialist that owns each finding's domain — including specialists the original build never spawned (e.g. a security finding in a build that only touched UI and DB tasks still gets a security-owning fixer). Fix agents run in fresh contexts, followed by a fresh, independent four-lens re-review. The loop exits on whichever comes first: clean review, no new findings vs. the prior round, or 2 rounds spent. BLOCK, or any lens returning `FAILED`, halts immediately with iterations unspent — neither is something another round can fix.
+- **`--verbose`** — standalone flag on all five cycle phases (`/set-design`, `/set-plan`, `/set-build`, `/set-review`, `/set-learn`), valid with or without `--autonomous`. Default output reports phase boundaries only (entering/leaving each phase with its headline result); `--verbose` adds per-agent spawn/return. There is no `--quiet` — phase boundaries are the floor a supervised run needs to follow along, not a default to suppress.
+- **Installer reports what's new on a version change.** `install.sh` now reads the previously-installed version before overwriting `~/.claude/commands/`, compares it to the incoming version, and prints a short digest of that version's changelog entry — a version line plus one line per headline bullet, with a pointer to `CHANGELOG.md` for the full notes. `/set-update` leads its report with the same digest, since installer output is not where a Claude Code user reads it. Fully best-effort: a missing changelog, unparseable `plugin.json`, or unwritable version file degrades to printing nothing and never fails the install.
+
+### Notes
+- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user the browser check and the push decision.
+- `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
+- Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human verification is traceable and removable.
 
 ## [1.2.0] — Autonomous mode + `--verbose`
 
@@ -16,7 +24,7 @@
 - **Installer reports what's new on a version change.** `install.sh` now reads the previously-installed version before overwriting `~/.claude/commands/`, compares it to the incoming version, and prints a short digest of that version's changelog entry — a version line plus one line per headline bullet, with a pointer to `CHANGELOG.md` for the full notes. `/set-update` leads its report with the same digest, since installer output is not where a Claude Code user reads it. Fully best-effort: a missing changelog, unparseable `plugin.json`, or unwritable version file degrades to printing nothing and never fails the install.
 
 ### Notes
-- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user this project's acceptance check and the push decision.
+- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user the browser check and the push decision.
 - `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
 - Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human verification is traceable and removable.
 
