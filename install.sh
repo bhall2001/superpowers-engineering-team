@@ -365,6 +365,13 @@ if [ -n "$PLUGIN_ROOT" ]; then
   install_file "references/autonomous-mode.md"         "references/autonomous-mode.md"
 fi
 
+# Capture the changelog section while the source tree still exists — under
+# `curl | bash` PLUGIN_ROOT lives inside DOWNLOAD_TMP, removed on the next line.
+WHATS_NEW=""
+if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
+  WHATS_NEW="$(extract_changelog_section "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
+fi
+
 # Clean up any downloaded tree.
 [ -n "$DOWNLOAD_TMP" ] && rm -rf "$DOWNLOAD_TMP"
 
@@ -464,8 +471,6 @@ if [ "$ERRORS" -eq 0 ] && [ -n "$NEW_VERSION" ]; then
   echo "$NEW_VERSION" > "$VERSION_FILE" 2>/dev/null || true
 
   if [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
-    CHANGELOG_PATH="$PLUGIN_ROOT/../../CHANGELOG.md"
-    WHATS_NEW="$(extract_changelog_section "$NEW_VERSION" "$CHANGELOG_PATH")"
     if [ -n "$WHATS_NEW" ]; then
       bold "What's new in $NEW_VERSION"
       bold "------------------------"
