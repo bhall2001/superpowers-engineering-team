@@ -537,7 +537,7 @@ DB row claiming a checkpoint that does not exist.
 ## Testing
 
 No test tooling exists in this repo. Ships a minimal `node --test` harness — zero
-dependencies — at `plugins/set/tests/`, invoked as `node --test plugins/set/tests/`,
+dependencies — at `plugins/set/tests/`, invoked as `node --test "plugins/set/tests/*.test.mjs"`,
 documented in CLAUDE.md. **Contributor-run; no CI enforces it**, stated plainly so a future
 reviewer does not read a test directory as enforced coverage.
 
