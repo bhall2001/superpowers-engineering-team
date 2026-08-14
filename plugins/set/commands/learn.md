@@ -241,7 +241,11 @@ For each agent with findings, propose additions to its `.md` file:
 
 #### 6c: Apply updates
 
-- Show the user each proposed change before writing. Get confirmation.
+- **Without an autonomous chain:** show the user each proposed change before writing.
+  Get confirmation.
+- **In an autonomous chain:** apply the updates without asking — there is no one to
+  confirm. List every agent file changed in the Final Report so the human reviews them
+  alongside the shards.
 - NEVER remove existing content — only append or update.
 - Date new entries with `[YYYY-MM-DD]`.
 - If an agent file exceeds ~100 lines, suggest splitting domain knowledge into a referenced file.

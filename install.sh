@@ -329,9 +329,12 @@ else
 fi
 
 # Incoming version from the source tree, now that PLUGIN_ROOT is resolved.
+# plugin.json arrives with the unauthenticated tarball, so the version is untrusted:
+# same whitelist as PREV_VERSION, since it reaches both the printed banner and disk.
 NEW_VERSION=""
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
-  NEW_VERSION="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
+  NEW_VERSION="$(jq -r '.version // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null \
+    | head -n1 | tr -cd 'A-Za-z0-9.+_-' || true)"
 fi
 
 # Digest bounds. CHANGELOG.md arrives with the unauthenticated tarball above, so
