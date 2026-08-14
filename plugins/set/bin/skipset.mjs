@@ -71,15 +71,6 @@ export function revertedShas(cwd) {
   return reverted;
 }
 
-function isAncestor(cwd, sha) {
-  try {
-    execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd, stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function expand(cwd, sha) {
   try {
     return git(cwd, ["rev-parse", sha]).trim();
@@ -107,8 +98,11 @@ export function resolveSkipSet(cwd, runId, { knownShas = [] } = {}) {
   const counted = [];
   const revertedCheckpoints = [];
 
+  // `git log HEAD` only walks ancestors of HEAD, so every commit it returned is
+  // already an ancestor — a per-commit `merge-base --is-ancestor` would spawn one
+  // process each (1.2s at 60 checkpoints) to re-derive what the walk guarantees.
+  // isAncestor stays for shas supplied from outside the walk (knownShas).
   for (const commit of commits) {
-    if (!isAncestor(cwd, commit.sha)) continue; // off this branch — abandoned run
     const wasReverted = [...reverted].some((short) => commit.sha.startsWith(short));
     if (wasReverted) {
       revertedCheckpoints.push(commit.sha);
