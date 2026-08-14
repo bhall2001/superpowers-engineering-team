@@ -139,10 +139,11 @@ test("trailer values are trimmed", () => {
     checkpoint(dir, { run: "runA", seq: 1, tasks: ["T-a", "T-b"], file: "a.txt" });
     const commits = checkpointCommits(dir, "runA");
     assert.equal(commits.length, 1);
-    for (const slug of commits[0].tasks) {
-      assert.equal(slug, slug.trim(), `slug carries whitespace: ${JSON.stringify(slug)}`);
-      assert.ok(slug.length > 0);
-    }
+    // Compare against literals. Asserting `slug === slug.trim()` is a tautology
+    // that holds whether or not the code trims.
+    assert.deepEqual(commits[0].tasks, ["T-a", "T-b"]);
+    assert.equal(commits[0].run, "runA");
+    assert.equal(commits[0].sequence, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

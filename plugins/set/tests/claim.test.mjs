@@ -35,6 +35,19 @@ test("probeDead reports a live pid as alive and a dead one as dead", () => {
   assert.equal(probeDead(4194304), true);
 });
 
+test("a live process owned by another user is not reported dead", () => {
+  // process.kill throws EPERM, not ESRCH, for a process we may not signal.
+  // Treating any throw as "dead" would let a resume steal a live worktree.
+  assert.equal(probeDead(1), false);
+});
+
+test("a pid on another host is never assumed dead", () => {
+  // We cannot probe another machine's process table; assuming dead would let
+  // two machines claim one worktree.
+  assert.equal(probeDead(process.pid, "some-other-host"), false);
+  assert.equal(probeDead(4194304, "some-other-host"), false);
+});
+
 test("claiming a worktree held by a live run refuses and names the holder", () => {
   const dir = tempDir();
   try {

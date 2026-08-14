@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 
 import { openStore, SCHEMA_VERSION, SchemaVersionError } from "../bin/store.mjs";
@@ -75,6 +76,40 @@ test("refuses a database newer than the code understands, leaving it unmodified"
     assert.equal(after.prepare("PRAGMA user_version").get().user_version, SCHEMA_VERSION + 998);
     assert.equal(after.prepare("SELECT COUNT(*) c FROM run").get().c, 1);
     after.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("concurrent processes can open a not-yet-created store", () => {
+  const dir = tempDir();
+  try {
+    const path = join(dir, "runs.db");
+    const probe = join(dir, "open.mjs");
+    const storeUrl = new URL("../bin/store.mjs", import.meta.url).href;
+    writeFileSync(
+      probe,
+      `import { openStore } from ${JSON.stringify(storeUrl)};
+       openStore(process.argv[2]).close();
+       console.log("ok");`,
+    );
+
+    // Several agents starting at once race to create the file and apply the
+    // schema. That contention is not covered by busy_timeout, so openStore
+    // retries; without the retry this crashes uncaught 1-2 times in 8.
+    const results = Array.from({ length: 8 }, () => {
+      try {
+        return execFileSync(process.execPath, [probe, path], { encoding: "utf8" }).trim();
+      } catch (err) {
+        return `FAILED: ${err.message}`;
+      }
+    });
+
+    assert.deepEqual(
+      results.filter((r) => r !== "ok"),
+      [],
+      "every concurrent open must succeed",
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

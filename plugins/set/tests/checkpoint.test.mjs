@@ -28,6 +28,17 @@ function tempRepo() {
   return dir;
 }
 
+/**
+ * Everything the worktree currently shows as changed. Stands in for the union
+ * of the plan's per-task `Files` — real callers pass that, not this.
+ */
+function allFiles(dir) {
+  return git(dir, "status", "--porcelain=v1", "--untracked-files=all")
+    .split("\n")
+    .filter((line) => line.length > 3)
+    .map((line) => line.slice(3));
+}
+
 function seed(db, dir) {
   return initRun(db, {
     projectPath: dir,
@@ -71,6 +82,7 @@ test("a verdict landing in the same instant as a checkpoint appears in exactly o
       phase: "build",
       reason: "judgment",
       cwd: dir,
+      files: allFiles(dir),
       at: ts,
     });
     assert.deepEqual(first.tasks, ["T-x"], "must be captured by the first checkpoint");
@@ -81,6 +93,7 @@ test("a verdict landing in the same instant as a checkpoint appears in exactly o
       phase: "build",
       reason: "judgment",
       cwd: dir,
+      files: allFiles(dir),
       at: ts,
     });
     assert.deepEqual(second.tasks, ["T-y"], "must not re-capture T-x nor drop T-y");
@@ -109,7 +122,7 @@ test("checkpoint writes the commit before the row, and the trailer carries run a
     recordVerdict(db, runId, "T-a", { passed: true });
     execFileSync("sh", ["-c", `echo x > ${JSON.stringify(join(dir, "f.txt"))}`]);
 
-    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "phase-boundary", cwd: dir });
+    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "phase-boundary", cwd: dir, files: allFiles(dir) });
 
     const body = git(dir, "log", "-1", "--format=%B");
     assert.match(body, new RegExp(`SET-Run: ${runId}`));
@@ -136,7 +149,7 @@ test("a checkpoint with nothing to commit is not taken", () => {
     const runId = seed(db, dir);
     recordVerdict(db, runId, "T-a", { passed: true });
 
-    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir });
+    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir, files: allFiles(dir) });
     assert.equal(cp.taken, false, "an empty tree must not produce a commit");
     assert.equal(
       db.prepare("SELECT captured_seq FROM task WHERE task_id = 'T-a'").get().captured_seq,
@@ -160,12 +173,109 @@ test("a run store sitting inside the worktree is never committed", () => {
     openStore(join(dir, "runs.db")).close();
     execFileSync("sh", ["-c", `echo real > ${JSON.stringify(join(dir, "real.txt"))}`]);
 
-    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir });
+    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir, files: allFiles(dir) });
     assert.equal(cp.taken, true);
 
     const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
     assert.ok(files.includes("real.txt"));
     assert.ok(!files.some((f) => f.includes("runs.db")), `store was committed: ${files}`);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a checkpoint never sweeps unrelated files out of the user's worktree", () => {
+  const dir = tempRepo();
+  try {
+    const db = openStore(storePath(dir));
+    const runId = seed(db, dir);
+    recordVerdict(db, runId, "T-a", { passed: true });
+
+    // Files a human left lying around, none of them ignored.
+    execFileSync("sh", [
+      "-c",
+      `cd ${JSON.stringify(dir)} && echo 'SECRET=x' > .env.local && echo notes > scratch.txt &&
+       mkdir -p .worktrees/other && echo wt > .worktrees/other/stuff.txt &&
+       mkdir -p nested && cp ${JSON.stringify(storePath(dir))} nested/runs.db &&
+       echo wal > nested/runs.db-wal && echo work > real.txt`,
+    ]);
+
+    // The plan says this task owns real.txt. Everything else in the worktree is
+    // the human's, and a checkpoint must leave it alone.
+    const cp = takeCheckpoint(db, runId, {
+      phase: "build",
+      reason: "judgment",
+      cwd: dir,
+      files: ["real.txt"],
+    });
+    assert.equal(cp.taken, true);
+
+    const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
+    assert.deepEqual(files, ["real.txt"], "only the run's own files may be committed");
+
+    for (const untouched of [".env.local", "scratch.txt"]) {
+      assert.ok(cp.foreign.includes(untouched), `must report what it left behind: ${untouched}`);
+    }
+    // The store and other worktrees are excluded outright, never even reported.
+    assert.ok(!cp.foreign.some((f) => f.includes("runs.db")));
+    assert.ok(!cp.foreign.some((f) => f.startsWith(".worktrees/")));
+
+    const stillDirty = git(dir, "status", "--porcelain");
+    assert.match(stillDirty, /\.env\.local/, "the human's file stays uncommitted");
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a checkpoint refuses rather than destroying a human's partial staging", () => {
+  const dir = tempRepo();
+  try {
+    const db = openStore(storePath(dir));
+    const runId = seed(db, dir);
+    recordVerdict(db, runId, "T-a", { passed: true });
+
+    // A human mid `git add -p`: hunk A staged, hunk B deliberately not.
+    execFileSync("sh", [
+      "-c",
+      `cd ${JSON.stringify(dir)} && printf 'l1\\n' > wip.txt && git add wip.txt &&
+       git commit -q -m wip-base && printf 'l1\\nHUNK-A\\n' > wip.txt && git add wip.txt &&
+       printf 'l1\\nHUNK-A\\nHUNK-B\\n' > wip.txt`,
+    ]);
+
+    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir, files: allFiles(dir) });
+    assert.equal(cp.taken, false);
+    assert.equal(cp.reason, "partial-staging");
+    assert.ok(cp.paths.includes("wip.txt"));
+
+    // Their index is intact: HUNK-B is still unstaged.
+    const staged = git(dir, "diff", "--cached", "--name-only");
+    assert.equal(staged, "wip.txt");
+    assert.ok(!git(dir, "diff", "--cached").includes("HUNK-B"), "unstaged hunk must not be staged");
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("gitignored files stay out of a checkpoint", () => {
+  const dir = tempRepo();
+  try {
+    const db = openStore(storePath(dir));
+    const runId = seed(db, dir);
+    recordVerdict(db, runId, "T-a", { passed: true });
+
+    execFileSync("sh", [
+      "-c",
+      `cd ${JSON.stringify(dir)} && echo 'node_modules/' > .gitignore &&
+       mkdir -p node_modules && echo junk > node_modules/x.js && echo work > real.txt`,
+    ]);
+
+    takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir, files: allFiles(dir) });
+    const files = git(dir, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean);
+    assert.ok(files.includes("real.txt"));
+    assert.ok(!files.some((f) => f.startsWith("node_modules/")), `ignored file committed: ${files}`);
     db.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -199,7 +309,7 @@ test("sequence numbers advance across taken and declined checkpoints", () => {
     declineCheckpoint(db, runId, { phase: "build", rationale: "too early" });
     recordVerdict(db, runId, "T-a", { passed: true });
     execFileSync("sh", ["-c", `echo x > ${JSON.stringify(join(dir, "f.txt"))}`]);
-    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir });
+    const cp = takeCheckpoint(db, runId, { phase: "build", reason: "judgment", cwd: dir, files: allFiles(dir) });
 
     assert.equal(cp.sequence, 2, "a declined checkpoint still consumes a sequence number");
     db.close();

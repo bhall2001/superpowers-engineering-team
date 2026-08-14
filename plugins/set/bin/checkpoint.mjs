@@ -52,12 +52,89 @@ function nextSequence(db, runId) {
   return row.seq + 1;
 }
 
-// The run store lives outside the repo (~/.claude/set-runs/), but a stray copy
-// inside a worktree must never be swept into a checkpoint by `git add -A`.
-const NEVER_COMMIT = [":!runs.db", ":!*/runs.db", ":!runs.db-wal", ":!runs.db-shm"];
+// A stray run store inside a worktree must never land in a checkpoint. The `**/`
+// forms matter: a nested copy escapes a bare `runs.db-wal` pathspec.
+const NEVER_COMMIT = [
+  ":(glob,exclude)**/runs.db",
+  ":(glob,exclude)**/runs.db-wal",
+  ":(glob,exclude)**/runs.db-shm",
+  ":(glob,exclude)runs.db",
+  ":(glob,exclude)runs.db-wal",
+  ":(glob,exclude)runs.db-shm",
+  ":(glob,exclude)**/.worktrees/**",
+  ":(glob,exclude).worktrees/**",
+];
 
-function hasStagedChanges(cwd) {
-  return git(cwd, ["status", "--porcelain", "--", ".", ...NEVER_COMMIT]).length > 0;
+/** Repo root, so pathspecs never depend on the caller's cwd. */
+function repoRoot(cwd) {
+  return git(cwd, ["rev-parse", "--show-toplevel"]);
+}
+
+/**
+ * Paths this checkpoint may commit.
+ *
+ * NEVER `git add -A`. A checkpoint runs in the human's own worktree, and `-A`
+ * sweeps whatever else is lying there — an unignored `.env.local`, personal
+ * scratch notes, another worktree — into an agent's commit on their branch.
+ *
+ * `allow` is the union of the plan's per-task `Files`. Anything changed outside
+ * it is not this run's work: it is excluded and returned in `foreign` so the
+ * orchestrator can report it. With no `allow` list the checkpoint can only
+ * guess, so it commits nothing and says why — the design abandoned per-task
+ * attribution, which means the run must be told what it owns.
+ */
+export function checkpointPaths(cwd, allow = null) {
+  const root = repoRoot(cwd);
+  const out = git(root, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+    "--",
+    ".",
+    ...NEVER_COMMIT,
+  ]);
+
+  const changed = [];
+  for (const entry of out.split("\0")) {
+    if (entry.length < 4) continue;
+    if (entry.slice(0, 2) === "!!") continue; // ignored
+    changed.push(entry.slice(3));
+  }
+
+  if (!allow) return { root, paths: [], foreign: changed, unscoped: true };
+
+  const owned = new Set(allow);
+  const isOwned = (path) =>
+    owned.has(path) || [...owned].some((entry) => entry.endsWith("/") && path.startsWith(entry));
+
+  return {
+    root,
+    paths: changed.filter(isOwned),
+    foreign: changed.filter((path) => !isOwned(path)),
+    unscoped: false,
+  };
+}
+
+/**
+ * Staged content the run did not create — a human mid-`git add -p`.
+ * Committing over it folds their unstaged hunks into an agent's commit and
+ * destroys the index they curated, so a checkpoint refuses instead.
+ */
+export function foreignStagedPaths(cwd) {
+  const root = repoRoot(cwd);
+  const out = git(root, ["status", "--porcelain=v1", "-z", "--", "."]);
+  const staged = [];
+  for (const entry of out.split("\0")) {
+    if (entry.length < 4) continue;
+    const index = entry[0];
+    const worktree = entry[1];
+    // Index differs from HEAD *and* worktree differs from index: partial staging.
+    if (index !== " " && index !== "?" && worktree !== " " && worktree !== "?") {
+      staged.push(entry.slice(3));
+    }
+  }
+  return staged;
 }
 
 /**
@@ -67,12 +144,39 @@ function hasStagedChanges(cwd) {
  * set (which is git-derived) and only loses a diagnostic row. The reverse order
  * would leave a row claiming a checkpoint that does not exist.
  */
-export function takeCheckpoint(db, runId, { phase, reason, cwd, rationale = null, at = nowIso() }) {
+export function takeCheckpoint(
+  db,
+  runId,
+  { phase, reason, cwd, files = null, rationale = null, at = nowIso() },
+) {
   const sequence = nextSequence(db, runId);
   const tasks = pendingCapture(db, runId);
 
-  if (!hasStagedChanges(cwd)) {
-    return { taken: false, sequence, tasks: [], sha: null, reason: "nothing-to-commit" };
+  const partial = foreignStagedPaths(cwd);
+  if (partial.length > 0) {
+    return {
+      taken: false,
+      sequence,
+      tasks: [],
+      sha: null,
+      reason: "partial-staging",
+      paths: partial,
+    };
+  }
+
+  const { root, paths, foreign, unscoped } = checkpointPaths(cwd, files);
+  if (unscoped) {
+    return {
+      taken: false,
+      sequence,
+      tasks: [],
+      sha: null,
+      reason: "no-file-scope",
+      foreign,
+    };
+  }
+  if (paths.length === 0) {
+    return { taken: false, sequence, tasks: [], sha: null, reason: "nothing-to-commit", foreign };
   }
 
   const message = [
@@ -83,9 +187,9 @@ export function takeCheckpoint(db, runId, { phase, reason, cwd, rationale = null
     `SET-Tasks: ${tasks.join(",")}`,
   ].join("\n");
 
-  git(cwd, ["add", "-A", "--", ".", ...NEVER_COMMIT]);
-  git(cwd, ["commit", "-q", "-m", message]);
-  const sha = git(cwd, ["rev-parse", "HEAD"]);
+  git(root, ["add", "--", ...paths]);
+  git(root, ["commit", "-q", "-m", message]);
+  const sha = git(root, ["rev-parse", "HEAD"]);
 
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -106,7 +210,7 @@ export function takeCheckpoint(db, runId, { phase, reason, cwd, rationale = null
     throw err;
   }
 
-  return { taken: true, sequence, tasks, sha };
+  return { taken: true, sequence, tasks, sha, committed: paths, foreign };
 }
 
 /** Record a checkpoint the orchestrator considered and declined. */

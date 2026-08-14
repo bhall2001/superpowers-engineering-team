@@ -20,6 +20,14 @@ function storePath(repoDir) {
   return join(repoDir, "..", `${basename(repoDir)}-store.db`);
 }
 
+/** Stands in for the union of the plan's per-task `Files`. */
+function allFiles(dir) {
+  return git(dir, "status", "--porcelain=v1", "--untracked-files=all")
+    .split("\n")
+    .filter((line) => line.length > 3)
+    .map((line) => line.slice(3));
+}
+
 function tempRepo() {
   const dir = mkdtempSync(join(tmpdir(), "set-e2e-"));
   git(dir, "init", "-q", ".");
@@ -48,7 +56,7 @@ function crashedRun(dir) {
   writeFileSync(join(dir, "b.txt"), "b\n");
   recordVerdict(db, runId, "T-beta", { passed: true });
 
-  const cp = takeCheckpoint(db, runId, { phase: "build", reason: "phase-boundary", cwd: dir });
+  const cp = takeCheckpoint(db, runId, { phase: "build", reason: "phase-boundary", cwd: dir, files: allFiles(dir) });
 
   // Verified after the checkpoint — durable in the DB, absent from git.
   writeFileSync(join(dir, "c.txt"), "c\n");

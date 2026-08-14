@@ -438,8 +438,10 @@ node "$BIN" init --worktree "$(git rev-parse --show-toplevel)" --branch "$(git b
 # after each verdict returns
 node "$BIN" task --run {run-id} --task T-{slug} --status passed|failed
 
-# at a checkpoint
-node "$BIN" checkpoint --run {run-id} --phase {phase} --reason phase-boundary|judgment|backstop
+# at a checkpoint — --files is REQUIRED and is the union of the `Files` field of
+# every task captured so far. Without it the checkpoint refuses ("no-file-scope").
+node "$BIN" checkpoint --run {run-id} --phase {phase} --reason phase-boundary|judgment|backstop \
+                       --files "src/a.ts,src/b.ts,tests/a.test.ts"
 
 # when you decline one — records why, so a long gap is diagnosable
 node "$BIN" checkpoint --run {run-id} --phase {phase} --decline --rationale "2 trivial tasks"
@@ -451,10 +453,23 @@ node "$BIN" due --run {run-id}
 node "$BIN" release --run {run-id}
 ```
 
-Run these **from the repo root** — `checkpoint` stages relative to the worktree it was
-given. If `.claude/set/config.json` has `sqlite_flag`, pass it to `node` before the script
-path. Every command prints JSON; a non-zero exit means the store write failed, so report it
-rather than continuing silently.
+Run these **from the repo root**. If `.claude/set/config.json` has `sqlite_flag`, pass it
+to `node` before the script path. Every command prints JSON; a non-zero exit means the
+store write failed, so report it rather than continuing silently.
+
+**A checkpoint commits only the files you scope it to.** It never runs `git add -A` — the
+build shares the human's worktree, and sweeping it would commit their unignored
+`.env.local`, their scratch notes, and any other worktree lying under the root. Pass
+`--files` as the union of the `Files` field from every task the checkpoint is capturing.
+
+Two results to handle rather than ignore:
+
+- `"reason": "partial-staging"` — a human has content staged that this run did not create
+  (mid `git add -p`). The checkpoint refuses instead of folding their unstaged hunks into
+  it. Report the paths and carry on without a checkpoint; do not `git add` anything.
+- `"foreign": [...]` on success — changed files outside your scope, left uncommitted.
+  Normal when the human has their own edits in the tree. Worth a line in the build report
+  if a task's real output shows up here, since that means the plan's `Files` was wrong.
 
 What you must do:
 

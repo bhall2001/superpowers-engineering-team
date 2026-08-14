@@ -3,6 +3,8 @@ import { canonicalPath } from "./run.mjs";
 import { probeHolders } from "./claim.mjs";
 import { resolveSkipSet } from "./skipset.mjs";
 
+const ADVISORY_FILE_CAP = 200;
+
 export class ResumeRefused extends Error {
   constructor(message, reason) {
     super(message);
@@ -12,7 +14,11 @@ export class ResumeRefused extends Error {
 }
 
 function git(cwd, args) {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  }).trim();
 }
 
 function currentBranch(cwd) {
@@ -65,15 +71,31 @@ export function assertLocation(run, cwd) {
  */
 export function advisoryDiff(cwd, sinceSha) {
   const files = new Set();
-  if (sinceSha) {
-    for (const line of git(cwd, ["diff", "--name-only", sinceSha]).split("\n")) {
+  try {
+    if (sinceSha) {
+      for (const line of git(cwd, ["diff", "--name-only", sinceSha]).split("\n")) {
+        if (line.trim()) files.add(line.trim());
+      }
+    }
+    for (const line of git(cwd, ["ls-files", "--others", "--exclude-standard"]).split("\n")) {
       if (line.trim()) files.add(line.trim());
     }
+  } catch (err) {
+    // A crashed run may leave a huge untracked tree (an interrupted install is
+    // the expected case). This briefing is advisory, so degrade rather than
+    // take the whole resume down with it.
+    return { checkpointSha: sinceSha, files: [], truncated: true, error: err.code ?? err.message };
   }
-  for (const line of git(cwd, ["ls-files", "--others", "--exclude-standard"]).split("\n")) {
-    if (line.trim()) files.add(line.trim());
-  }
-  return { checkpointSha: sinceSha, files: [...files].sort() };
+
+  // This briefing goes into an agent's prompt. 14k paths from an interrupted
+  // install is not context, it is a denial of service on the context window.
+  const sorted = [...files].sort();
+  return {
+    checkpointSha: sinceSha,
+    files: sorted.slice(0, ADVISORY_FILE_CAP),
+    total: sorted.length,
+    truncated: sorted.length > ADVISORY_FILE_CAP,
+  };
 }
 
 /**

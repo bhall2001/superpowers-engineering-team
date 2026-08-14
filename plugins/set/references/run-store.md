@@ -31,8 +31,19 @@ is on disk but uncommitted, so resume re-dispatches it.
     tasks/<task-id>.md             agent scratch — advisory, never parsed
 ```
 
-The store lives **outside** the worktree. `takeCheckpoint` also excludes `runs.db` by
-pathspec, so a stray copy inside a repo is never swept into a checkpoint.
+The store lives **outside** the worktree, and a stray copy inside a repo is excluded by
+pathspec so it can never be swept into a checkpoint.
+
+**A checkpoint commits only files it was scoped to.** It never runs `git add -A`: the
+build shares the human's worktree, so `-A` would commit their unignored `.env.local`,
+their scratch notes, and any nested worktree. `checkpoint --files` takes the union of the
+captured tasks' `Files`; anything else changed in the tree is reported as `foreign` and
+left alone. With no scope the checkpoint refuses (`no-file-scope`) rather than guessing —
+per-task attribution was abandoned deliberately, so the run has to be told what it owns.
+
+It also refuses (`partial-staging`) when the index holds content the run did not create:
+committing over a human's `git add -p` session would fold their unstaged hunks into an
+agent's commit and destroy the index they curated.
 
 ## Requirements
 

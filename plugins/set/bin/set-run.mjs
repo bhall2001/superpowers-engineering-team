@@ -67,6 +67,16 @@ function openAt(flags) {
 const COMMANDS = {
   init(db, flags) {
     require_(flags, "worktree", "branch", "plan");
+    // Surface the holder and the recovery command rather than a raw UNIQUE
+    // violation from the partial index.
+    const live = probeHolders(db, flags.worktree).filter((holder) => !holder.dead);
+    if (live.length > 0) {
+      const holder = live[0].row;
+      throw new Error(
+        `worktree is held by run ${holder.run_id} (pid ${holder.session_pid} on ${holder.hostname}, ` +
+          `last seen ${holder.updated_at}). Release it with: set-run.mjs release ${holder.run_id}`,
+      );
+    }
     const runId = initRun(db, {
       projectPath: flags.project ?? flags.worktree,
       worktreePath: flags.worktree,
@@ -122,6 +132,12 @@ const COMMANDS = {
       reason: flags.reason ?? "judgment",
       rationale: flags.rationale ?? null,
       cwd: flags.cwd ?? run.worktree_path,
+      files: flags.files
+        ? String(flags.files)
+            .split(",")
+            .map((path) => path.trim())
+            .filter(Boolean)
+        : null,
     });
   },
 
@@ -155,6 +171,8 @@ const COMMANDS = {
       rewritten: plan.rewritten,
       checkpoint_sha: plan.advisory.checkpointSha,
       dirty_files: plan.advisory.files,
+      dirty_total: plan.advisory.total ?? plan.advisory.files.length,
+      dirty_truncated: Boolean(plan.advisory.truncated),
     };
   },
 
