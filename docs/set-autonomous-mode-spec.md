@@ -173,7 +173,8 @@ editable, so this is recoverable rather than a hard risk.
 This feature must reach existing SET users through their next `/set-update`. That is a
 requirement of the work, not a follow-up to it.
 
-The mechanism already exists and needs no installer changes:
+The delivery mechanism already exists (the installer gains a version-notification
+step — see "Update Notification" below — but nothing about delivery changes):
 
 - `install.sh` fetches the **`main` branch** tarball and copies
   `plugins/set/commands/*.md` → `~/.claude/commands/set-*.md`.
@@ -195,13 +196,65 @@ project migration has nothing to reconcile.
 
 1. The five edited command files live under `plugins/set/commands/` and are merged to
    `main`.
-2. `install.sh` requires no changes; the existing `install_file` calls cover every
-   edited file.
+2. The existing `install_file` calls cover every edited file (they already do; the
+   installer's only change is the version notification below).
 3. A user running `/set-update` against `main` receives the switches with no manual step
    and no migration prompt.
 4. `README.md` and `docs/commands.md` describe both switches — `--verbose` documented as
    a general-purpose flag, not as an autonomous-mode option — so an updating user can
    discover the feature without reading the command specs.
+5. A user updating from an earlier version is **told** the switches now exist, rather
+   than having to notice them (see "Update Notification").
+
+## Update Notification
+
+A significant feature that ships silently is a feature most users never find. `/set-update`
+currently reports only that commands were installed — never what changed. Autonomous mode
+is the first release large enough to make that gap matter.
+
+### Mechanism
+
+`install.sh` gains a version check. It does **not** change how files are delivered.
+
+1. **Before overwriting anything,** read the previously installed version from
+   `~/.claude/commands/.set-version` (absent → treat as a first install).
+2. Read the incoming version from the source tree's
+   `plugins/set/.claude-plugin/plugin.json` via `jq` (already a hard dependency).
+3. **After a successful install,** write the incoming version to
+   `~/.claude/commands/.set-version`.
+4. If the version changed, print the incoming version's section from `CHANGELOG.md`
+   under a "What's new" heading. Unchanged → print nothing beyond the normal report.
+
+The version file must be read **before** the copy step: `/set-update` overwrites
+`~/.claude/commands/`, so anything stored only inside the replaced files is gone by the
+time the report is printed.
+
+### Why the installer rather than the `/set-update` command
+
+`/set-update` is a prompt. An instruction to "tell the user what changed" is advisory —
+an LLM may apply it inconsistently, and it would need to capture the prior version before
+running the installer that destroys it. The installer is deterministic and already owns
+the copy step, so it is the only place the before/after comparison is reliable.
+
+### Self-maintaining
+
+The notification reads `CHANGELOG.md`, which this project already maintains per release.
+Every future release gets a notification with no additional work — nothing to remember,
+nothing to keep in sync beyond the changelog entry that would be written anyway.
+
+### Version bump
+
+This branch ships a significant feature, so it releases as **1.2.0** (from 1.1.0), with a
+`CHANGELOG.md` entry describing both switches. The notification mechanism has nothing to
+announce without them — the bump and the entry are part of this work, not a follow-up.
+
+### Failure behavior
+
+The notification is **never** allowed to fail the install. A missing `CHANGELOG.md`, an
+unparseable `plugin.json`, an unwritable version file, or a missing changelog section for
+the incoming version each degrade to printing nothing (or a single terse line) and must
+not set the installer's error count or change its exit code. Delivering the files is the
+installer's job; telling the user what arrived is a courtesy on top.
 
 ## Files Touched
 
@@ -212,10 +265,16 @@ project migration has nothing to reconcile.
 - `plugins/set/commands/learn.md` — accept `--verbose`; reject `--autonomous` (terminal); shard origin tagging; final report
 - `README.md` — document both switches; design-phase caution note
 - `docs/commands.md`, `docs/workflow.md` — switch reference
+- `install.sh` — copy the new reference file; version check + "What's new" notification
+- `plugins/set/.claude-plugin/plugin.json` — version 1.1.0 → 1.2.0
+- `CHANGELOG.md` — 1.2.0 entry describing both switches
 
-`/set-init` and `/set-update` are untouched. Neither fans out agents, so `--verbose`
-would be a no-op flag there; "every pipeline command" means the five cycle phases
-(`design`, `plan`, `build`, `review`, `learn`).
+The five cycle command files are untouched by the notification work.
+
+`/set-init` and `/set-update` command specs are untouched. Neither fans out agents, so
+`--verbose` would be a no-op flag there; "every pipeline command" means the five cycle
+phases (`design`, `plan`, `build`, `review`, `learn`). `/set-update` needs no edit to
+surface the notification — it re-runs `install.sh`, which prints it.
 
 ## Out of Scope
 
@@ -223,6 +282,10 @@ would be a no-op flag there; "every pipeline command" means the five cycle phase
 - Autonomy on `/set-init` and `/set-learn`
 - Any change to the four-lens return contract or the build's TDD/verifier bar
 - Pushing, PR creation, or merging under any flag
+- Any notification channel other than the installer's own output (no network calls, no
+  telemetry, no update-available check against GitHub)
+- Downgrade detection — a lower incoming version is treated as "changed" and shows that
+  version's changelog section; the installer does not attempt to reason about direction
 
 ## Open Questions
 
