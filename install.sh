@@ -184,8 +184,33 @@ else
 fi
 
 # Ensure .claude directory exists
-mkdir -p "$CLAUDE_DIR"
-mkdir -p "$COMMANDS_DIR"
+mkdir -p "$CLAUDE_DIR" 2>/dev/null || true
+mkdir -p "$COMMANDS_DIR" 2>/dev/null || true
+
+# A read-only commands dir is the normal devcontainer setup, not a broken install:
+# the host's ~/.claude/commands is bind-mounted readonly so the container reads the
+# host's SET without being able to corrupt it. Under `set -e` the mkdir above would
+# otherwise abort with a bare "Permission denied" and no explanation.
+if ! ( : > "$COMMANDS_DIR/.set-write-probe" ) 2>/dev/null; then
+  error "Cannot write to $COMMANDS_DIR"
+  echo ""
+  if [ -f /.dockerenv ] || [ -n "${REMOTE_CONTAINERS:-}" ] || [ -n "${CODESPACES:-}" ]; then
+    error "This looks like a container, where ~/.claude/commands is typically"
+    error "bind-mounted read-only from the host. That is intentional — SET is"
+    error "installed once on the HOST and every container inherits it."
+    echo ""
+    error "  Fix: run this installer on the host, then restart the container."
+    error "  Do NOT try to install SET inside the container."
+  else
+    error "Check ownership and permissions on that directory, then re-run."
+  fi
+  echo ""
+  if [ -f "$COMMANDS_DIR/.set-version" ]; then
+    error "Currently mounted SET version: $(cat "$COMMANDS_DIR/.set-version" 2>/dev/null)"
+  fi
+  exit 1
+fi
+rm -f "$COMMANDS_DIR/.set-write-probe"
 
 # ---------------------------------------------------------------------------
 # Step 1: Register marketplaces in settings.json

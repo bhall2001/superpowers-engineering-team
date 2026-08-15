@@ -181,6 +181,13 @@ If the user prefers not to grant that, tell them to run the line themselves outs
 
 > Re-running the installer overwrites this `/set-update` command with the latest version. That's expected and safe now that migration (Step 1) has already run.
 
+**In a container, this step cannot succeed — and should not.** Devcontainers commonly
+bind-mount the host's `~/.claude/commands` read-only, so SET is installed once on the host
+and every container inherits it. The installer detects this and stops with instructions
+rather than a permission error. If you hit it, do **not** try to work around the mount:
+tell the user to run the installer on the host and restart the container, and report the
+version currently mounted so they can see what the container has.
+
 ### 3. Update Superpowers
 
 ```
