@@ -379,6 +379,51 @@ extract_changelog_section() {
   ' "$changelog" 2>/dev/null || true
 }
 
+# extract_changelog_range <new-version> <prev-version> <changelog-path>
+# Prints the bodies of every "## [x.y.z]" section newer than <prev-version>, up to
+# and including <new-version>, each preceded by a "@@VERSION x.y.z" marker line.
+#
+# A user who skips releases must still see what changed in the ones they skipped:
+# upgrading 1.2.0 -> 1.3.0 has to report 1.2.1's changes too, or they ship silently.
+# An empty or unparseable <prev-version> falls back to the single newest section,
+# which is the correct behaviour for a first install.
+extract_changelog_range() {
+  local new_version="$1" prev_version="$2" changelog="$3"
+  [ -f "$changelog" ] || return 0
+  awk -v newv="$new_version" -v prevv="$prev_version" '
+    # Compare dotted versions numerically, component by component. Non-numeric or
+    # missing components sort as 0, so a malformed tag degrades to "oldest" rather
+    # than throwing. Returns -1, 0, or 1.
+    function vcmp(a, b,   an, bn, x, y, i, n, na, nb) {
+      na = split(a, x, ".")
+      nb = split(b, y, ".")
+      n = (na > nb) ? na : nb
+      for (i = 1; i <= n; i++) {
+        an = (x[i] ~ /^[0-9]+$/) ? x[i] + 0 : 0
+        bn = (y[i] ~ /^[0-9]+$/) ? y[i] + 0 : 0
+        if (an > bn) return 1
+        if (an < bn) return -1
+      }
+      return 0
+    }
+    /^## \[/ {
+      emit = 0
+      # Section version is the text between the first [ and the following ].
+      if (match($0, /\[[^]]+\]/)) {
+        secv = substr($0, RSTART + 1, RLENGTH - 2)
+        # Include it when it is no newer than the version being installed and
+        # strictly newer than what the user already has.
+        if (vcmp(secv, newv) <= 0 && (prevv == "" || vcmp(secv, prevv) > 0)) {
+          emit = 1
+          print "@@VERSION " secv
+        }
+      }
+      next
+    }
+    emit { print }
+  ' "$changelog" 2>/dev/null || true
+}
+
 # changelog_headline <version> <changelog-path>
 # Prints the text after the separator in "## [<ver>] — <headline>" (em-dash or
 # ASCII hyphen). Empty when the heading carries no separated headline.
@@ -395,16 +440,49 @@ changelog_headline() {
   ' "$changelog" 2>/dev/null | sanitize_digest || true
 }
 
-# changelog_digest <version> <changelog-path>
-# One "  • " line per top-level `- **lead**` bullet in the version's section,
-# bounded and sanitized. A full changelog section is release-note prose; this is
-# the scannable form.
+# changelog_digest <version> <changelog-path> [prev-version]
+# One "  • " line per top-level `- **lead**` bullet, bounded and sanitized. A full
+# changelog section is release-note prose; this is the scannable form.
+#
+# With <prev-version>, covers every release in (prev, version] rather than just the
+# newest — a user upgrading across skipped versions sees their changes too. When the
+# range spans more than one release, each is introduced by a "  1.2.1:" header so the
+# bullets stay attributable. Omitting <prev-version> keeps the single-section form.
 changelog_digest() {
-  local version="$1" changelog="$2"
-  extract_changelog_section "$version" "$changelog" \
-    | grep '^- \*\*' 2>/dev/null \
-    | sed 's/^- \*\*\([^*]*\)\*\*.*/  • \1/' 2>/dev/null \
-    | sed 's/[.:]$//' 2>/dev/null \
+  local version="$1" changelog="$2" prev="${3:-}"
+  local raw
+  # A prev that is not dotted-numeric compares as 0.0.0, which would make every
+  # section "newer" and dump the entire history. Treat it as unknown instead.
+  case "$prev" in
+    *[!0-9.]* | .* | *.) prev="" ;;
+  esac
+  if [ -n "$prev" ]; then
+    raw="$(extract_changelog_range "$version" "$prev" "$changelog")"
+  else
+    raw="$(printf '@@VERSION %s\n%s\n' "$version" "$(extract_changelog_section "$version" "$changelog")")"
+  fi
+  printf '%s\n' "$raw" \
+    | awk '
+        /^@@VERSION / { versions[++nv] = substr($0, 11); order[nv] = ""; cur = nv; next }
+        /^- \*\*/ {
+          line = $0
+          sub(/^- \*\*/, "", line)
+          sub(/\*\*.*/, "", line)
+          sub(/[.:]$/, "", line)
+          if (cur) bullets[cur] = bullets[cur] line "\n"
+        }
+        END {
+          # Header the versions only when more than one contributed bullets.
+          shown = 0
+          for (i = 1; i <= nv; i++) if (bullets[i] != "") shown++
+          for (i = 1; i <= nv; i++) {
+            if (bullets[i] == "") continue
+            if (shown > 1) print "  " versions[i] ":"
+            n = split(bullets[i], b, "\n")
+            for (j = 1; j <= n; j++) if (b[j] != "") print (shown > 1 ? "    • " : "  • ") b[j]
+          }
+        }
+      ' 2>/dev/null \
     | sanitize_digest || true
 }
 
@@ -482,7 +560,7 @@ WHATS_NEW=""
 WHATS_NEW_HEADLINE=""
 if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$PREV_VERSION" ]; then
   WHATS_NEW_HEADLINE="$(changelog_headline "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
-  WHATS_NEW="$(changelog_digest "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md")"
+  WHATS_NEW="$(changelog_digest "$NEW_VERSION" "$PLUGIN_ROOT/../../CHANGELOG.md" "$PREV_VERSION")"
 fi
 
 # Clean up any downloaded tree.

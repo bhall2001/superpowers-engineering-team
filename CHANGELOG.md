@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1] — Fix: update digest skipped intermediate releases
+
+### Fixed
+- **The "what's new" digest covered only the newest release.** `install.sh` printed a header naming the full range (`SET updated 1.2.0 → 1.3.0`) but a body drawn from a single changelog section, so every release in between was reported as if it did not exist — a user upgrading 1.2.0 → 1.3.0 never saw 1.2.1's changes at all. The digest now walks every section newer than the installed version, grouping bullets under an indented per-release header when more than one is covered. A single-release update keeps the flat list it had before, and a fresh install still shows only the newest section. `/set-update` relays the grouped form.
+
+### Notes
+- Version comparison is numeric and component-wise, so a downgrade or a re-run on the same version correctly reports nothing rather than replaying history. A previous version that is not dotted-numeric (an unparseable or hand-edited `.set-version`) falls back to the newest-section digest instead of dumping every release.
+
 ## [1.3.0] — Durable autonomous runs + agent return-channel fix
 
 ### Added
