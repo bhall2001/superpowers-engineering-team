@@ -1,67 +1,57 @@
 # Changelog
 
-## [1.3.3] — Fix: read-only commands directory aborted the installer
+## [1.4.0] — Agent Teams now start correctly
 
 ### Fixed
-- **A read-only `~/.claude/commands` aborted the installer with a bare permission error.** Devcontainers commonly bind-mount the host's commands directory read-only, so SET is installed once on the host and every container inherits it — but under `set -e` the installer's `mkdir -p` failed with an unexplained `Permission denied`, which reads like a broken install rather than a working design. It now probes writability up front and, when the directory is not writable, explains the container model, says to install on the host and restart the container, and reports the version currently mounted. On a non-container host the same check points at ownership and permissions instead. `/set-update` documents the same constraint, since an in-container agent running it is exactly who hits this.
+- **Configuration issue that kept Agent Teams from initializing.** `/set-build` silently ran on the dynamic-workflow path instead. `install.sh` and `/set-init` now write the right settings; `/set-update` adds them to existing projects.
 
-## [1.3.2] — Fix: availability gate downgraded silently on a deferred-tool probe
-
-### Fixed
-- **The Agent Team availability gate checked only the env var.** With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` set, an orchestrator would probe for the task tools, get `No matching deferred tools found` back from a malformed `ToolSearch` query, conclude the harness lacked Agent Teams, and fall back to the workflow path — reporting a missing feature where the real fault was the probe. The task tools are normally **deferred**: listed by name with no schema until `ToolSearch("select:TaskCreate,TaskList,TaskUpdate,TaskGet")` fetches them. The gate now spells out that query, notes that `No matching deferred tools found` is a query miss rather than a verdict on the harness, and treats Agent Teams as unavailable only when the `select:` form returns nothing *and* `TaskList` cannot be called.
-- **"Agent Teams unavailable" no longer hides which check failed.** The env var and the tool probe have different fixes; a user told only "unavailable" edits `settings.json` for a problem that was never there. Both the interactive prompt and the `--autonomous` phase-boundary line now name the failing check.
+### Changed
+- **`/set-build` halts when Agent Teams are unavailable** instead of quietly switching to the workflow path — the two produce different results, and the substitution was invisible. Use `--use-workflow` to run that path deliberately.
 
 ### Notes
-- `references/agent-return-channels.md` now records that its rule binds the **Agent Team path only**. The workflow path calls `agent(prompt, {schema})`, which has no `name` parameter and was never affected — so a green `--use-workflow` build or a default `/set-review` fan-out does not exercise the return-channel fix, and must not be cited as validating it.
+- **Restart Claude Code after updating.** These settings are read at session start.
 
-## [1.3.1] — Fix: update digest skipped intermediate releases
+## [1.3.3] — Clearer installer errors in containers
 
 ### Fixed
-- **The "what's new" digest covered only the newest release.** `install.sh` printed a header naming the full range (`SET updated 1.2.0 → 1.3.0`) but a body drawn from a single changelog section, so every release in between was reported as if it did not exist — a user upgrading 1.2.0 → 1.3.0 never saw 1.2.1's changes at all. The digest now walks every section newer than the installed version, grouping bullets under an indented per-release header when more than one is covered. A single-release update keeps the flat list it had before, and a fresh install still shows only the newest section. `/set-update` relays the grouped form.
+- **The installer failed with an unexplained permission error** when `~/.claude/commands` was read-only. It now explains that SET is installed on the host and inherited by containers, and reports the version currently mounted.
 
-### Notes
-- Version comparison is numeric and component-wise, so a downgrade or a re-run on the same version correctly reports nothing rather than replaying history. A previous version that is not dotted-numeric (an unparseable or hand-edited `.set-version`) falls back to the newest-section digest instead of dumping every release.
+## [1.3.2] — More accurate Agent Team availability check
 
-## [1.3.0] — Durable autonomous runs + agent return-channel fix
+### Fixed
+- **`/set-build` could report Agent Teams as unavailable when they were fine**, and switch to the workflow path. The check is now more reliable and names what actually failed.
+
+## [1.3.1] — Update notes cover every release
+
+### Fixed
+- **`/set-update` showed only the newest release's notes**, skipping anything in between. Upgrades spanning several versions now list each one.
+
+## [1.3.0] — Durable autonomous runs
 
 ### Added
-- **Durable autonomous runs.** An autonomous run now survives a crash. Checkpoint commits on the build branch are the authoritative record of completed work: `/set-build --resume` derives its skip set from `SET-Run`/`SET-Tasks` git trailers, re-dispatches everything not durably committed, and leaves the working tree untouched as the forensic record of where the team broke. A machine-level SQLite store at `~/.claude/set-runs/runs.db` (WAL, `node:sqlite`) tracks liveness, enforces one live run per worktree, and logs checkpoints — taken *and* declined. Checkpoints are mandatory at phase boundaries, judgment-based within a phase, with a 30-minute backstop. Task identity is a stable slug derived from the task title, so re-planning does not re-dispatch finished work. See `references/run-store.md`; requires `node:sqlite` (stable on Node 24), and degrades to markdown-only if unavailable.
-- **`references/agent-return-channels.md`** — the rule the fix below violated, in one place both commands cite: *name an agent only when you intend to `SendMessage` it; never when you need its result.* Documents why a named result is unrecoverable (`TaskOutput` is deprecated for agent tasks; its `.output` file is a transcript symlink that would overflow context), how to recognize the receipt, and why git is the corroborating channel when a report is missing.
+- **Autonomous runs survive a crash.** `/set-build --resume` picks up where the run stopped, re-dispatching only work that wasn't committed and leaving the working tree intact. Checkpoints are taken at phase boundaries and at meaningful points within a phase. Requires Node 24; degrades gracefully without it.
 
 ### Fixed
-- **`/set-build` verifiers returned nothing.** T3 spawned each verifier with `name: "verifier-{task-id}"`. A named `Agent` call returns a mailbox receipt (`Spawned successfully … will receive instructions via mailbox`) instead of the agent's final message, so every per-task verdict was discarded at the moment it was produced — the verifier did its work correctly and the result went nowhere. Verifiers are now spawned unnamed, which returns the verdict object as the tool result. The same applies to `/set-review` `--light` lenses, whose Step 2c "retry, then mark `FAILED`" was attributing a caller defect to the lens.
-- **Stall detection misdiagnosed the symptom.** `/set-build` T4 treated a missing return as a stalled teammate and burned six polling rounds before failing the task. It now rules out the return-channel defect first: a result that never had a delivery path cannot be recovered by waiting.
+- **Build verifiers and review lenses reported no results.** Their verdicts were being discarded, so tasks looked unverified even when the work was done.
+- **Stalled-task detection** no longer burns polling rounds on a task that already finished.
 
-### Notes
-- Naming a builder teammate is still correct — the coordinator messages it and reads progress from the task list. `build.md` now states which spawns may carry a `name` and why, so the two cases are not conflated again.
+## [1.2.1] — Acceptance check wording
 
-## [1.2.1] — Autonomous mode + `--verbose`
-
-### Added
-- **`--autonomous` on all five cycle phases.** Runs that phase and every remaining phase through `/set-learn` without stopping at human gates — chained in-session by reading the next phase's command file directly, nothing written to disk. Carries only for the current conversation: not resumable after a crash, and a stale flag can never leak into a later manual invocation. Valid on `/set-design`, `/set-plan`, `/set-build`, `/set-review`, and `/set-learn`; `/set-init` and `/set-update` take neither switch.
-- **`/set-learn` no longer stops to ask.** It chains nowhere from the terminal phase, but it otherwise asks you to approve a proposed taxonomy, approve each new domain, and approve every agent update — three gates an autonomous run would stall on. Under `--autonomous`, or when reached via a chain, it applies them and lists everything applied in the Final Report, so you review after instead of approving up front.
-- **Bounded iterate loop in `/set-review --autonomous`.** On ITERATE, findings are compiled into a fix brief and routed to the specialist that owns each finding's domain — including specialists the original build never spawned (e.g. a security finding in a build that only touched UI and DB tasks still gets a security-owning fixer). Fix agents run in fresh contexts, followed by a fresh, independent four-lens re-review. The loop exits on whichever comes first: clean review, no new findings vs. the prior round, or 2 rounds spent. BLOCK, or any lens returning `FAILED`, halts immediately with iterations unspent — neither is something another round can fix.
-- **`--verbose`** — standalone flag on all five cycle phases (`/set-design`, `/set-plan`, `/set-build`, `/set-review`, `/set-learn`), valid with or without `--autonomous`. Default output reports phase boundaries only (entering/leaving each phase with its headline result); `--verbose` adds per-agent spawn/return. There is no `--quiet` — phase boundaries are the floor a supervised run needs to follow along, not a default to suppress.
-- **Installer reports what's new on a version change.** `install.sh` now reads the previously-installed version before overwriting `~/.claude/commands/`, compares it to the incoming version, and prints a short digest of that version's changelog entry — a version line plus one line per headline bullet, with a pointer to `CHANGELOG.md` for the full notes. `/set-update` leads its report with the same digest, since installer output is not where a Claude Code user reads it. Fully best-effort: a missing changelog, unparseable `plugin.json`, or unwritable version file degrades to printing nothing and never fails the install.
-
-### Notes
-- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user this project's acceptance check and the push decision.
-- `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
-- Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human verification is traceable and removable.
+### Fixed
+- Autonomous runs now hand back **this project's** acceptance check rather than assuming a browser check.
 
 ## [1.2.0] — Autonomous mode + `--verbose`
 
 ### Added
-- **`--autonomous` on all five cycle phases.** Runs that phase and every remaining phase through `/set-learn` without stopping at human gates — chained in-session by reading the next phase's command file directly, nothing written to disk. Carries only for the current conversation: not resumable after a crash, and a stale flag can never leak into a later manual invocation. Valid on `/set-design`, `/set-plan`, `/set-build`, `/set-review`, and `/set-learn`; `/set-init` and `/set-update` take neither switch.
-- **`/set-learn` no longer stops to ask.** It chains nowhere from the terminal phase, but it otherwise asks you to approve a proposed taxonomy, approve each new domain, and approve every agent update — three gates an autonomous run would stall on. Under `--autonomous`, or when reached via a chain, it applies them and lists everything applied in the Final Report, so you review after instead of approving up front.
-- **Bounded iterate loop in `/set-review --autonomous`.** On ITERATE, findings are compiled into a fix brief and routed to the specialist that owns each finding's domain — including specialists the original build never spawned (e.g. a security finding in a build that only touched UI and DB tasks still gets a security-owning fixer). Fix agents run in fresh contexts, followed by a fresh, independent four-lens re-review. The loop exits on whichever comes first: clean review, no new findings vs. the prior round, or 2 rounds spent. BLOCK, or any lens returning `FAILED`, halts immediately with iterations unspent — neither is something another round can fix.
-- **`--verbose`** — standalone flag on all five cycle phases (`/set-design`, `/set-plan`, `/set-build`, `/set-review`, `/set-learn`), valid with or without `--autonomous`. Default output reports phase boundaries only (entering/leaving each phase with its headline result); `--verbose` adds per-agent spawn/return. There is no `--quiet` — phase boundaries are the floor a supervised run needs to follow along, not a default to suppress.
-- **Installer reports what's new on a version change.** `install.sh` now reads the previously-installed version before overwriting `~/.claude/commands/`, compares it to the incoming version, and prints a short digest of that version's changelog entry — a version line plus one line per headline bullet, with a pointer to `CHANGELOG.md` for the full notes. `/set-update` leads its report with the same digest, since installer output is not where a Claude Code user reads it. Fully best-effort: a missing changelog, unparseable `plugin.json`, or unwritable version file degrades to printing nothing and never fails the install.
+- **`--autonomous` on all five cycle phases.** Runs the rest of the cycle through `/set-learn` without stopping at human gates. Applies to the current conversation only — it is never persisted, so a stale flag cannot leak into a later run.
+- **Bounded iterate loop in `/set-review --autonomous`.** Findings are routed to the specialist that owns each one, fixed in fresh contexts, then independently re-reviewed. Exits on a clean review, no new findings, or 2 rounds.
+- **`--verbose`** on all five phases. Default output reports phase boundaries; `--verbose` adds per-agent spawn/return.
+- **The installer reports what's new** when the version changes, and `/set-update` leads with the same summary.
 
 ### Notes
-- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing the user the browser check and the push decision.
-- `--autonomous` on `/set-design` is supported but not currently best practice: the agent authors its own requirements, so a poor design costs tokens twice. Prefer starting autonomy at `/set-plan`, from a human-approved spec.
-- Learning shards written during an autonomous run are tagged `(unverified cycle)` so a bad learning captured before human verification is traceable and removable.
+- Autonomous runs never push, open a PR, merge, or claim work is verified — they always end by handing you the acceptance check and the push decision.
+- Prefer starting autonomy at `/set-plan` from an approved spec. `--autonomous` on `/set-design` works but has the agent author its own requirements.
+- Learnings captured during an autonomous run are tagged `(unverified cycle)`.
 
 ## [1.1.0] — Agent Teams by default
 

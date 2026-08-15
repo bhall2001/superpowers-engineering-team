@@ -16,6 +16,28 @@ SET 1.0 dropped Compound Teams and moved build/review onto dynamic workflows. Pr
 
 This step is **idempotent** (safe to re-run) and **never silently overwrites** — show each proposed change and get confirmation before writing. If none of the stale markers below are found, report "Project already current" and continue to Step 2.
 
+#### 1-pre: Add the task-tools variable (SET ≤ 1.3.3)
+
+Every SET through 1.3.3 wrote only `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, which does
+**not** register the task tools — so `/set-build`'s Agent Team path could never run and
+silently fell through to workflows. Fix both the user and project settings:
+
+```bash
+for f in ~/.claude/settings.json .claude/settings.json; do
+  [ -f "$f" ] || continue
+  jq -e '.env.CLAUDE_CODE_ENABLE_TODO_TOOLS' "$f" &>/dev/null && continue
+  echo "needs CLAUDE_CODE_ENABLE_TODO_TOOLS: $f"
+done
+```
+
+For each file listed, propose adding `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "true"` to its
+`env` block, preserving everything else. Do not remove `EXPERIMENTAL_AGENT_TEAMS` — it is
+a recognized variable and may gate other team behaviour; it was simply never sufficient
+alone.
+
+Tell the user a **session restart** is required: these are read at session start, so the
+current session keeps failing until it restarts.
+
 #### 1a: Migrate `CLAUDE.md`
 
 Look for the old SET-generated block. The marker is a heading line `### Ralph Loop (All Teammates Follow This)`.
@@ -203,8 +225,14 @@ ls ~/.claude/commands/set-*.md 2>/dev/null
 echo "=== Superpowers ==="
 ls ~/.claude/plugins/cache/*/superpowers/ 2>/dev/null && echo "OK" || echo "NOT FOUND"
 
-echo "=== Agent Teams enabled (required for the default /set-build path) ==="
-cat ~/.claude/settings.json 2>/dev/null | grep -q AGENT_TEAMS && echo "OK" || echo "not set — the default /set-build path needs it (restart after setting); /set-build --use-workflow needs no flag"
+echo "=== Agent Teams: task tools (REQUIRED — /set-build halts without them) ==="
+jq -e '.env.CLAUDE_CODE_ENABLE_TODO_TOOLS' ~/.claude/settings.json &>/dev/null \
+  && echo "OK" \
+  || echo "MISSING CLAUDE_CODE_ENABLE_TODO_TOOLS — this registers TaskCreate/TaskList/TaskUpdate/TaskGet. Without it /set-build cannot run (it will NOT fall back to workflows). Restart the session after setting it."
+
+echo "=== Agent Teams: experimental flag ==="
+jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' ~/.claude/settings.json &>/dev/null \
+  && echo "OK" || echo "MISSING CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 echo "=== Serena MCP (optional) ==="
 if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' ~/.claude/settings.json &>/dev/null; then

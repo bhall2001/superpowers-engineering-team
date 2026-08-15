@@ -96,12 +96,25 @@ and get confirmation before writing.
 
 ## Step 4: Enable Agent Teams (required for the default `/set-build` path)
 
-The default `/set-build` path runs as a native Agent Team and REQUIRES this flag (a session restart is needed after first write). Write it by default so the default path works out of the box. `/set-build --use-workflow` runs the dynamic-workflow path instead and needs no flag.
+`/set-build` runs as a native Agent Team and REQUIRES **both** variables below (a
+session restart is needed after first write). Write them by default so the build path
+works out of the box.
+
+- **`CLAUDE_CODE_ENABLE_TODO_TOOLS: "true"`** — registers `TaskCreate`, `TaskList`,
+  `TaskUpdate`, `TaskGet`. This is the one that actually matters: without it the team
+  has no task list and the build cannot run at all.
+- **`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"`** — the experimental team flag.
+
+Writing only `EXPERIMENTAL_AGENT_TEAMS` is the mistake SET shipped through 1.3.3: it is
+a recognized variable but does not register the task tools, so every build silently
+failed the availability check. `CLAUDE_CODE_ENABLE_TASKS` looks like the right lever and
+is **not** — it does not work.
 
 Check `.claude/settings.json`:
-- If it **doesn't exist**: create it with `{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
-- If it **exists but lacks the flag**: add the flag, preserving all other settings
-- If it **already has the flag**: skip, tell user it's already enabled
+- If it **doesn't exist**: create it with
+  `{ "env": { "CLAUDE_CODE_ENABLE_TODO_TOOLS": "true", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
+- If it **exists but lacks either**: add the missing one(s), preserving all other settings
+- If it **already has both**: skip, tell user it's already enabled
 
 Show the user the change before writing.
 
