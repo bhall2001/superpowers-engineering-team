@@ -51,6 +51,21 @@ work correctly; only the delivery was misrouted. Retrying with a sterner prompt,
 a poll timeout, or marking the lens `FAILED` all treat a caller defect as an agent defect
 and none of them fix it.
 
+## Which path this governs
+
+This rule binds the **Agent Team path only** — `/set-build` Phase B-team and `/set-review`
+`--light`, both of which call the `Agent` tool directly.
+
+The **workflow path is unaffected and was never broken.** `agent(prompt, {schema})` forces
+a `StructuredOutput` tool call and returns a validated object; there is no `name` parameter
+to get wrong. A `--use-workflow` build or a default `/set-review` fan-out therefore does
+**not** exercise this fix — a green run on those paths says nothing about it either way.
+
+Consequence when reading a report: "the lenses all returned" is evidence only when you
+know which path produced it. A run that fell back to the workflow path (see the Agent Team
+Availability Gate in `build.md`) proves nothing about the Agent Team path's return channel,
+and must not be cited as validating it.
+
 ## Corroborating channel
 
 Builders commit atomically, so git independently records what a teammate accomplished.

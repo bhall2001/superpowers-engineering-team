@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.2] — Fix: availability gate downgraded silently on a deferred-tool probe
+
+### Fixed
+- **The Agent Team availability gate checked only the env var.** With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` set, an orchestrator would probe for the task tools, get `No matching deferred tools found` back from a malformed `ToolSearch` query, conclude the harness lacked Agent Teams, and fall back to the workflow path — reporting a missing feature where the real fault was the probe. The task tools are normally **deferred**: listed by name with no schema until `ToolSearch("select:TaskCreate,TaskList,TaskUpdate,TaskGet")` fetches them. The gate now spells out that query, notes that `No matching deferred tools found` is a query miss rather than a verdict on the harness, and treats Agent Teams as unavailable only when the `select:` form returns nothing *and* `TaskList` cannot be called.
+- **"Agent Teams unavailable" no longer hides which check failed.** The env var and the tool probe have different fixes; a user told only "unavailable" edits `settings.json` for a problem that was never there. Both the interactive prompt and the `--autonomous` phase-boundary line now name the failing check.
+
+### Notes
+- `references/agent-return-channels.md` now records that its rule binds the **Agent Team path only**. The workflow path calls `agent(prompt, {schema})`, which has no `name` parameter and was never affected — so a green `--use-workflow` build or a default `/set-review` fan-out does not exercise the return-channel fix, and must not be cited as validating it.
+
 ## [1.3.1] — Fix: update digest skipped intermediate releases
 
 ### Fixed
