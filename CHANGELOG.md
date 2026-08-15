@@ -1,17 +1,15 @@
 # Changelog
 
-## [1.4.0] — Agent Teams actually run: correct env var, no workflow fallback
+## [1.4.0] — Agent Teams now start correctly
 
 ### Fixed
-- **SET enabled the wrong variable, so the Agent Team path never ran.** Every SET through 1.3.3 wrote and gated on `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, which does not register the task tools. The variable that does is **`CLAUDE_CODE_ENABLE_TODO_TOOLS`**. Verified by nonce test on Claude Code 2.1.233: with only `EXPERIMENTAL_AGENT_TEAMS`, a session reports `TaskCreate`/`TaskList`/`TaskUpdate`/`TaskGet` do not exist; with `TODO_TOOLS` it creates a task and reads back its id. `CLAUDE_CODE_ENABLE_TASKS` looks like the obvious lever and does **not** work. `install.sh` (4 sites), `/set-init`, `/set-build`'s gate, and `/set-update`'s verify all now use the correct variable and write both.
-- **The availability gate passed while the tools were absent**, because it read only the experimental flag. Combined with the fallback below, that meant `/set-build` silently ran every build on the dynamic-workflow path — including the builds meant to validate the Agent Team return-channel fix from 1.3.0.
+- **Configuration issue that kept Agent Teams from initializing.** `/set-build` silently ran on the dynamic-workflow path instead. `install.sh` and `/set-init` now write the right settings; `/set-update` adds them to existing projects.
 
 ### Changed
-- **`/set-build` no longer falls back to the workflow path. It halts.** The two paths are not interchangeable: an Agent Team gives each specialist its own context, its own judgment, and the ability to message a peer and re-scope mid-task, where a workflow DAG is fixed at authoring time. Substituting one for the other returns a different, lesser artifact under the same name. When the task tools are unavailable the build now stops with the exact settings block and a restart instruction, under `--autonomous` too. The workflow path runs only when explicitly requested with `--use-workflow`.
+- **`/set-build` halts when Agent Teams are unavailable** instead of quietly switching to the workflow path — the two produce different results, and the substitution was invisible. Use `--use-workflow` to run that path deliberately.
 
 ### Notes
-- Task-tool registration is **session-scoped**, not purely settings-scoped — the same `settings.json` can yield working tools in one session type and absent tools in another. The gate therefore reads the settings *and* probes the tools, and reports which check failed, since the fixes differ (edit settings vs. restart the session).
-- `/set-update` migrates existing projects: it adds `CLAUDE_CODE_ENABLE_TODO_TOOLS` to both user and project settings, and leaves `EXPERIMENTAL_AGENT_TEAMS` in place — it is a recognized variable that may gate other team behaviour, it was simply never sufficient alone.
+- **Restart Claude Code after updating.** These settings are read at session start.
 
 ## [1.3.3] — Fix: read-only commands directory aborted the installer
 
