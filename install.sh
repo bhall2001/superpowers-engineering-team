@@ -377,7 +377,9 @@ fi
 # Digest bounds. CHANGELOG.md arrives with the unauthenticated tarball above, so
 # treat its text as untrusted: it is printed to a terminal and handed to
 # /set-update, which relays it into an LLM's context.
-DIGEST_MAX_BULLETS=10
+# Counts version headers as well as bullets, so a multi-release upgrade spends part of
+# the budget on headers. 18 covers a five-release span without truncating.
+DIGEST_MAX_BULLETS=18
 DIGEST_MAX_LINE=120
 
 # sanitize_digest — stdin to stdout. Strips ANSI escape sequences and control
