@@ -18,7 +18,17 @@ SET (Superpowers Engineering Team) is a Claude Code plugin that provides a 6-com
 
 ## No Build System
 
-This is a plugin distribution, not a compiled app. All "code" is markdown command specs and a bash installer. No build, test, or lint tooling exists.
+This is a plugin distribution, not a compiled app. Almost all "code" is markdown command specs and a bash installer. No build or lint tooling exists.
+
+**One exception:** the durable-run store under `plugins/set/bin/` is real JavaScript, with tests:
+
+```bash
+node --test "plugins/set/tests/*.test.mjs"
+```
+
+Requires Node with `node:sqlite` (stable on Node 24; Node 22 needs `--experimental-sqlite`). The quotes matter — Node resolves a bare directory as a module, not a glob root.
+
+**No CI runs this suite.** It is contributor-run only, so a green tree is evidence someone ran it, not that it is enforced.
 
 ## Installation
 

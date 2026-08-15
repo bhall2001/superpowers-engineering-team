@@ -1,3 +1,4 @@
 .worktrees/
-docs/superpowers/
+docs/superpowers/*
+!docs/superpowers/specs/
 .superpowers/
