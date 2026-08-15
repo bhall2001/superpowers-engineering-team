@@ -1,0 +1,59 @@
+# Agent Return Channels
+
+Cited by `/set-build` and `/set-review`. How a spawned agent's output reaches the
+orchestrator — and the one calling mistake that silently discards it.
+
+## The rule
+
+**Name an agent only when you intend to `SendMessage` it. Never name one whose result you
+need.**
+
+The `Agent` tool has two return modes, selected by the presence of `name`:
+
+| Spawn | Tool result | Use for |
+|---|---|---|
+| no `name` | the agent's final message | one-shot workers: verifiers, review lenses, fix agents |
+| `name: "x"` | `Spawned successfully … will receive instructions via mailbox` | long-lived teammates you message and track |
+
+A named spawn's work product **never appears in the tool result**. The receipt is not a
+truncation or a delay — the value is not delivered through that channel at all.
+
+## Why a named result is unrecoverable
+
+There is no supported retrieval path:
+
+- `TaskOutput` is **documented as deprecated for agent tasks**, which say to use the
+  `Agent` tool result directly.
+- Its `.output` file is a symlink to the full subagent transcript (JSONL). Reading it
+  overflows the orchestrator's context — the tool's own description warns against this.
+- `SendMessage` can ask the agent to repeat itself, but that is an async round-trip that
+  resumes the agent from its transcript: an extra turn and a second billing of its
+  context, to retrieve something an unnamed spawn returns instantly.
+
+So the cost of naming a one-shot agent is not "slightly slower" — it is the entire result,
+or an expensive recovery that may still not arrive.
+
+## How to tell this happened
+
+The tool result begins:
+
+```
+Spawned successfully. (This tool result is internal metadata — never quote or paste …)
+agent_id: {name}@session-{id}
+name: {name}
+The agent is now running and will receive instructions via mailbox.
+```
+
+If you are waiting on findings or a verdict and see that, stop waiting. Re-spawn unnamed.
+
+**Do not misread it as a stalled or failed agent.** The agent very likely completed its
+work correctly; only the delivery was misrouted. Retrying with a sterner prompt, extending
+a poll timeout, or marking the lens `FAILED` all treat a caller defect as an agent defect
+and none of them fix it.
+
+## Corroborating channel
+
+Builders commit atomically, so git independently records what a teammate accomplished.
+When a return is missing, `git log` on the build branch answers "did the work land?" even
+when the agent's own report did not arrive. Prefer deriving state from the repository over
+trusting an agent's claim — the same principle the checkpoint design applies to resume.

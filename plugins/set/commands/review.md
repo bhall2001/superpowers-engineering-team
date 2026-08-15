@@ -53,6 +53,9 @@ The flags were already parsed and stripped in Step 1; `--light` selects the mode
 
 ### Step 2b: The Lens Return Contract (binding on both modes)
 
+Read `references/agent-return-channels.md` before spawning any lens — it governs how a
+lens's output reaches you, and the calling mistake that discards it.
+
 A lens that reviews the code but does not hand its findings back has **failed**, no matter how good the review was. Analysis left in a lens agent's own transcript is invisible to the lead, and the tokens that produced it are wasted. Every lens agent MUST return exactly this object:
 
 ```
@@ -93,6 +96,10 @@ lines are reporting only — they do not replace or relax the Step 2b return con
 
 For small diffs, skip the workflow. Spawn **4 independent `Agent` subagents in a single message** (one per lens, fresh contexts), each with its lens rubric below. Same independence semantics — none of them wrote the code.
 
+**Spawn each lens without a `name`.** A named `Agent` call returns a mailbox receipt
+instead of the agent's final message, so a named lens can never deliver findings no matter
+how well it reviews. Name an agent only when you intend to `SendMessage` it.
+
 The `Agent` tool has **no `schema` parameter**, so the contract cannot be enforced by the harness here — it must be enforced by the prompt. Append this verbatim to every `--light` lens prompt:
 
 ```
@@ -119,6 +126,10 @@ Then handle missing returns per Step 2c.
 
 Applies to both modes. For each lens whose result is null, empty, or does not parse against the Step 2b schema:
 
+0. **Check the spawn call first.** If the result reads `Spawned successfully … will receive
+   instructions via mailbox`, the lens was spawned with a `name` and its findings are
+   unreachable. That is a caller defect, not a lens failure: re-spawn it **unnamed** and do
+   not count the attempt against the retry below.
 1. **Retry that lens exactly once**, fresh context, same rubric and diff, with this line prepended to the prompt: `Your previous attempt returned no parseable findings object. Return ONLY the JSON object specified below.`
 2. **If the retry also fails, mark that lens `FAILED`** and move on. Do not retry a second time.
 3. Do **not** substitute your own review for a failed lens.

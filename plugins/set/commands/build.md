@@ -288,7 +288,14 @@ Agent({
 })
 ```
 
-`name` makes the teammate addressable by `SendMessage`. `subagent_type` resolves from
+`name` makes the teammate addressable by `SendMessage`. That is the **only** reason to
+pass it, and it comes at a price: a named spawn's tool result is a mailbox receipt, not
+the agent's output. A builder is named because the coordinator talks to it and reads its
+progress from the task list — **never** expect a builder's work product to arrive as the
+`Agent` call's return value. Contrast T3, where the verifier's whole purpose is to return
+a verdict and therefore must be spawned unnamed.
+
+`subagent_type` resolves from
 `.claude/agents/*.md` by the agent file's `name:` frontmatter field, which equals the
 filename stem, which equals the value `/set-plan` tags as `Specialist`. When `Specialist`
 is `generic` or absent, omit `subagent_type` and spawn a default builder.
@@ -300,9 +307,13 @@ Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt. QA
 is unchanged from previous SET versions — it is a peer role, **not** the verifier.
 
 Under `--verbose`, emit `→ spawn {Specialist} :: {task name}` as each builder and the QA
-teammate is spawned, and `← {Specialist} :: {pass/fail}` as each reports back.
+teammate is spawned, and `← {Specialist} :: {pass/fail}` as each reports back — where
+"reports back" means a `TaskUpdate` status change or a `SendMessage`, not a return value
+from the `Agent` call, which for a named spawn never carries one.
 
-Read both reference files before spawning anything.
+Read both reference files before spawning anything, plus
+`references/agent-return-channels.md` — it governs which spawns may carry a `name` and is
+binding on T2 and T3 below.
 
 Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
 to teammates — only `tools`, `model`, `permissionMode`, and `maxTurns` carry over.
@@ -322,11 +333,11 @@ per-session and therefore safe under parallel teammates.
 
 ### T3: Spawn a dedicated verifier per task
 
-Each task gets its **own** verifier teammate, separate from its builder:
+Each task gets its **own** verifier, separate from its builder:
 
 ```
 Agent({
-  name: "verifier-{task-id}",
+  subagent_type: "{a specialist that did NOT author this task, or general-purpose}",
   prompt: "You verify one task. You write NO code — verification only.
            Task: {task name}
            Context: {A3 bundle}
@@ -336,11 +347,21 @@ Agent({
 })
 ```
 
+**Never pass `name` to a verifier spawn.** A named `Agent` call returns a mailbox
+receipt — `Spawned successfully … will receive instructions via mailbox` — instead of the
+agent's final message, so the verdict never reaches you. An unnamed spawn returns the
+agent's output as the tool result, which is the only supported way to collect it:
+`TaskOutput` is documented as deprecated for agent tasks, and its `.output` file is a
+symlink to the raw transcript that would overflow this context. The rule generalizes —
+**name an agent only when you intend to `SendMessage` it; never when you need its
+result.**
+
 A verifier writes no code, so it can never verify its own work — this preserves the
 fresh-verifier guarantee the workflow path gets from a separate `agent({schema})` call.
 
 Under `--verbose`, emit `→ spawn verifier-{task-id} :: {task name}` at each verifier spawn
-and `← verifier-{task-id} :: {passed/failed}` when its verdict returns.
+and `← verifier-{task-id} :: {passed/failed}` when its verdict returns. `verifier-{task-id}`
+is the label you print, not the agent's `name` — see above.
 
 **Concurrency ceiling of 4.** Spawn a verifier when its builder reports the task
 complete. If 4 verifiers are already running, queue the rest and spawn as earlier ones
@@ -354,8 +375,14 @@ final word — `/set-review` is the independent audit.
 
 Poll `TaskList()`. Unblock with **guidance, not code**, via `SendMessage`.
 
-A documented Agent Teams limitation: teammates sometimes fail to mark tasks complete,
-which stalls every `blockedBy` dependent. Mitigate:
+**First, rule out a self-inflicted stall.** If you are waiting on a *return value* from a
+named spawn, it is never coming — that is the receipt behavior described in T2/T3, not a
+stalled teammate, and no amount of polling will resolve it. Re-read where the result is
+supposed to arrive: a named teammate reports through `TaskUpdate`/`SendMessage`; an
+unnamed one-shot agent reports through the `Agent` tool result.
+
+Beyond that, a documented Agent Teams limitation: teammates sometimes fail to mark tasks
+complete, which stalls every `blockedBy` dependent. Mitigate:
 
 1. Track consecutive polls where a task stays `in_progress` with no status change.
 2. After **3** consecutive unchanged polls, `SendMessage` that teammate for a status report.

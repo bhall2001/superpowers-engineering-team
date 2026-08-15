@@ -268,7 +268,7 @@ mkdir -p "$COMMANDS_DIR/references"
 
 # Single source of truth for reference files — the install loop and the Step 5
 # verify loop both read this. Adding a reference means editing this line only.
-SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode run-store"
+SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode run-store agent-return-channels"
 
 # ERRORS may be referenced before Step 5 initializes it; ensure it exists.
 ERRORS=${ERRORS:-0}
