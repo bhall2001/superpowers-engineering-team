@@ -191,25 +191,63 @@ Agent Teams are an experimental Claude Code feature, disabled by default:
 jq -r '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS // empty' ~/.claude/settings.json
 ```
 
-If the value is `1`, proceed to Phase B-team.
+If the value is `1`, confirm the task tools are actually callable before proceeding.
 
-If it is empty or absent:
+**The task tools are usually deferred, not absent.** In most sessions `TaskCreate`,
+`TaskList`, `TaskUpdate`, and `TaskGet` are listed by name with no schema loaded, so
+calling one directly fails until you fetch it:
+
+```
+ToolSearch("select:TaskCreate,TaskList,TaskUpdate,TaskGet")
+```
+
+Then call `TaskList` once. It returns `No tasks found` on an empty list — that is success,
+not a failure.
+
+**`No matching deferred tools found` is a query miss, not a verdict on the harness.**
+`ToolSearch` returns it when the *query* matched nothing — a bare tool name instead of the
+`select:` form, a typo, stray spaces around the commas. It does **not** mean the build
+lacks Agent Teams. Re-issue the query in exactly the form above before concluding
+anything; a malformed probe that silently downgrades the build to the workflow path is
+indistinguishable, in the final report, from a harness that genuinely cannot run one.
+
+Treat Agent Teams as unavailable only when the `select:` query above returns no tools
+**and** `TaskList` cannot be called. Report which of the two checks failed — the env var
+or the tool probe — so the cause is not guessed at later.
+
+Neither check is about the Claude Code version or anything installable: the task tools
+ship with the CLI. In a container, `~/.claude/settings.json` is the container's own file
+(often seeded at first run and persisted on a volume), so read the env var there rather
+than assuming the host's copy applies — but a container running the same CLI version as
+the host has the same tools, and "install something" is never the fix.
+
+If the env var is empty or absent, or the tool probe genuinely fails:
 
 **Under `--autonomous`, do not present options or wait.** Select the
 dynamic-workflow path (Phase B-workflow, the `--use-workflow` semantics) and
-report on the phase-boundary line: `Agent Teams unavailable — using workflow path`.
+report on the phase-boundary line, naming which check failed:
+`Agent Teams unavailable ({env var not set | task tools did not resolve}) — using workflow path`.
 The workflow path needs no env var, so it always runs.
+
+A silent downgrade is the failure this naming prevents: an autonomous run that probed
+wrongly, fell back, and reported only "unavailable" looks identical to one on a harness
+that truly lacks the feature — and the build's default path goes unexercised without
+anyone noticing.
 
 **Without `--autonomous`,** present exactly two options and wait for the user:
 
 ```
-Agent Teams are not enabled, so /set-build cannot run its default path.
+Agent Teams are unavailable ({env var not set | task tools did not resolve}),
+so /set-build cannot run its default path.
 
   1. Run this build on the dynamic-workflow path now
   2. Stop, so you can enable Agent Teams
 
 Which? [1/2]
 ```
+
+Name which check failed in the parenthetical. The two causes have different fixes, and
+a user told only "unavailable" will edit settings.json for a problem that was never there.
 
 - **Option 1** → run Phase B-workflow. Say so plainly; never degrade silently.
 - **Option 2** → stop and print:
