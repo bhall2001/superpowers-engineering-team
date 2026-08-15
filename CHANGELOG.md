@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.3] — Fix: read-only commands directory aborted the installer
+
+### Fixed
+- **A read-only `~/.claude/commands` aborted the installer with a bare permission error.** Devcontainers commonly bind-mount the host's commands directory read-only, so SET is installed once on the host and every container inherits it — but under `set -e` the installer's `mkdir -p` failed with an unexplained `Permission denied`, which reads like a broken install rather than a working design. It now probes writability up front and, when the directory is not writable, explains the container model, says to install on the host and restart the container, and reports the version currently mounted. On a non-container host the same check points at ownership and permissions instead. `/set-update` documents the same constraint, since an in-container agent running it is exactly who hits this.
+
 ## [1.3.2] — Fix: availability gate downgraded silently on a deferred-tool probe
 
 ### Fixed
