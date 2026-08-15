@@ -239,7 +239,7 @@ Its first line is a `STATUS:` marker:
 
 | First line | Meaning |
 | --- | --- |
-| `STATUS: install-ok version-changed` | Updated; the lines below are that release's digest |
+| `STATUS: install-ok version-changed` | Updated; the lines below digest **every** release between the user's previous version and this one. When more than one is covered, each is introduced by an indented `1.2.1:` header and its bullets are indented beneath it — report them per release rather than flattening them into one list, or a user who skipped versions cannot tell what arrived when. |
 | `STATUS: install-ok no-change` | Already on the latest version; nothing new to report |
 | `STATUS: install-ok version-unknown` | Install succeeded; version could not be read |
 | file absent | **Ambiguous — do not interpret.** The install failed, or the commands directory was unwritable. Fall back to the installer's own banner and Step 4's output for the verdict, and say the digest was unavailable. |
