@@ -255,16 +255,27 @@ bold ""
 bold "Step 2: Enabling Agent Teams (required for the default build path)"
 bold "------------------------------------------------------------------"
 
-# /set-build runs as a native Agent Team by default, which requires this flag.
-# Without it, /set-build prompts the user to fall back to the dynamic-workflow
-# path (/set-build --use-workflow), which needs no flag.
-if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
-  info "Agent Teams already enabled (required for the default /set-build path)"
+# /set-build runs as a native Agent Team, which needs the task tools (TaskCreate,
+# TaskList, TaskUpdate, TaskGet) registered in the session.
+#
+# CLAUDE_CODE_ENABLE_TODO_TOOLS is the variable that registers them. Verified by
+# nonce test on 2.1.233: with only CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS set, a
+# headless session reports the tools do not exist; with TODO_TOOLS it creates a
+# task and reads back its id. CLAUDE_CODE_ENABLE_TASKS does NOT work — it looks
+# like the obvious lever and is not one.
+#
+# EXPERIMENTAL_AGENT_TEAMS is still written: it is a recognized variable (it
+# appears in the CLI's env table) and may gate other team behaviour. It is simply
+# not sufficient on its own, which is what SET got wrong.
+if jq -e '.env.CLAUDE_CODE_ENABLE_TODO_TOOLS' "$SETTINGS_FILE" &>/dev/null \
+  && jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
+  info "Agent Teams already enabled (task tools + experimental flag)"
 else
-  jq '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"' \
+  jq '.env.CLAUDE_CODE_ENABLE_TODO_TOOLS = "true"
+      | .env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"' \
     "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-  info "Agent Teams enabled (required for the default /set-build path)"
-  warn "Restart any running Claude Code session — this variable is read at session start"
+  info "Agent Teams enabled (task tools + experimental flag)"
+  warn "Restart any running Claude Code session — these are read at session start"
 fi
 
 # ---------------------------------------------------------------------------
@@ -609,10 +620,19 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
-  info "Agent Teams: enabled (required for the default /set-build path)"
+if jq -e '.env.CLAUDE_CODE_ENABLE_TODO_TOOLS' "$SETTINGS_FILE" &>/dev/null; then
+  info "Agent Teams: task tools enabled (CLAUDE_CODE_ENABLE_TODO_TOOLS)"
 else
-  error "Agent Teams: not enabled — the default /set-build path will not run"
+  error "Agent Teams: task tools NOT enabled — /set-build cannot run"
+  error "  CLAUDE_CODE_ENABLE_TODO_TOOLS is what registers TaskCreate/TaskList/"
+  error "  TaskUpdate/TaskGet. Without it the Agent Team path has no task list."
+  ERRORS=$((ERRORS + 1))
+fi
+
+if jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$SETTINGS_FILE" &>/dev/null; then
+  info "Agent Teams: experimental flag set"
+else
+  error "Agent Teams: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS not set"
   ERRORS=$((ERRORS + 1))
 fi
 
@@ -731,10 +751,15 @@ fi
 if [ "$ERRORS" -ne 0 ]; then
   error "SET did not install cleanly. Check the problems listed above. Common causes:"
   error ""
-  error "  Agent Teams not enabled — /set-build's default path needs this in"
-  error "    ~/.claude/settings.json:  \"env\": { \"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\" }"
-  error "    Restart Claude Code after setting it. To skip Agent Teams entirely,"
-  error "    run /set-build --use-workflow, which needs no flag."
+  error "  Agent Teams not enabled — /set-build needs BOTH of these in"
+  error "    ~/.claude/settings.json:"
+  error "      \"env\": {"
+  error "        \"CLAUDE_CODE_ENABLE_TODO_TOOLS\": \"true\","
+  error "        \"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\""
+  error "      }"
+  error "    TODO_TOOLS is what registers TaskCreate/TaskList/TaskUpdate/TaskGet;"
+  error "    without it the team has no task list and the build cannot run."
+  error "    Restart Claude Code after setting them — read at session start."
   error ""
   error "  Commands not installed/updated — this often means the installer ran inside"
   error "    Claude Code's sandbox (blocks network + writes to ~/.claude). Re-run with"

@@ -16,8 +16,10 @@ task list. This is a deliberate lean toward durable, autonomous teams.
 
 Check `$ARGUMENTS`:
 
-- **Default (no flag)** → the **Agent Team path** (Phase B-team). Requires the
-  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env var; see "Agent Team Availability Gate".
+- **Default (no flag)** → the **Agent Team path** (Phase B-team). Requires
+  `CLAUDE_CODE_ENABLE_TODO_TOOLS` and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`; see
+  "Agent Team Availability Gate". If they are missing, the build **halts** — it never
+  falls back to the workflow path.
 - **`--use-workflow`** → the **dynamic-workflow path** (Phase B-workflow). Skips the
   availability gate entirely.
 - **`--use-agent-team`** → accepted as a **silent no-op alias** for the default.
@@ -188,10 +190,21 @@ Run this AFTER Phase A and BEFORE Phase B. **Skip entirely if `--use-workflow` w
 Agent Teams are an experimental Claude Code feature, disabled by default:
 
 ```bash
+jq -r '.env.CLAUDE_CODE_ENABLE_TODO_TOOLS // empty' ~/.claude/settings.json
 jq -r '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS // empty' ~/.claude/settings.json
 ```
 
-If the value is `1`, confirm the task tools are actually callable before proceeding.
+**`CLAUDE_CODE_ENABLE_TODO_TOOLS` is the variable that registers the task tools.**
+Verified by nonce test on 2.1.233: with only `EXPERIMENTAL_AGENT_TEAMS` set, a session
+reports the task tools do not exist; with `TODO_TOOLS` it creates a task and reads back
+its id. `CLAUDE_CODE_ENABLE_TASKS` looks like the obvious lever and does **not** work.
+Through SET 1.3.3 the gate read `EXPERIMENTAL_AGENT_TEAMS` alone, so it passed while the
+tools were absent and every build fell through to the workflow path.
+
+Registration is also **session-scoped**, not purely settings-scoped: the same
+`settings.json` can yield working tools in one session type and absent tools in another.
+So the settings read above is necessary but not sufficient — always confirm the tools are
+callable.
 
 **The task tools are usually deferred, not absent.** In most sessions `TaskCreate`,
 `TaskList`, `TaskUpdate`, and `TaskGet` are listed by name with no schema loaded, so
@@ -217,53 +230,53 @@ or the tool probe — so the cause is not guessed at later.
 
 Neither check is about the Claude Code version or anything installable: the task tools
 ship with the CLI. In a container, `~/.claude/settings.json` is the container's own file
-(often seeded at first run and persisted on a volume), so read the env var there rather
-than assuming the host's copy applies — but a container running the same CLI version as
-the host has the same tools, and "install something" is never the fix.
+(often seeded at first run and persisted on a volume), so read the env vars there rather
+than assuming the host's copy applies. "Install something" is never the fix.
 
-If the env var is empty or absent, or the tool probe genuinely fails:
+### When the tools are unavailable, STOP. Do not fall back.
 
-**Under `--autonomous`, do not present options or wait.** Select the
-dynamic-workflow path (Phase B-workflow, the `--use-workflow` semantics) and
-report on the phase-boundary line, naming which check failed:
-`Agent Teams unavailable ({env var not set | task tools did not resolve}) — using workflow path`.
-The workflow path needs no env var, so it always runs.
+`/set-build` is an Agent Team build. If the task tools are not callable, **halt with the
+remediation below** — under `--autonomous` too. Do not offer the workflow path, do not
+switch to it, do not ask which the user prefers.
 
-A silent downgrade is the failure this naming prevents: an autonomous run that probed
-wrongly, fell back, and reported only "unavailable" looks identical to one on a harness
-that truly lacks the feature — and the build's default path goes unexercised without
-anyone noticing.
+Falling back is worse than failing. The two paths are not interchangeable: an Agent Team
+gives each specialist its own context, its own judgment, and the ability to message a peer
+and re-scope mid-task. A workflow DAG is fixed at authoring time. Quietly substituting one
+for the other returns a different, lesser artifact under the same name — and that is
+exactly how SET shipped 1.3.3 with an availability gate that passed while the tools were
+absent, so **every** build ran on the workflow path and nobody noticed for weeks.
 
-**Without `--autonomous`,** present exactly two options and wait for the user:
+A user who wants the workflow path asks for it explicitly with `--use-workflow`. That is
+the only way it runs.
+
+Print this and stop:
 
 ```
-Agent Teams are unavailable ({env var not set | task tools did not resolve}),
-so /set-build cannot run its default path.
+/set-build cannot run: the Agent Team task tools are not available.
+Failed check: {CLAUDE_CODE_ENABLE_TODO_TOOLS not set | tools did not resolve in this session}
 
-  1. Run this build on the dynamic-workflow path now
-  2. Stop, so you can enable Agent Teams
+Add BOTH to ~/.claude/settings.json:
 
-Which? [1/2]
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "true",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+
+Then RESTART your session — these are read at session start, so setting them
+now will not take effect in this one. Re-run /set-build after restarting.
+
+CLAUDE_CODE_ENABLE_TODO_TOOLS is the one that registers TaskCreate/TaskList/
+TaskUpdate/TaskGet. CLAUDE_CODE_ENABLE_TASKS is NOT the right variable.
 ```
 
-Name which check failed in the parenthetical. The two causes have different fixes, and
-a user told only "unavailable" will edit settings.json for a problem that was never there.
+Name the failing check — the settings read and the session probe have different fixes,
+and a user told only "unavailable" will edit `settings.json` for a problem that was never
+there. If the settings already hold both variables and the tools still do not resolve,
+say so plainly: that is a session-scoped registration failure, and a restart is the fix,
+not another settings edit.
 
-- **Option 1** → run Phase B-workflow. Say so plainly; never degrade silently.
-- **Option 2** → stop and print:
-
-  ```
-  Add this to ~/.claude/settings.json:
-
-    "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }
-
-  Then restart your session — the variable is read at session start, so setting
-  it in this session will not take effect. Re-run /set-build after you restart
-  the session.
-  ```
-
-  The restart line is required. Without it a user sets the variable, retries in the
-  same session, and hits the identical failure.
+The restart line is required. Without it a user sets the variables, retries in the same
+session, and hits the identical failure.
 
 Do not persist the answer to `config.json`. This gate asks each cycle while
 Agent Teams are unavailable — the choice is not persisted between runs.
@@ -274,9 +287,10 @@ Phase A above and Phase C below are **shared and harness-agnostic** — they run
 identically regardless of path. Only this phase forks:
 
 - **Default** → Phase B-team (native Agent Team)
-- **`--use-workflow`, or Option 1 at the availability gate** → Phase B-workflow
+- **`--use-workflow`** → Phase B-workflow. **Only** an explicit flag reaches this path;
+  the availability gate never routes here.
 
-Both paths are first-class and must emit the **identical per-task verdict schema**:
+Both paths must emit the **identical per-task verdict schema**:
 
 ```
 { task: string, passed: boolean, tdd_followed: boolean, spec_compliant: boolean,
