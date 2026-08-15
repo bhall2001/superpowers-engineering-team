@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.2] — Fix: verifier and lens results never reached the orchestrator
+
+### Fixed
+- **`/set-build` verifiers returned nothing.** T3 spawned each verifier with `name: "verifier-{task-id}"`. A named `Agent` call returns a mailbox receipt (`Spawned successfully … will receive instructions via mailbox`) instead of the agent's final message, so every per-task verdict was discarded at the moment it was produced — the verifier did its work correctly and the result went nowhere. Verifiers are now spawned unnamed, which returns the verdict object as the tool result. The same applies to `/set-review` `--light` lenses, whose Step 2c "retry, then mark `FAILED`" was attributing a caller defect to the lens.
+- **Stall detection misdiagnosed the symptom.** `/set-build` T4 treated a missing return as a stalled teammate and burned six polling rounds before failing the task. It now rules out the return-channel defect first: a result that never had a delivery path cannot be recovered by waiting.
+
+### Added
+- **`references/agent-return-channels.md`** — the rule this bug violated, in one place both commands cite: *name an agent only when you intend to `SendMessage` it; never when you need its result.* Documents why a named result is unrecoverable (`TaskOutput` is deprecated for agent tasks; its `.output` file is a transcript symlink that would overflow context), how to recognize the receipt, and why git is the corroborating channel when a report is missing.
+
+### Notes
+- Naming a builder teammate is still correct — the coordinator messages it and reads progress from the task list. `build.md` now states which spawns may carry a `name` and why, so the two cases are not conflated again.
+
 ## [1.2.1] — Autonomous mode + `--verbose`
 
 ### Added
