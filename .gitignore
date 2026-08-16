@@ -2,3 +2,11 @@
 docs/superpowers/*
 !docs/superpowers/specs/
 .superpowers/
+
+# Personal Claude Code settings. .claude/settings.json IS tracked — it carries the SET
+# enforcement hooks and must reach every clone.
+.claude/settings.local.json
+
+# Transient /set-build run marker. Committing one mid-build would gate every clone
+# permanently — the worst failure this control has.
+.claude/set/RUN-IN-PROGRESS.md

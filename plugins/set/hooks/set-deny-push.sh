@@ -10,11 +10,21 @@
 # Splitting is quote-aware (awk), so a commit message or heredoc body that merely *mentions*
 # `git push` is not a push. Only a segment's leading tokens are matched.
 #
-# Identity carve-out (selected by the probe findings, see
-# docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md): the human's own
-# session is the only caller allowed to push. Main-context payloads carry NO agent_id /
-# agent_type; every spawn carries both. Identity is only trusted when the payload has the
-# probed session shape; anything else is unknown identity and DENIES.
+# Run-scoped gate (see docs/superpowers/specs/2026-08-16-run-scoped-push-gate-design.md).
+# Two conditions must BOTH hold to deny: the caller is a spawned agent, AND a SET build is
+# running in this worktree. Identity alone cannot separate "a builder inside /set-build"
+# from "the assistant helping a human at a keyboard" — outside a run those are the same
+# payload shape — so run state is the discriminator and identity only narrows it.
+#
+# Identity (probe findings, docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md):
+# main-context payloads carry NO agent_id / agent_type; every spawn carries both. Identity is
+# only trusted when the payload has the probed session shape; anything else DENIES.
+#
+# Run state: <worktree>/.claude/set/RUN-IN-PROGRESS.md, written by /set-build before it
+# spawns anything and deleted when it finishes. Marker absent -> allow. A crashed build
+# leaves the marker behind, so a stale marker must not deny forever: it carries pid/host/
+# started and the liveness rules below mirror probeDead/staleMinutes in bin/claim.mjs.
+# Polarity is deliberate — every ambiguity keeps the gate ON. Unknown pid is NOT dead.
 #
 # PROBED: in-process spawns via the `Agent` tool (named and unnamed), from a main context.
 # NOT PROBED: `Workflow`-tool agents (`--use-workflow`, `/set-review`), and teammates run
@@ -31,7 +41,9 @@
 set -uo pipefail
 set -f   # never glob-expand the inspected command against the cwd (timeout → fail-open)
 
-ESCAPE='SET blocks agent-initiated pushes. Human review gate. To push yourself, type:  !git push origin <branch>  (! runs in your shell — no tool call, no hook.)'
+ESCAPE='To push yourself, type:  !git push origin <branch>  (! runs in your shell — no tool call, no hook.)'
+MARKER_REL='.claude/set/RUN-IN-PROGRESS.md'
+STALE_AFTER_MINUTES=15   # mirrors STALE_AFTER_MINUTES in bin/claim.mjs
 
 deny() {
   # Emitted without jq so the fail-closed paths work when jq is the thing that is missing.
@@ -284,6 +296,97 @@ fi
 
 case "$caller" in
   main) exit 0 ;;                        # the human's supervised session
-  agent) deny "$ESCAPE" ;;
+  agent) ;;                              # narrow further on run state, below
   *) deny "SET: caller identity undetectable from this payload; failing closed. $ESCAPE" ;;
 esac
+
+# ---------------------------------------------------------------------------
+# Run state. Reached only for a gated command from a spawned agent.
+# ---------------------------------------------------------------------------
+
+# Worktree root: walk up from the payload's cwd looking for .git (a file in a linked
+# worktree, a directory in a normal clone). Scoping is by LOCATION — a build in repo A
+# cannot gate a push in repo B — so there is no path comparison to get wrong. cwd is used
+# as given; no realpath, because both sides of the comparison are this same string.
+cwd=$(printf '%s' "$payload" | jq -r '.cwd // ""' 2>/dev/null) \
+  || deny "SET: unparseable hook payload (cwd); failing closed. $ESCAPE"
+
+marker=""
+if [ -n "$cwd" ] && [ "${cwd#/}" != "$cwd" ]; then    # absolute paths only
+  dir=$cwd
+  while :; do
+    if [ -e "$dir/.git" ] && [ -f "$dir/$MARKER_REL" ]; then
+      marker="$dir/$MARKER_REL"; break
+    fi
+    [ -e "$dir/.git" ] && break            # repo root reached, no marker
+    parent=${dir%/*}
+    [ -n "$parent" ] || parent=/
+    [ "$parent" = "$dir" ] && break        # hit /
+    dir=$parent
+  done
+fi
+
+# No marker: no build is running here. This is the ordinary case — an agent pushing
+# outside a run, which is exactly what this change is meant to allow.
+[ -n "$marker" ] || exit 0
+
+# Marker present. Parse pid/host/started. Values are read with a whitelist pattern rather
+# than trusted, because the file is human-editable and its bytes end up in JSON below.
+field() {
+  LC_ALL=C sed -n "s/^[[:space:]]*$1:[[:space:]]*\([A-Za-z0-9._:+-]\{1,64\}\)[[:space:]]*$/\1/p" \
+    "$marker" 2>/dev/null | head -n1
+}
+m_pid=$(field pid); m_host=$(field host); m_started=$(field started); m_run=$(field run)
+
+RUN_LABEL=""
+[ -n "$m_run" ] && RUN_LABEL=" (run $m_run)"
+DENY_LIVE="SET blocks pushes from agents during an active build${RUN_LABEL}. The human reviews before anything leaves the machine. If no build is running, delete $MARKER_REL . $ESCAPE"
+
+# A marker with neither a usable pid nor a usable timestamp is undeterminable state, not an
+# absent run: fail closed.
+if [ -z "$m_pid" ] && [ -z "$m_started" ]; then
+  deny "SET found a run marker it cannot parse, so it is failing closed. Inspect or delete $MARKER_REL . Your own session is unaffected. $ESCAPE"
+fi
+
+# Liveness, mirroring probeDead/staleMinutes (bin/claim.mjs:21-60):
+#   pid alive -> ON | pid gone (ESRCH) -> OFF | pid unknown -> ON | other host -> ON
+#   no pid, started older than STALE_AFTER_MINUTES -> OFF, else ON
+# Only a POSITIVE finding that the run is gone turns the gate off. A stale marker denying
+# is annoying and one `rm` away; a gate dropping mid-build is the failure this prevents.
+if [ -n "$m_host" ] && [ "$m_host" != "$(hostname -s 2>/dev/null || hostname 2>/dev/null)" ]; then
+  deny "$DENY_LIVE"                      # another machine — never assume dead
+fi
+
+if [ -n "$m_pid" ]; then
+  case "$m_pid" in
+    ''|*[!0-9]*) deny "$DENY_LIVE" ;;     # unparseable pid is unknown, not dead
+  esac
+  if kill -0 "$m_pid" 2>/dev/null; then
+    deny "$DENY_LIVE"                     # alive and ours
+  fi
+  # kill -0 fails for BOTH ESRCH ("no such process") and EPERM ("operation not
+  # permitted" — the process EXISTS but is owned by another user, or this hook is
+  # sandboxed). probeDead (bin/claim.mjs) treats only ESRCH as dead, and the distinction
+  # is not in the exit status: both are 1. It is only in the message.
+  #
+  # `ps -p` is NOT a usable tiebreaker here: under the hook sandbox `ps -p 1` reports
+  # absent for a process that is plainly alive, which would read a live build as crashed
+  # and drop the gate mid-run — the one direction this design must never fail.
+  #
+  # So: dead ONLY on an explicit no-such-process. Anything else (EPERM, an unexpected
+  # message, a locale that renders it differently, no stderr at all) keeps the gate ON.
+  kill_err=$(kill -0 "$m_pid" 2>&1) || true
+  case "$kill_err" in
+    *"no such process"*|*"No such process"*) exit 0 ;;   # provably gone; gate releases
+    *) deny "$DENY_LIVE" ;;                              # unknown, EPERM → still ON
+  esac
+fi
+
+# No pid recorded, so the heartbeat decides.
+now_s=$(date -u +%s 2>/dev/null) || deny "$DENY_LIVE"
+started_s=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$m_started" +%s 2>/dev/null \
+         || date -u -d "$m_started" +%s 2>/dev/null) || started_s=""
+[ -n "$started_s" ] || deny "$DENY_LIVE"  # unparseable timestamp is unknown, not stale
+age_min=$(( (now_s - started_s) / 60 ))
+[ "$age_min" -ge "$STALE_AFTER_MINUTES" ] && exit 0
+deny "$DENY_LIVE"

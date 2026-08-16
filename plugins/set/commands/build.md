@@ -105,6 +105,35 @@ Tests passing ({N} tests, 0 failures)
 Ready to compile the build brief.
 ```
 
+### 1g: Write the run marker (REQUIRED — before any teammate exists)
+
+The push gate (`set-deny-push.sh`) denies agent pushes only while this file exists. Write it
+now, in the **build worktree** — before Phase A, and above all before T2 spawns anything. A
+marker written after the first spawn leaves a window in which builders are live and ungated.
+
+```bash
+mkdir -p "{worktree-path}/.claude/set"
+cat > "{worktree-path}/.claude/set/RUN-IN-PROGRESS.md" <<EOF
+# SET run in progress
+
+run: {feature-name}
+pid: $PPID
+host: $(hostname -s)
+started: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+A SET build is running in this worktree. Agents cannot push or open PRs while this
+file exists. If no build is actually running, delete this file.
+EOF
+```
+
+`$PPID` is this session's pid, not the `cat` subshell's. That distinction matters: a pid that
+dies the moment it is written makes every liveness probe report "crashed" and the gate never
+fires (see the note at `bin/set-run.mjs:131-133`). If no durable session pid is available,
+**omit the `pid:` line entirely** and let the `started:` heartbeat carry liveness — an absent
+pid keeps the gate ON, while a lying pid silently disables it.
+
+Do not commit this file; `.gitignore` covers it.
+
 ## Phase A — Compile the Build Brief (main context, cheap)
 
 Assemble ONE brief the execution path can run without re-deriving anything. For each task in the plan:
@@ -656,6 +685,12 @@ re-dispatch`. Do not emit a second boundary line.
 ## Phase C — Build Gate-Back (you own this)
 
 When the selected execution path returns:
+
+0. **Delete the run marker** — `rm -f "{worktree-path}/.claude/set/RUN-IN-PROGRESS.md"`. Do
+   this whenever the build stops, including the failure exits and the Agent Team Availability
+   Gate's STOP: any path that ends the build must remove it, or agent pushes in that worktree
+   stay denied. A missed delete is not fatal — the gate self-heals once the recorded pid is
+   gone (or after 15 minutes with no pid) — but the recovery is only a backstop, not the plan.
 
 1. Run the full test suite yourself one final time.
 2. Present the result at the human gate. Show: tasks passed/failed (from the structured verdicts), the diff stat, and any failed-task escalations.

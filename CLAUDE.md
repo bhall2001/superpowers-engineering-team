@@ -73,11 +73,26 @@ must resolve on the host, in a devcontainer, and on a collaborator's machine.
 
 ## Enforcement hooks
 
-`plugins/set/hooks/` — `set-deny-push.sh` (matcher `Bash`; agents cannot `git push` /
-`gh pr create|merge`, the human's own session can) and `set-guard-agent-name.sh` (matcher
-`Agent`; a named spawn with a verifier-shaped prompt is denied). Both fail closed on their
-own errors. Each script's header comments carry its parsing and timeout constraints — read
-them before editing, since a hook that exceeds its timeout is treated as fail-open.
+`plugins/set/hooks/` — `set-deny-push.sh` (matcher `Bash`) and `set-guard-agent-name.sh`
+(matcher `Agent`; a named spawn with a verifier-shaped prompt is denied). Both fail closed on
+their own errors. Each script's header comments carry its parsing and timeout constraints —
+read them before editing, since a hook that exceeds its timeout is treated as fail-open.
+
+The push gate denies `git push` / `gh pr create|merge` only when **both** hold: the caller is
+a spawned agent, **and** `<worktree>/.claude/set/RUN-IN-PROGRESS.md` exists and is live.
+`/set-build` writes that marker before spawning anyone (`build.md` step 1g) and deletes it at
+gate-back. Identity alone cannot separate a builder from the assistant helping a human — the
+payloads are identical outside a run — so run state is the discriminator.
+
+Liveness mirrors `probeDead`/`staleMinutes` in `bin/claim.mjs`: dead **only** on an explicit
+"no such process". EPERM, an unknown pid, another host, or an unparseable marker all keep the
+gate **on**. `kill -0` cannot distinguish ESRCH from EPERM by exit status and `ps -p` is
+unreliable under the hook sandbox, so the check reads `kill`'s message — do not "simplify" it
+back to an exit-status test. A stale marker denying is recoverable with `rm`; a gate dropping
+mid-build is not.
+
+Design: `docs/superpowers/specs/2026-08-16-run-scoped-push-gate-design.md`. The run store
+(`~/.claude/set-runs/runs.db`) is **not** consulted by this gate.
 
 Payload facts the identity logic depends on are recorded in
 `docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md`; re-probe before
