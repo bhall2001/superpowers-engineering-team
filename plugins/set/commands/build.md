@@ -310,14 +310,18 @@ Route each task by its `Specialist` field:
 
 ```
 Agent({
-  name: "{Specialist}",
+  name: "{Specialist}-set",
   subagent_type: "{Specialist}",
   prompt: "{A3 context bundle}\n\n{contents of references/enhanced-builder-prompt.md}"
 })
 ```
 
 `name` makes the teammate addressable by `SendMessage`. That is the **only** reason to
-pass it, and it comes at a price: a named spawn's tool result is a mailbox receipt, not
+pass it. The `-set` suffix marks the spawn as SET's own — the marker SET controls rather
+than observes (`$CLAUDE_CODE_AGENT_NAME` is never set in hook subprocesses; the payload's
+`agent_type` carries the `name` verbatim). It is corroborating evidence for SET's hooks
+and legible in transcripts; it never grants anything — see
+`references/agent-return-channels.md`. Naming comes at a price: a named spawn's tool result is a mailbox receipt, not
 the agent's output. A builder is named because the coordinator talks to it and reads its
 progress from the task list — **never** expect a builder's work product to arrive as the
 `Agent` call's return value. Contrast T3, where the verifier's whole purpose is to return
@@ -334,8 +338,8 @@ specialists over duplicate generic builders.
 Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt. QA's remit
 is unchanged from previous SET versions — it is a peer role, **not** the verifier.
 
-Under `--verbose`, emit `→ spawn {Specialist} :: {task name}` as each builder and the QA
-teammate is spawned, and `← {Specialist} :: {pass/fail}` as each reports back — where
+Under `--verbose`, emit `→ spawn {Specialist}-set :: {task name}` as each builder and the QA
+teammate is spawned, and `← {Specialist}-set :: {pass/fail}` as each reports back — where
 "reports back" means a `TaskUpdate` status change or a `SendMessage`, not a return value
 from the `Agent` call, which for a named spawn never carries one.
 
