@@ -85,7 +85,7 @@ mechanical and agent-free at every step:
 - [x] T-install-payload-probe — passed 2026-08-16T00:00Z (awaiting human restart)
 - [ ] T-run-probe-matrix-and-write-findings — pending
 - [ ] T-uninstall-payload-probe — pending
-- [ ] T-hook-test-harness — pending
+- [x] T-hook-test-harness — passed 2026-08-16T00:00Z
 - [ ] T-deny-push-hook — pending
 - [ ] T-guard-agent-name-hook — pending
 - [ ] T-hook-settings-merge-and-uninstall — pending
