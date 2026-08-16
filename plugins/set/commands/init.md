@@ -91,6 +91,40 @@ Check `.claude/settings.json`:
 
 Show the user the change before writing.
 
+## Step 4b: Install SET enforcement hooks (project settings)
+
+SET ships two PreToolUse hooks that make the build's safety rules structural instead of
+prose:
+
+| Hook | Matcher | Enforces |
+|---|---|---|
+| `set-deny-push.sh` | `Bash` | No agent-initiated `git push` / `gh pr create` / `gh pr merge`. The human's own session may push; every spawned agent is denied. `git commit` stays allowed. |
+| `set-guard-agent-name.sh` | `Agent` | A **named** spawn with a verifier-shaped prompt is denied — a named verifier's verdict never arrives (mailbox receipt), so `/set-build` would stall. |
+
+The scripts live centrally at `~/.claude/set/hooks/` (placed by `install.sh`); the
+project's `.claude/settings.json` references them by absolute path. Registration is
+**per project**, never in `~/.claude/settings.json` — hooks apply only to SET-managed
+repos.
+
+Show the user the two entries that will be appended to `hooks.PreToolUse`, then:
+
+```bash
+node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir ~/.claude/set/hooks
+```
+
+Idempotent: re-running adds nothing when the entries are present. It **appends** to
+`hooks.PreToolUse` and never rewrites `hooks` wholesale — any hooks the user already has
+(SessionStart, other PreToolUse matchers) survive untouched. It creates
+`.claude/settings.json` if Step 4 did not.
+
+If `~/.claude/set/hooks/set-hooks.mjs` is absent, SET was installed by an older
+`install.sh`: tell the user to run `/set-update` (which re-runs the installer, then
+registers the hooks) and continue.
+
+Tell the user: hooks are read at session start, so they take effect on the next session.
+To push themselves they type `!git push origin <branch>` — `!` runs in their shell, no
+tool call, no hook.
+
 ## Step 5: Detect Project Stack
 
 ```bash
@@ -289,6 +323,11 @@ Directories created:
 
 Files created:
   .claude/set/taxonomy.md         — Learning domain taxonomy (populated on first /set-learn)
+
+Enforcement hooks (.claude/settings.json → hooks.PreToolUse):
+  set-deny-push.sh        [✓ installed | ⚠ skipped — run /set-update]  — agents cannot push / open or merge PRs
+  set-guard-agent-name.sh [✓ installed | ⚠ skipped — run /set-update]  — named verifier spawns are rejected
+  (active from the next session; you push with `!git push origin <branch>`)
 
 CLAUDE.md augmented with:
   - SET pipeline reference

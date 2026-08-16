@@ -23,6 +23,10 @@ set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 RUNS_BIN_DIR="$CLAUDE_DIR/set-runs/bin"
+# Enforcement hooks live centrally; project settings reference them by absolute path so
+# N SET projects share one copy. Registration happens per project in /set-init and
+# /set-update — this installer never writes hooks into ~/.claude/settings.json.
+HOOKS_DIR="$CLAUDE_DIR/set/hooks"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
 # Marketplace sources
@@ -445,6 +449,17 @@ if [ -n "$PLUGIN_ROOT" ]; then
     install_file "references/$ref.md" "references/$ref.md"
   done
 
+  # Enforcement hooks (deny-push, guard-agent-name) plus the set-hooks.mjs registrar
+  # that /set-init and /set-update run against a project's .claude/settings.json.
+  # Plain bash + jq + node, no sqlite — installed unconditionally.
+  if [ -d "$PLUGIN_ROOT/hooks" ]; then
+    mkdir -p "$HOOKS_DIR"
+    cp "$PLUGIN_ROOT"/hooks/*.sh "$HOOKS_DIR/" 2>/dev/null || true
+    cp "$PLUGIN_ROOT"/bin/set-hooks.mjs "$HOOKS_DIR/" 2>/dev/null || true
+    chmod +x "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/*.mjs 2>/dev/null || true
+    info "Installed enforcement hooks → $HOOKS_DIR (registered per project by /set-init or /set-update)"
+  fi
+
   # Durable run store. Needs node:sqlite — stable on Node 24, flagged on Node 22.
   # A failure here is not fatal: the other six commands do not touch the store.
   if [ -d "$PLUGIN_ROOT/bin" ]; then
@@ -556,6 +571,15 @@ for ref in $SET_REFERENCES; do
     info "Reference: $ref.md"
   else
     error "Missing reference: $ref.md"
+    ERRORS=$((ERRORS + 1))
+  fi
+done
+
+for hook in set-deny-push.sh set-guard-agent-name.sh set-hooks.mjs; do
+  if [ -x "$HOOKS_DIR/$hook" ]; then
+    info "Hook: $hook"
+  else
+    error "Missing or non-executable hook: $HOOKS_DIR/$hook"
     ERRORS=$((ERRORS + 1))
   fi
 done

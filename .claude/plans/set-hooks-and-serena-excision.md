@@ -89,7 +89,7 @@ mechanical and agent-free at every step:
 - [x] T-deny-push-hook — passed 2026-08-16
 - [x] T-guard-agent-name-hook — passed 2026-08-16
 - [x] T-hook-settings-merge-and-uninstall — passed 2026-08-16
-- [ ] T-wire-hooks-into-init-and-update — pending
+- [x] T-wire-hooks-into-init-and-update — passed 2026-08-16
 - [ ] T-add-set-name-suffix-to-spawns — pending
 
 ---

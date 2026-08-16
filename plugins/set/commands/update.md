@@ -161,6 +161,13 @@ If shards were just made trackable, say so plainly: the learnings are now visibl
 
 ### 2. Update SET commands
 
+Record the version this run **started as** — Step 4c compares it against what the
+installer leaves on disk:
+
+```bash
+SET_VERSION_BEFORE="$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
+```
+
 Re-run the installer to pull the latest commands:
 
 ```bash
@@ -208,7 +215,67 @@ echo "=== Learning shards trackable by git ==="
 git check-ignore -q .claude/set/ 2>/dev/null \
   && echo "IGNORED — learnings will not persist (see migration step 1c)" \
   || echo "OK"
+
+echo "=== Enforcement hooks: scripts installed centrally ==="
+ls ~/.claude/set/hooks/set-deny-push.sh ~/.claude/set/hooks/set-guard-agent-name.sh ~/.claude/set/hooks/set-hooks.mjs 2>/dev/null \
+  && echo "OK" || echo "MISSING — installer predates hooks or failed; see Step 2"
+
+echo "=== Enforcement hooks: registered in THIS project ==="
+jq -e '[.hooks.PreToolUse[]?.hooks[]?.command | select(test("/set/hooks/set-deny-push\\.sh$"))] | length > 0' .claude/settings.json &>/dev/null \
+  && echo "OK" || echo "hooks: MISSING from .claude/settings.json — registered in Step 4b"
 ```
+
+### 4b. Register enforcement hooks in this project
+
+SET's two PreToolUse hooks (`set-deny-push.sh` on `Bash`: no agent-initiated push / PR
+create / PR merge; `set-guard-agent-name.sh` on `Agent`: no named verifier spawns) are
+registered **per project**, in `.claude/settings.json` — never in `~/.claude/settings.json`.
+A project initialized before hooks shipped has none until this step runs. Show the user
+the two entries that will be appended to `hooks.PreToolUse`, then:
+
+```bash
+node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir ~/.claude/set/hooks
+```
+
+Idempotent — prints `"installed": []` when already registered. Appends only; the user's
+existing hooks (SessionStart, other PreToolUse matchers) are untouched by construction.
+If `set-hooks.mjs` is absent, Step 2 did not place it (older installer, or the container
+case above) — leave the hooks unregistered and say so in the report; do not hand-write
+the entries.
+
+Hooks are read at session start: they take effect next session. The human pushes with
+`!git push origin <branch>` (`!` runs in the shell — no tool call, no hook).
+
+### 4c. Warn if the command files changed under you
+
+The `/set-update` you are executing right now was loaded **before** Step 2 swapped the
+files. If the installer changed the version, any migration or registration this version
+adds did not run — the old command did not know about it. Compare:
+
+```bash
+SET_VERSION_AFTER="$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
+[ "$SET_VERSION_BEFORE" = "$SET_VERSION_AFTER" ] && echo "same-version" || echo "CHANGED: $SET_VERSION_BEFORE -> $SET_VERSION_AFTER"
+```
+
+If it printed `same-version`, print nothing — a clean exit is the signal the user is done.
+If it printed `CHANGED`, print this, listing **by name** only the items whose check below
+still fails (nothing pending → still print the first paragraph, since a newer command may
+carry work this one cannot see):
+
+```
+⚠  SET was upgraded during this run ({before} → {after}).
+
+The migration steps for this version did not run — you were executing the
+previous /set-update. Run /set-update once more to complete the upgrade.
+
+Pending for this project:
+  - Register SET enforcement hooks in .claude/settings.json (set-deny-push.sh,
+    set-guard-agent-name.sh)          ← when Step 4's "registered in THIS project" check is not OK
+  - Remove stale Serena bookkeeping (serena_enabled, .serena-migrated)
+                                      ← when either artifact from Step 1c-bis is still present
+```
+
+Self-clearing: on the second run the versions match and nothing prints.
 
 ### 5. Report
 
@@ -259,3 +326,6 @@ Then tell the user:
 - Any that failed (with suggested fix)
 - Whether this project needed migration (Step 1) and what changed
 - Whether learning shards are trackable by git, and if not, that learnings are being lost
+- Whether the enforcement hooks are registered in this project's `.claude/settings.json`
+  (Step 4b), and that they take effect next session
+- The Step 4c warning verbatim, if it fired
