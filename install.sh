@@ -453,11 +453,28 @@ if [ -n "$PLUGIN_ROOT" ]; then
   # that /set-init and /set-update run against a project's .claude/settings.json.
   # Plain bash + jq + node, no sqlite — installed unconditionally.
   if [ -d "$PLUGIN_ROOT/hooks" ]; then
-    mkdir -p "$HOOKS_DIR"
+    mkdir -p "$HOOKS_DIR" 2>/dev/null || true
     cp "$PLUGIN_ROOT"/hooks/*.sh "$HOOKS_DIR/" 2>/dev/null || true
     cp "$PLUGIN_ROOT"/bin/set-hooks.mjs "$HOOKS_DIR/" 2>/dev/null || true
     chmod +x "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/*.mjs 2>/dev/null || true
-    info "Installed enforcement hooks → $HOOKS_DIR (registered per project by /set-init or /set-update)"
+
+    # Never claim success on an unchecked copy. A read-only ~/.claude (the container
+    # bind-mount case) silently copies nothing; /set-init would then register settings
+    # entries pointing at absent scripts, and a hook command that is "not found" is a
+    # NON-BLOCKING error — the push gate would be silently absent, which is worse than
+    # visibly missing.
+    HOOKS_MISSING=""
+    for hook in set-deny-push.sh set-guard-agent-name.sh set-hooks.mjs; do
+      [ -f "$HOOKS_DIR/$hook" ] || HOOKS_MISSING="$HOOKS_MISSING $hook"
+    done
+    if [ -z "$HOOKS_MISSING" ]; then
+      info "Installed enforcement hooks → $HOOKS_DIR (registered per project by /set-init or /set-update)"
+    else
+      warn "Enforcement hooks NOT installed (could not write$HOOKS_MISSING to $HOOKS_DIR)."
+      warn "  If ~/.claude is a read-only mount, run this installer on the host."
+      warn "  Do NOT register hooks in a project until they exist: a missing hook command"
+      warn "  fails open, so the push gate would be silently absent."
+    fi
   fi
 
   # Durable run store. Needs node:sqlite — stable on Node 24, flagged on Node 22.

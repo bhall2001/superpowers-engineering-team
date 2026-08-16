@@ -102,28 +102,47 @@ prose:
 | `set-guard-agent-name.sh` | `Agent` | A **named** spawn with a verifier-shaped prompt is denied — a named verifier's verdict never arrives (mailbox receipt), so `/set-build` would stall. |
 
 The scripts live centrally at `~/.claude/set/hooks/` (placed by `install.sh`); the
-project's `.claude/settings.json` references them by absolute path. Registration is
-**per project**, never in `~/.claude/settings.json` — hooks apply only to SET-managed
-repos.
+project's `.claude/settings.json` references them as **`$HOME/.claude/set/hooks/…`** —
+the literal string, not your expanded home directory. Claude Code runs hook commands
+through a shell, so `$HOME` resolves on every machine that opens the repo: your host, a
+devcontainer that bind-mounts `~/.claude` at a different absolute path, a collaborator's
+checkout. SET's target is autonomous teams in devcontainers, so this portability is the
+default — an expanded `/Users/you/...` path would leave the hooks silently absent exactly
+where the team runs. Registration is **per project**, never in `~/.claude/settings.json` —
+hooks apply only to SET-managed repos.
 
-Show the user the two entries that will be appended to `hooks.PreToolUse`, then:
+Show the user the two entries that will be appended to `hooks.PreToolUse`, then run
+exactly this (the single quotes around `$HOME` are load-bearing — they stop your shell
+from expanding it):
 
 ```bash
-node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir ~/.claude/set/hooks
+node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'
 ```
+
+It prints `{"installed": [...], "skipped": [...]}`. **If it prints nothing, or errors,
+the hooks are NOT registered** — say so; never report success from silence.
 
 Idempotent: re-running adds nothing when the entries are present. It **appends** to
 `hooks.PreToolUse` and never rewrites `hooks` wholesale — any hooks the user already has
 (SessionStart, other PreToolUse matchers) survive untouched. It creates
-`.claude/settings.json` if Step 4 did not.
+`.claude/settings.json` if Step 4 did not. Requires `jq` (already required by SET).
 
 If `~/.claude/set/hooks/set-hooks.mjs` is absent, SET was installed by an older
 `install.sh`: tell the user to run `/set-update` (which re-runs the installer, then
 registers the hooks) and continue.
 
-Tell the user: hooks are read at session start, so they take effect on the next session.
-To push themselves they type `!git push origin <branch>` — `!` runs in their shell, no
-tool call, no hook.
+Tell the user:
+- Hooks are read at session start, so they take effect on the next session.
+- To push themselves they type `!git push origin <branch>` — `!` runs in their shell, no
+  tool call, no hook.
+- The "your own session may push" carve-out is verified for agents spawned in-process
+  via the `Agent` tool (the default `/set-build`). It is **not yet verified** for
+  `--use-workflow` / `/set-review` workflow agents or for teammates run as separate
+  processes (tmux / split-pane teammate mode) — those may present a main-shaped payload.
+  Until re-probed, treat the gate as a safety net there, not a guarantee.
+- To remove the hooks later:
+  `node ~/.claude/set/hooks/set-hooks.mjs uninstall --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'`
+  — it removes only SET's entries (matched by that prefix) and leaves every other hook alone.
 
 ## Step 5: Detect Project Stack
 

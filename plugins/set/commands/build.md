@@ -335,8 +335,10 @@ is `generic` or absent, omit `subagent_type` and spawn a default builder.
 Scale builders by task count: 2–3 tasks → 1 builder; 4–6 → 2; 7+ → 3. Prefer distinct
 specialists over duplicate generic builders.
 
-Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt. QA's remit
-is unchanged from previous SET versions — it is a peer role, **not** the verifier.
+Spawn the QA teammate using `references/enhanced-qa-prompt.md` as its prompt, with
+`name: "qa-specialist-set"` — it is a peer you `SendMessage`, so it is named, and it
+carries the same `-set` suffix as every other SET teammate. QA's remit is unchanged from
+previous SET versions — it is a peer role, **not** the verifier.
 
 Under `--verbose`, emit `→ spawn {Specialist}-set :: {task name}` as each builder and the QA
 teammate is spawned, and `← {Specialist}-set :: {pass/fail}` as each reports back — where

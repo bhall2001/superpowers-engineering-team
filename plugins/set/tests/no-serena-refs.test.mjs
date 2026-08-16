@@ -13,11 +13,16 @@ const REPO = new URL("../../..", import.meta.url).pathname;
  */
 function shippedFiles() {
   const out = [join(REPO, "install.sh"), join(REPO, "CLAUDE.md"), join(REPO, "README.md")];
-  for (const sub of ["commands", "references"]) {
+  for (const sub of ["commands", "references", "hooks", "bin"]) {
     const dir = join(REPO, "plugins/set", sub);
     for (const f of readdirSync(dir)) {
-      if (f.endsWith(".md") && f !== "update.md") out.push(join(dir, f));
+      if (/\.(md|sh|mjs)$/.test(f) && f !== "update.md") out.push(join(dir, f));
     }
+  }
+  // User-facing docs are shipped too — a doc describing Serena as live is a live reference.
+  const docs = join(REPO, "docs");
+  for (const f of readdirSync(docs)) {
+    if (f.endsWith(".md")) out.push(join(docs, f));
   }
   return out;
 }

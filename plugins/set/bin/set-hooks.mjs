@@ -2,14 +2,24 @@
 // SET hook registration. Merges SET's PreToolUse hook entries into a project's
 // .claude/settings.json (append-only, idempotent) and removes only SET's entries.
 //
-//   set-hooks.mjs install   --settings <file> --hooks-dir <abs dir>
-//   set-hooks.mjs uninstall --settings <file> --hooks-dir <abs dir>
+//   set-hooks.mjs install   --settings <file> --hooks-dir <dir>
+//   set-hooks.mjs uninstall --settings <file> --hooks-dir <dir>
+//
+// --hooks-dir is written into the settings file verbatim as the command-path prefix. Use
+// the literal string `$HOME/.claude/set/hooks` (single-quoted in the shell), NOT the
+// expanded absolute path: <repo>/.claude/settings.json is the shared, committed project
+// file, and Claude Code runs hook commands through a shell, so `$HOME` resolves on every
+// machine — the host, a devcontainer with ~/.claude bind-mounted at a different absolute
+// path, a collaborator's checkout. An expanded `/Users/you/...` works only on the machine
+// that wrote it; everywhere else the command is not found and the hook is silently absent.
+// SET's target topology is autonomous teams in devcontainers, so portability is the
+// default, not an option. An absolute path is still accepted (tests, unusual layouts).
 //
 // Every command prints JSON on stdout. Errors print JSON on stderr and exit non-zero.
 //
 // The rewriting is done by jq with the filter shape the design spec verified against
-// the user's real settings (docs/superpowers/specs/2026-08-16-set-hooks-and-serena-
-// excision-design.md, Section 3 "Removal" + Section 4 "Shared mechanics"):
+// the user's real settings (the 2026-08-16 SET Phase 1 design spec under
+// docs/superpowers/specs/, Section 3 "Removal" + Section 4 "Shared mechanics"):
 //
 //   if (.hooks.PreToolUse | type) == "array" then (.hooks.PreToolUse) |= … else . end
 //   … any(.hooks[]?; …) — never .hooks[0]
@@ -18,8 +28,9 @@
 // Do not "simplify" it back. Never assigns to `.hooks` wholesale; SessionStart and every
 // non-SET PreToolUse entry pass through untouched. Only PreToolUse is registered.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 // Matcher per script. deny-push gates Bash; guard-agent-name gates Agent spawns.
@@ -28,6 +39,7 @@ export const SET_HOOKS = [
   { script: "set-guard-agent-name.sh", matcher: "Agent" },
 ];
 const TIMEOUT = 10;
+export const DEFAULT_HOOKS_DIR = "$HOME/.claude/set/hooks";
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
@@ -55,7 +67,12 @@ function require_(flags, ...names) {
 }
 
 function jq(filter, input, args = []) {
-  return execFileSync("jq", ["--indent", "2", ...args, filter], { input, encoding: "utf8" });
+  try {
+    return execFileSync("jq", ["--indent", "2", ...args, filter], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+  } catch (err) {
+    if (err.code === "ENOENT") throw new Error("jq is not installed; SET hooks need jq (the hooks themselves fail closed without it)");
+    throw new Error((err.stderr || err.message).toString().trim().replace(/^jq: error \(at <stdin>:\d+\): /, ""));
+  }
 }
 
 function readSettingsText(path) {
@@ -70,8 +87,19 @@ function writeSettingsText(path, text) {
   renameSync(tmp, path);
 }
 
+/** Trailing-slash-normalized prefix, kept verbatim otherwise (no path.join — it would not
+ *  touch `$HOME`, but the intent is "string prefix", not "filesystem path"). */
+function prefixOf(hooksDir) {
+  return hooksDir.endsWith("/") ? hooksDir : `${hooksDir}/`;
+}
+
+/** Portable across machines: `$HOME/...` (see header), `~/...`, or an absolute path. */
+export function isPortableHooksDir(dir) {
+  return dir.startsWith("$HOME/") || dir.startsWith("${HOME}/") || dir.startsWith("~/") || isAbsolute(dir);
+}
+
 function entryFor(hooksDir, { script, matcher }) {
-  return { matcher, hooks: [{ type: "command", command: join(hooksDir, script), timeout: TIMEOUT }] };
+  return { matcher, hooks: [{ type: "command", command: prefixOf(hooksDir) + script, timeout: TIMEOUT }] };
 }
 
 const HAS_COMMAND = `
@@ -80,10 +108,13 @@ const HAS_COMMAND = `
     and any(.hooks.PreToolUse[]; any(.hooks[]?; .command == $cmd));
 `;
 
+// A PreToolUse that exists but is not an array is the user's malformed value; refuse to
+// overwrite it rather than silently replacing it.
 const APPEND = `${HAS_COMMAND}
   if has_command($entry.hooks[0].command) then .
   elif (.hooks.PreToolUse | type) == "array" then (.hooks.PreToolUse) |= (. + [$entry])
-  else .hooks.PreToolUse = [$entry]
+  elif (.hooks.PreToolUse | type) == "null" then .hooks.PreToolUse = [$entry]
+  else error("hooks.PreToolUse exists but is not an array; fix it by hand before installing SET hooks")
   end`;
 
 // The spec's verified removal filter, with the probe's test("set-probe") swapped for the
@@ -119,7 +150,7 @@ export function install(settingsPath, hooksDir) {
 
 export function uninstall(settingsPath, hooksDir) {
   if (!existsSync(settingsPath)) return { settings: settingsPath, removed: 0 };
-  const prefix = hooksDir.endsWith("/") ? hooksDir : `${hooksDir}/`;
+  const prefix = prefixOf(hooksDir);
   const text = readSettingsText(settingsPath);
   const removed = Number(jq(COUNT, text, ["--arg", "prefix", prefix]).trim());
   if (removed > 0) writeSettingsText(settingsPath, jq(REMOVE, text, ["--arg", "prefix", prefix]));
@@ -128,11 +159,11 @@ export function uninstall(settingsPath, hooksDir) {
 
 function main(argv) {
   const { command, flags } = parseArgs(argv);
-  const usage = "usage: set-hooks.mjs install|uninstall --settings <file> --hooks-dir <abs dir>";
+  const usage = "usage: set-hooks.mjs install|uninstall --settings <file> --hooks-dir '$HOME/.claude/set/hooks'";
   if (!command || flags.help) throw new Error(usage);
   require_(flags, "settings", "hooks-dir");
   const hooksDir = flags["hooks-dir"];
-  if (!isAbsolute(hooksDir)) throw new Error(`--hooks-dir must be absolute (got ${hooksDir}); project settings reference the shared scripts by absolute path`);
+  if (!isPortableHooksDir(hooksDir)) throw new Error(`--hooks-dir must be '$HOME/...', '~/...' or an absolute path (got ${hooksDir}); project settings reference the shared scripts by a path that resolves on every machine`);
   switch (command) {
     case "install":
       return install(flags.settings, hooksDir);
@@ -143,7 +174,19 @@ function main(argv) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Main guard that survives symlinks (dotfiles-managed ~/.claude) and spaces in the path:
+// import.meta.url is the percent-encoded realpath, argv[1] is whatever was typed. Comparing
+// them naively made the CLI a silent no-op — exit 0, no output, nothing written.
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
   try {
     process.stdout.write(JSON.stringify(main(process.argv.slice(2))) + "\n");
   } catch (err) {

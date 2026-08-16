@@ -68,7 +68,10 @@ overwritten. It never edits `.mcpServers` in any of the four places Claude Code 
 from; MCP configuration is the user's or their team's call. It also places the enforcement
 hook scripts at `~/.claude/set/hooks/` but **never registers them there**: hooks are
 appended to a project's `.claude/settings.json` (`hooks.PreToolUse`) by `/set-init` /
-`/set-update` via `set-hooks.mjs`, so they bind only SET-managed repos.
+`/set-update` via `set-hooks.mjs`, so they bind only SET-managed repos. The registered
+command is the **literal** `$HOME/.claude/set/hooks/<script>` (Claude Code runs hook
+commands through a shell), never an expanded home path — the project file is committed and
+must resolve on the host, in a devcontainer, and on a collaborator's machine.
 
 ## Enforcement hooks
 
@@ -77,4 +80,9 @@ appended to a project's `.claude/settings.json` (`hooks.PreToolUse`) by `/set-in
 `set-guard-agent-name.sh` (matcher `Agent`; a named spawn with a verifier-shaped prompt is
 denied). Payload facts they rely on are recorded in
 `docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md` — re-probe before
-changing identity logic. Table-driven tests live in `plugins/set/tests/`.
+changing identity logic; the main-session carve-out is verified for in-process `Agent`
+spawns only (not workflow agents, not tmux teammates). `set-deny-push.sh` splits the
+command quote-aware with awk (heredoc bodies and quoted text are data), never globs
+(`set -f`), pre-filters segments with `grep -w`, and degrades to a coarse scan above 64 KB —
+all so it can never exceed its hook timeout, which Claude Code treats as fail-open.
+Table-driven tests live in `plugins/set/tests/`.

@@ -128,10 +128,18 @@ SET no longer integrates Serena. Projects initialized under an earlier version c
 bookkeeping for a mechanism that no longer exists. Remove **only what SET wrote**:
 
 ```bash
-jq 'del(.serena_enabled)' .claude/set/config.json > .claude/set/config.json.tmp \
-  && mv .claude/set/config.json.tmp .claude/set/config.json
-rm -f .claude/set/.serena-migrated
+if [ -f .claude/set/config.json ] && jq -e 'has("serena_enabled")' .claude/set/config.json >/dev/null 2>&1; then
+  jq 'del(.serena_enabled)' .claude/set/config.json > .claude/set/config.json.tmp \
+    && mv .claude/set/config.json.tmp .claude/set/config.json \
+    && echo "removed: serena_enabled (config.json)"
+fi
+if [ -e .claude/set/.serena-migrated ]; then
+  rm -f .claude/set/.serena-migrated && echo "removed: .serena-migrated sentinel"
+fi
 ```
+
+Prints one `removed:` line per artifact it deleted, nothing otherwise — the report below
+is driven by that output.
 
 Both are no-ops when already absent, so this sub-step is idempotent and needs no version
 detection. Every other key in `config.json` survives.
@@ -162,11 +170,15 @@ If shards were just made trackable, say so plainly: the learnings are now visibl
 ### 2. Update SET commands
 
 Record the version this run **started as** — Step 4c compares it against what the
-installer leaves on disk:
+installer leaves on disk. Each Bash call is a fresh shell, so a variable does **not**
+survive to Step 4c: this prints the value, and you carry it in your context.
 
 ```bash
-SET_VERSION_BEFORE="$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
+echo "SET_VERSION_BEFORE=$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
 ```
+
+Note the printed value (e.g. `1.4.0`, or `unknown`) — you will substitute it literally in
+Step 4c.
 
 Re-run the installer to pull the latest commands:
 
@@ -231,20 +243,33 @@ SET's two PreToolUse hooks (`set-deny-push.sh` on `Bash`: no agent-initiated pus
 create / PR merge; `set-guard-agent-name.sh` on `Agent`: no named verifier spawns) are
 registered **per project**, in `.claude/settings.json` — never in `~/.claude/settings.json`.
 A project initialized before hooks shipped has none until this step runs. Show the user
-the two entries that will be appended to `hooks.PreToolUse`, then:
+the two entries that will be appended to `hooks.PreToolUse`, then run exactly this — the
+single quotes around `$HOME` are load-bearing; the literal `$HOME/.claude/set/hooks/…`
+must land in the committed project file so it resolves on the host, in a devcontainer
+whose `~/.claude` mount sits at another absolute path, and on a collaborator's machine:
 
 ```bash
-node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir ~/.claude/set/hooks
+node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'
 ```
 
-Idempotent — prints `"installed": []` when already registered. Appends only; the user's
-existing hooks (SessionStart, other PreToolUse matchers) are untouched by construction.
-If `set-hooks.mjs` is absent, Step 2 did not place it (older installer, or the container
-case above) — leave the hooks unregistered and say so in the report; do not hand-write
-the entries.
+It prints `{"installed": [...], "skipped": [...]}` — `"installed": []` when already
+registered. **Nothing printed, or an error, means NOT registered** — report that; never
+infer success from silence. Appends only; the user's existing hooks (SessionStart, other
+PreToolUse matchers) are untouched by construction. If `set-hooks.mjs` is absent, Step 2
+did not place it (older installer, or the read-only-mount container case above where the
+host has not yet been updated) — leave the hooks unregistered and say so in the report;
+do not hand-write the entries.
+
+If the file already holds an entry whose command is this machine's *expanded* home path
+(`/Users/you/.claude/set/hooks/…`, written by a pre-release build), tell the user: it works
+only on this machine; remove it by hand and re-run this step so the portable form replaces
+it.
 
 Hooks are read at session start: they take effect next session. The human pushes with
-`!git push origin <branch>` (`!` runs in the shell — no tool call, no hook).
+`!git push origin <branch>` (`!` runs in the shell — no tool call, no hook). The
+main-session carve-out is verified for in-process `Agent` spawns (default `/set-build`)
+and not yet for workflow agents or separate-process (tmux) teammates — say so if the user
+relies on either.
 
 ### 4c. Warn if the command files changed under you
 
@@ -253,9 +278,15 @@ files. If the installer changed the version, any migration or registration this 
 adds did not run — the old command did not know about it. Compare:
 
 ```bash
+# Replace {before} with the value Step 2 printed — literally, not as a shell variable
+# (it did not survive; every Bash call is a fresh shell).
 SET_VERSION_AFTER="$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
-[ "$SET_VERSION_BEFORE" = "$SET_VERSION_AFTER" ] && echo "same-version" || echo "CHANGED: $SET_VERSION_BEFORE -> $SET_VERSION_AFTER"
+[ "{before}" = "$SET_VERSION_AFTER" ] && echo "same-version" || echo "CHANGED: {before} -> $SET_VERSION_AFTER"
 ```
+
+If you did not run Step 2 (container case) or lost the value, treat it as `same-version`
+— never print the warning on a guess; a false alarm on every run trains the user to
+ignore it.
 
 If it printed `same-version`, print nothing — a clean exit is the signal the user is done.
 If it printed `CHANGED`, print this, listing **by name** only the items whose check below

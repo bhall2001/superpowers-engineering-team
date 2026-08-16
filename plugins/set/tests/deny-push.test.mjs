@@ -56,6 +56,32 @@ const DENY_COMMANDS = [
   "true && { git push; }",
   "sh -lc 'cd repo && git push'",
   "bash -c 'git status; gh pr merge 3'",
+  // review round 2: wrappers, keywords, separators, and quoting forms agents actually emit
+  "git push&",
+  "nohup git push > /dev/null 2>&1 &",
+  "git push 2>&1 | tail",
+  "timeout 300 git push",
+  "timeout -s KILL 5 git push",
+  "nice -n 10 git push",
+  "xargs -n 1 -I{} git push < list",
+  "caffeinate git push",
+  "if git diff --quiet; then git push; fi",
+  "for b in a b; do git push origin $b; done",
+  "while true; do git push; done",
+  "! git push",
+  "git \\\npush",
+  "\\git push",
+  'bash -o pipefail -c "git push"',
+  'bash --rcfile /dev/null -c "git push"',
+  "sh -c $'git push'",
+  'bash -c "cd x\ngit push"',
+  "gh pr -R owner/repo create",
+  "gh api -X POST repos/o/r/pulls -f title=x",
+  "gh api -X PUT repos/o/r/pulls/1/merge",
+  "gh api repos/o/r/pulls --method POST",
+  "cat <<EOF; git push\nx\nEOF",
+  "cat <<EOF\ngit push\nEOF\ngit push",
+  'echo "\\\\"; git push',
 ];
 
 const ALLOW_COMMANDS = [
@@ -73,6 +99,26 @@ const ALLOW_COMMANDS = [
   "grep -rn 'git push' docs/",
   "bash -c 'git status'",
   "bash script.sh",
+  // review round 2: quoted text is data, not a command — commits must never be blocked
+  'git commit -m "fix hook; git push still blocked"',
+  'git commit -m "a && git push later"',
+  "git commit -m 'gh pr create is denied'",
+  'git commit -m "$(cat <<\'EOF\'\nfeat: hook\n\n- gh pr create is denied\n- git push blocked\nEOF\n)"',
+  'git commit -m "feat: hook\n\n- git push blocked\n\nCo-Authored-By: x"',
+  "cat <<EOF > notes.md\ngit push\ngh pr create\nEOF",
+  "cat <<'EOF'\ngit push\nEOF",
+  "cat <<-EOF\n\tgit push\n\tEOF\necho done",
+  'echo "\\"; git push"',
+  "echo 'a; git push'",
+  'echo <<< "git push"',
+  "gh api repos/o/r/pulls",
+  "gh api repos/o/r/pulls/1",
+  "gh pr create-foo",
+  "git pushx",
+  "timeout 5 npm test",
+  "nice -n 10 npm test",
+  "sudo -n ls",
+  "echo * && git status",
 ];
 
 for (const command of DENY_COMMANDS) {
@@ -168,6 +214,37 @@ test("jq unavailable → deny, with a reason", () => {
   } finally {
     rmSync(bin, { recursive: true, force: true });
   }
+});
+
+test("glob characters are never expanded against the cwd (a deep glob used to push the hook past its timeout)", () => {
+  const started = Date.now();
+  const r = runHook(HOOK, agentBash("echo /*/*/*/*/*/* && git push"));
+  assert.equal(decisionOf(r), "deny", r.stdout);
+  assert.ok(Date.now() - started < 3000, `took ${Date.now() - started}ms`);
+});
+
+test("a command over the parse cap degrades to a coarse scan — still denies, still fast", () => {
+  const big = "echo " + "a".repeat(200_000) + "; git push";
+  const started = Date.now();
+  const r = runHook(HOOK, agentBash(big));
+  assert.equal(decisionOf(r), "deny", r.stdout);
+  assert.ok(Date.now() - started < 3000, `took ${Date.now() - started}ms`);
+  const bigOk = "echo " + "a".repeat(200_000) + "; git status";
+  assert.equal(decisionOf(runHook(HOOK, agentBash(bigOk))), null);
+});
+
+test("worst case under the parse cap (tens of thousands of segments) stays well under the hook timeout", () => {
+  const cmd = "git;".repeat(16_000) + " git push";
+  const started = Date.now();
+  const r = runHook(HOOK, agentBash(cmd));
+  assert.equal(decisionOf(r), "deny", r.stdout);
+  assert.ok(Date.now() - started < 6000, `took ${Date.now() - started}ms`);
+});
+
+test("non-string tool_input.command → deny, with a reason", () => {
+  const r = runHook(HOOK, agentBash(["git", "push"]));
+  assert.equal(decisionOf(r), "deny");
+  assert.match(reasonOf(r), /payload/i);
 });
 
 test("non-Bash tool → allow (defensive; the matcher should prevent it)", () => {

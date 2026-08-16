@@ -562,7 +562,8 @@ Not a TDD task — it is measurement. The discipline is instead:
 - **Done when**:
   - `install.sh` copies hook scripts to `~/.claude/set/hooks/` and marks them executable
   - `/set-init` merges both entries into `<repo>/.claude/settings.json`, referencing the
-    scripts by absolute path
+    scripts as the literal `$HOME/.claude/set/hooks/…` (amended post-review: an expanded
+    absolute path is host-only and silently absent in devcontainers)
   - `/set-update` installs them too — covering users who initialized before this change
   - Both are idempotent
   - Entries land in **project** settings, never `~/.claude/settings.json`
@@ -586,7 +587,7 @@ Not a TDD task — it is measurement. The discipline is instead:
 - [ ] No hardcoded values, missing validation, or security issues
 - [ ] Nothing writes to `~/.claude/settings.json`
 - [ ] Scripts are executable after install
-- [ ] Absolute paths, so N projects share one copy
+- [ ] `$HOME`-relative literal, so N projects share one copy AND the committed file resolves in devcontainers
 
 ---
 

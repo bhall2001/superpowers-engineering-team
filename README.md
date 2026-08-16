@@ -53,6 +53,21 @@ Then open Claude Code and install the prerequisite plugin:
 
 Dynamic workflows (used by `/set-review` and `/set-build --use-workflow`) are built into Claude Code (Pro/Max/Team/Enterprise). Pro users enable them once via `/config`; Max/Team/Enterprise have them on by default.
 
+### Enforcement hooks
+
+SET ships two PreToolUse hooks that make the build's safety rules structural rather than prose. `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` (and `/set-update`, for existing projects) registers them in the **project's** `.claude/settings.json` — never in `~/.claude/settings.json`, so they bind only SET-managed repos.
+
+| Hook | Blocks | Why |
+|---|---|---|
+| `set-deny-push.sh` | Agent-initiated `git push`, `gh pr create`, `gh pr merge` (chained, wrapped, `sh -c`'d, in `if`/`for` bodies…). `git commit` is always allowed. | The human review gate. Your own session can still push; every spawned agent is denied. |
+| `set-guard-agent-name.sh` | A **named** `Agent` spawn whose prompt is verifier-shaped | A named spawn returns a mailbox receipt, not the agent's output — the verdict would never arrive and the build would stall. |
+
+The registered command path is the literal `$HOME/.claude/set/hooks/…`, so the same committed settings work on your host, inside a devcontainer whose `~/.claude` mount lives at another absolute path, and on a collaborator's machine. Hooks load at session start — restart Claude Code after registering. To push yourself, type `!git push origin <branch>` (`!` runs in your shell: no tool call, no hook). To remove them: `node ~/.claude/set/hooks/set-hooks.mjs uninstall --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'` — it removes only SET's entries.
+
+Both hooks fail **closed** on their own errors (missing `jq`, unparseable payload). The push gate is a heuristic over the command string, not a sandbox: `eval`, `$var` expansion, git aliases and scripts on disk are out of scope, and the "your own session may push" carve-out is verified for in-process `Agent` spawns (the default `/set-build`), not yet for workflow agents or separate-process (tmux) teammates.
+
+**Upgrading from 1.4.x or earlier:** run `/set-update` twice — the first run fetches the new command files, the second registers the hooks and removes stale bookkeeping.
+
 ## Upgrading from a pre-1.0 install
 
 **If you already use SET, do this one-time step to reach v1 — run it in your own terminal, NOT via `/set-update`:**

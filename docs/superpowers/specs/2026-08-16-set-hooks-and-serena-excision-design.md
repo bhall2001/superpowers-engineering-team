@@ -370,6 +370,13 @@ sees true state immediately.
 
 ### Caveat
 
+**Probed:** in-process spawns via the `Agent` tool (named and unnamed) from a
+main context. **Not probed:** `Workflow`-tool agents (`--use-workflow`,
+`/set-review`) and teammates run as separate processes (tmux / split-pane
+teammate mode). A separate process may present a main-shaped payload — no
+`agent_id` — and be *allowed* by the carve-out. Until re-probed, user-facing
+docs say so, and the gate is a safety net on those paths, not a guarantee.
+
 The probe measures the current Claude Code version. If identity plumbing changes
 upstream, a carve-out built on it fails in the deny direction — safe, but it
 would block the human too. The hook must therefore degrade to
@@ -403,10 +410,21 @@ review.
 
 ### Hook 1 — `set-deny-push.sh` (PreToolUse, matcher `Bash`)
 
-**Denies:** `git push`, `gh pr create`, `gh pr merge`, including forms reached
-via `&&` / `;` / `|` chaining or a leading `env` / `sudo`. Matching is on the
-parsed command string and must handle chaining — `pnpm test && git push` is a
-push.
+**Denies:** `git push`, `gh pr create`, `gh pr merge` (and `gh api` writes to a
+pulls endpoint), including forms reached via `&&` / `||` / `;` / `|` / `&` /
+newline chaining, `if … then` / `do` bodies, a leading `env` / `sudo` /
+`timeout` / `nice` / `xargs` / VAR=val, subshells and `sh -c` strings.
+Matching is on the parsed command string and must handle chaining —
+`pnpm test && git push` is a push.
+
+> **Amended 2026-08-16 (post-review).** Splitting must be **quote-aware** and
+> skip heredoc bodies — quoted text is data, so `git commit -m "fix; git push
+> later"` and a heredoc commit body listing `- gh pr create` are commits, not
+> pushes (the first cut denied both, breaking the "commits always allowed"
+> rule). The parser must never glob (`set -f`) and must be bounded in time — a
+> hook past its timeout is a non-blocking error, i.e. fail-open — so above a
+> size cap it degrades to a coarse scan. Out of scope, by design: `eval`,
+> `$var` expansion, git/gh aliases, scripts on disk.
 
 **Allows:** everything else, including `git commit`. Builders commit; that is
 how checkpoints and the corroborating git-log channel work. Only outward-facing
@@ -460,8 +478,20 @@ net over the prose, not a replacement; `agent-return-channels.md` stays.
 ### Shared mechanics
 
 **Scripts live centrally** at `~/.claude/set/hooks/`, installed once by
-`install.sh`. Project settings reference them by absolute path, so N SET
-projects share one copy.
+`install.sh`. Project settings reference them as the **literal**
+`$HOME/.claude/set/hooks/<script>` (Claude Code runs hook commands through a
+shell, so it expands per machine), so N SET projects share one copy **and** the
+committed `.claude/settings.json` resolves on the host, in a devcontainer whose
+`~/.claude` bind-mount sits at another absolute path, and on a collaborator's
+checkout.
+
+> **Amended 2026-08-16 (post-review).** The first cut wrote the expanded absolute
+> path. Review showed that in the devcontainer topology SET targets — the
+> *primary* topology for autonomous teams — the host path does not exist inside
+> the container, so the hook command fails with `not found`, which Claude Code
+> treats as a non-blocking error: the gate is silently absent exactly where the
+> team runs, and each environment that re-registers appends its own divergent
+> entry. `$HOME` is the fix; an absolute path is still accepted for tests.
 
 **Installed to project settings** (`<repo>/.claude/settings.json`) by
 `/set-init` and `/set-update` — not user settings. Scope matches intent: hooks

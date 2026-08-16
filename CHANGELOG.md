@@ -3,8 +3,8 @@
 ## [1.5.0] — Enforcement hooks; Serena removed
 
 ### Added
-- **Two enforcement hooks make the build's safety rules structural.** `set-deny-push.sh` blocks agent-initiated `git push` / `gh pr create` / `gh pr merge` (including chained, `sudo`/`env`-prefixed, subshell and `sh -c` forms) — your own session can still push, and `git commit` is always allowed. `set-guard-agent-name.sh` rejects a **named** verifier spawn, whose verdict would otherwise never arrive. Both fail closed on a bad payload or missing `jq`.
-- **Hooks are registered per project.** `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` and `/set-update` append them to the project's `.claude/settings.json` (idempotent, never touching your other hooks). They never land in `~/.claude/settings.json`.
+- **Two enforcement hooks make the build's safety rules structural.** `set-deny-push.sh` blocks agent-initiated `git push` / `gh pr create` / `gh pr merge` / `gh api` writes to a pulls endpoint — including chained (`&&`, `;`, `|`, `&`, newline), wrapped (`sudo`, `env`, `timeout`, `nice`, `xargs`, `nohup`), keyword-bodied (`if … then`, `for … do`), subshell and `sh -c` forms. Quoted text and heredoc bodies are data, so a commit message that mentions `git push` is not a push; your own session can still push, and `git commit` is always allowed. `set-guard-agent-name.sh` rejects a **named** verifier spawn, whose verdict would otherwise never arrive. Both fail closed on a bad payload or missing `jq`, and the push gate is built never to exceed its hook timeout (which would fail open).
+- **Hooks are registered per project, portably.** `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` and `/set-update` append them to the project's `.claude/settings.json` (idempotent, never touching your other hooks) as the literal `$HOME/.claude/set/hooks/…`, so the committed settings resolve on the host, in a devcontainer, and on a collaborator's machine. They never land in `~/.claude/settings.json`. Remove with `set-hooks.mjs uninstall`, which drops only SET's entries.
 - **`/set-update` warns when it upgraded itself mid-run** and lists what is still pending (hook registration, stale bookkeeping), so a one-run upgrade is not mistaken for a complete one.
 - **SET-spawned builders carry a `-set` name suffix**, making SET teammates identifiable in hook payloads, transcripts and logs.
 
@@ -12,7 +12,8 @@
 - **Serena integration.** Retrieval is keyword search over the learning shards — the path that already ran by default. Serena was unreachable from the walled environments SET targets and could not serve parallel teammates. **Breaking:** `serena_enabled` is no longer read; `/set-update` removes SET's own bookkeeping (`serena_enabled`, `.serena-migrated`) and leaves `.serena/memories/` untouched.
 
 ### Notes
-- **Run `/set-update` twice** on an existing project: once to fetch this version, once to register the hooks. The second run says so if needed.
+- **Run `/set-update` twice** on an existing project: the first run (your old `/set-update`) fetches this version's files; the second registers the hooks and removes stale Serena bookkeeping. From this version on, `/set-update` warns when it upgraded itself mid-run and lists what is still pending.
+- **The push gate is a safety net, not a sandbox.** `eval`, `$var` expansion, git/gh aliases and scripts written to disk are out of scope. The "your own session may push" carve-out is verified for in-process `Agent` spawns (the default `/set-build`); workflow agents (`--use-workflow`, `/set-review`) and separate-process (tmux) teammates were not probed and may present a main-shaped payload.
 - **Restart Claude Code after updating** — hooks are read at session start.
 - To push yourself, type `!git push origin <branch>` — `!` runs in your shell, no tool call, no hook.
 

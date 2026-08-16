@@ -164,7 +164,29 @@ test("uninstall filters by the hooks-dir prefix, so a differently-located SET-lo
   });
 });
 
-test("hooks-dir must be absolute", () => {
+test("hooks-dir accepts the portable $HOME form and writes it verbatim", () => {
+  withSettings("{}", (path) => {
+    const r = cli(["install", "--settings", path, "--hooks-dir", "$HOME/.claude/set/hooks"]);
+    assert.deepEqual(r.installed.sort(), ["$HOME/.claude/set/hooks/set-deny-push.sh", "$HOME/.claude/set/hooks/set-guard-agent-name.sh"]);
+    const cmds = readSettings(path).hooks.PreToolUse.map((e) => e.hooks[0].command);
+    for (const c of cmds) assert.ok(c.startsWith("$HOME/"), c);
+    // and uninstall by the same prefix removes exactly those
+    const u = cli(["uninstall", "--settings", path, "--hooks-dir", "$HOME/.claude/set/hooks"]);
+    assert.equal(u.removed, 2);
+    assert.deepEqual(readSettings(path).hooks.PreToolUse, []);
+  });
+});
+
+test("a malformed non-array hooks.PreToolUse is refused, not overwritten", () => {
+  withSettings('{"hooks":{"PreToolUse":{"oops":true}}}', (path) => {
+    const r = cli(["install", "--settings", path, "--hooks-dir", HOOKS_DIR], { expectFail: true });
+    assert.ok(r.failed);
+    assert.match(r.stderr, /not an array/);
+    assert.deepEqual(readSettings(path), { hooks: { PreToolUse: { oops: true } } });
+  });
+});
+
+test("hooks-dir must be portable: $HOME/…, ~/…, or absolute — never relative", () => {
   withSettings("{}\n", (path) => {
     const r = cli(["install", "--settings", path, "--hooks-dir", "relative/dir"], { expectFail: true });
     assert.ok(r.failed);
