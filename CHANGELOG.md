@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.1] — `/set-update` finishes when the installer is blocked
+
+### Fixed
+- **`/set-update` stalled when Claude Code's auto-mode classifier refused to run the installer.** Piping a download into a shell is blocked at the permission gate, not by the sandbox, so disabling the sandbox never helped and the command had no answer for it. It now recognizes that denial, hands you the one line to run yourself with a leading `!`, and carries on — and it will not retry or reword the command to slip past the gate.
+- **An installer you ran yourself was reported as unverified, even when it worked.** Output from a `!` line never reaches Claude, so the success banner `/set-update` waited for could not arrive on that path. It now confirms the result from what the installer leaves on disk, and checks that the file is from this run rather than an earlier one — so a line you never ran is not mistaken for a successful update.
+
 ## [1.5.0] — Enforcement hooks; Serena removed
 
 ### Added
