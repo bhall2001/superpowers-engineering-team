@@ -92,45 +92,7 @@ Do **not** reformat or rewrite anything the user customized — touch only the k
 
 This normalization is **idempotent** and follows the same rule as the rest of Step 1: show each proposed per-file diff and apply only on confirmation.
 
-#### 1c: Offer to move Serena onto the official plugin
-
-Only relevant to users who already run Serena. **Serena is optional in SET** — skip this
-sub-step entirely for anyone who doesn't have it, and never suggest installing it here.
-
-When SET does install Serena it uses the official Claude Code plugin rather than a
-hand-written `mcpServers` entry. The installer (Step 2) deliberately **leaves an existing
-standalone entry alone** so nobody's Serena is swapped mid-cycle — which means this
-migration only ever happens here, if the user opts in.
-
-Check for a standalone entry:
-
-```bash
-jq -e '.mcpServers.serena' ~/.claude/settings.json &>/dev/null && echo "standalone" || echo "none"
-```
-
-If it prints `none`, skip this sub-step entirely — either the plugin is already in use or Serena isn't installed.
-
-If it prints `standalone`, offer the switch. Explain it plainly, including what does **not** change:
-
-> Your Serena is configured as a standalone `mcpServers` entry pointing at a locally-installed binary. The official plugin runs the same server via `uvx --from git+https://github.com/oraios/serena`, so it tracks upstream instead of staying pinned to whatever version you installed, and Claude Code manages its lifecycle across sessions.
->
-> This is a packaging change only — same stdio server, same one-instance-per-session behavior. It does **not** give spawned agents their own Serena: SET queries it in the lead and injects results as text, and that is unaffected either way.
->
-> Switch now? (Your local `serena` binary stays installed; you can remove it with `uv tool uninstall serena-agent` once you're happy.)
-
-On confirmation:
-
-```bash
-jq 'del(.mcpServers.serena)' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-  && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
-claude plugin install serena@claude-plugins-official
-```
-
-Run the `claude plugin install` line with the sandbox disabled (same reason as Step 2 — it writes under `~/.claude/`). Then tell the user to **restart Claude Code**, since MCP servers are wired up at session start.
-
-If the user declines, leave everything as-is and note it in the 1d report — the standalone entry keeps working and SET supports both.
-
-#### 1c-bis: Verify learning shards are committable
+#### 1c: Verify learning shards are committable
 
 Projects initialized before this check existed may be silently discarding every learning
 they produce. Shards only carry forward to future cycles if git can see them, and many
@@ -157,41 +119,49 @@ If `TRACKABLE`, note it and move on. If `IGNORED`, this is worth flagging clearl
 > The trailing `*` is required — git will not re-include a path whose parent directory is
 > excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op.
 
-Show the proposed `.gitignore` change and apply only on confirmation. Keep `.serena/`
-ignored — it is a rebuildable index, not source of truth. Committing the now-visible
-shards is the user's call; don't stage or commit them here.
+Show the proposed `.gitignore` change and apply only on confirmation. Committing the
+now-visible shards is the user's call; don't stage or commit them here.
 
-#### 1c-ter: Reconcile `serena_enabled` with how this project actually runs
+#### 1c-bis: Remove stale Serena bookkeeping
 
-Serena is now **optional**, and `serena_enabled` in `.claude/set/config.json` decides
-whether `/set-build`, `/set-review`, and `/set-learn` call it at all. Projects predating
-that change may carry a stale `true`.
+SET no longer integrates Serena. Projects initialized under an earlier version carry
+bookkeeping for a mechanism that no longer exists. Remove **only what SET wrote**:
 
-Read the flag. If it is absent, leave it absent — `/set-build` resolves it lazily. If it
-is `true`, confirm the assumption still holds:
+```bash
+jq 'del(.serena_enabled)' .claude/set/config.json > .claude/set/config.json.tmp \
+  && mv .claude/set/config.json.tmp .claude/set/config.json
+rm -f .claude/set/.serena-migrated
+```
 
-> `serena_enabled: true` — SET will query Serena for semantic recall over your learnings.
-> That works when the session running `/set-build` can reach an MCP server.
->
-> If this project's agents run **walled** — inside a devcontainer or an isolated worktree
-> — no agent reaches Serena, the lead included. In that case the flag should be `false`:
-> SET falls back to keyword search over the same shards, which is what actually runs there.
->
-> Keep `true`, or switch to `false`?
+Both are no-ops when already absent, so this sub-step is idempotent and needs no version
+detection. Every other key in `config.json` survives.
 
-Only ask when the flag is `true`; a `false` value needs no reconciliation. Apply the
-user's answer to `.claude/set/config.json` and note it in the 1d report.
+**Never touch `.serena/memories/`, `.serena/`, the user's hooks, or their MCP config.**
+Serena owns that directory and it may hold memories SET never wrote. SET removes only what
+SET created, inside SET's own directories.
+
+Report what was removed, and say explicitly why the memories were left:
+
+```
+Removed stale Serena bookkeeping:
+  - serena_enabled (config.json)
+  - .serena-migrated sentinel
+
+Note: .serena/memories/ left untouched — Serena owns that directory.
+SET no longer reads it. Delete manually if you want it gone.
+```
+
+Print nothing when neither artifact was present.
 
 #### 1d: Report migration result
 
-List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; Serena: switched to plugin / declined / already plugin / not installed; shard trackability: already trackable / `.gitignore` fixed / still ignored by choice; `serena_enabled`: unchanged / switched to false / absent) or confirm the project was already current. Note that plans, specs, shards, and taxonomy need no migration — they are format-compatible with 1.0.
+List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; shard trackability: already trackable / `.gitignore` fixed / still ignored by choice; stale Serena bookkeeping: removed / already absent) or confirm the project was already current. Note that plans, specs, shards, and taxonomy need no migration — they are format-compatible with 1.0.
 
 If shards were just made trackable, say so plainly: the learnings are now visible to `git status` and committing them is the user's call.
 
 ### 2. Update SET commands
 
-Re-run the installer to pull the latest commands. It will offer Serena as an optional
-opt-in prompt (default no); declining changes nothing about the update:
+Re-run the installer to pull the latest commands:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
@@ -234,18 +204,9 @@ echo "=== Agent Teams: experimental flag ==="
 jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' ~/.claude/settings.json &>/dev/null \
   && echo "OK" || echo "MISSING CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
-echo "=== Serena MCP (optional) ==="
-if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' ~/.claude/settings.json &>/dev/null; then
-  echo "present (plugin)"
-elif jq -e '.mcpServers.serena' ~/.claude/settings.json &>/dev/null; then
-  echo "present (standalone mcpServers entry)"
-else
-  echo "not installed — fine; SET uses keyword search over the same shards"
-fi
-
 echo "=== Learning shards trackable by git ==="
 git check-ignore -q .claude/set/ 2>/dev/null \
-  && echo "IGNORED — learnings will not persist (see migration step 1c-bis)" \
+  && echo "IGNORED — learnings will not persist (see migration step 1c)" \
   || echo "OK"
 ```
 
@@ -297,5 +258,4 @@ Then tell the user:
 - Which plugins were updated successfully
 - Any that failed (with suggested fix)
 - Whether this project needed migration (Step 1) and what changed
-- Serena MCP status — as a neutral fact, not a warning; absent is a supported state
 - Whether learning shards are trackable by git, and if not, that learnings are being lost

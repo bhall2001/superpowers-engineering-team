@@ -46,34 +46,7 @@ git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 
 Report findings to the user before proceeding.
 
-## Step 3: Detect Serena MCP (optional)
-
-Serena is an **optional enhancement**, not a requirement. It adds semantic recall over
-the learning shards for the lead session. Shards themselves are plain markdown in
-`.claude/set/learnings/` and are the source of truth — SET's full pipeline runs without
-any MCP server. This matters for autonomous teams running inside devcontainers or
-isolated worktrees, where no MCP server is reachable by any agent, lead included.
-
-Detect it and record the result — never block on it:
-
-1. Check whether any `mcp__serena__*` tool is listed in your available tools.
-2. **Not available** → write `serena_enabled: false` to `.claude/set/config.json` and
-   continue. Mention once, without alarm:
-   > "Serena not detected — continuing without it. Learning shards work standalone;
-   > semantic recall over them is disabled. To add it later: `/plugin install serena@claude-plugins-official`."
-3. **Available** → write `serena_enabled: true` to `.claude/set/config.json`, then
-   initialize `.serena/project.yml` for this project (create `.serena/` if missing):
-   ```yaml
-   project_name: "{project-name-from-git-or-dirname}"
-   languages: []  # fill in your primary languages
-   ignore_all_files_in_gitignore: true
-   ```
-   Show the user the file before writing. Get confirmation.
-
-Keep `.serena/` gitignored — it is a rebuildable index. The shards under `.claude/set/`
-are what must be committed; see Step 3b.
-
-## Step 3b: Ensure learning shards are committable
+## Step 3: Ensure learning shards are committable
 
 Shards only carry forward to future cycles if git can see them. Many repos ignore
 `.claude/` wholesale, which would silently discard every learning SET produces:
@@ -253,7 +226,7 @@ You are a {domain} specialist agent in the SET workflow. You have deep expertise
 - `description:` — one line stating when SET should route a task to this specialist.
 - `model:` — replaces the old `## Model` section; keep it in frontmatter only (no `## Model` body heading).
 - `tools:` — `[Read, Edit, Write, Bash, Grep, Glob]` for every specialist (builders write code, run tests, search). `qa-specialist` uses the same list; QA independence comes from `/set-build` using a fresh verifier agent, not from tool restriction.
-- Do NOT add `skills:` or `mcpServers:` keys — the Workflow tool does not apply them. The body already directs builders to call `mcp__serena__*` directly at runtime.
+- Do NOT add `skills:` or `mcpServers:` keys — the Workflow tool does not apply them.
 
 Read CLAUDE.md and any existing shards in `.claude/set/learnings/` to populate with real project-specific content — NOT generic placeholders. Show each file before writing. Get confirmation.
 
@@ -298,7 +271,6 @@ Stack detected:
   Type checker: [detected]
 
 Execution:   Agent Teams (default for /set-build) — dynamic workflows available via /set-build --use-workflow
-Serena MCP:  [✓ detected — semantic recall enabled | — not detected (optional; shards work standalone)]
 Learnings:   [✓ .claude/set/ is trackable by git | ⚠ gitignored — learnings will not persist]
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]

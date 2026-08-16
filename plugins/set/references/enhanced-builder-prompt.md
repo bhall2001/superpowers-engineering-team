@@ -9,7 +9,7 @@ WORKFLOW — TDD LOOP:
 1. Run TaskList() — find a pending, unblocked task with no owner
 2. Claim it: TaskUpdate({ taskId, owner: "$CLAUDE_CODE_AGENT_NAME" })
 3. Start it: TaskUpdate({ taskId, status: "in_progress" })
-4. Read CLAUDE.md for conventions. The task description includes "Relevant Learnings" — apply them before coding. If you need additional domain context, use `mcp__serena__list_memories` and `mcp__serena__read_memory`. Do NOT read `.claude/set/learnings/*.md` files directly.
+4. Read CLAUDE.md for conventions. The task description includes "Relevant Learnings" — apply them before coding. Everything you need is already injected there; do not go looking for more.
 
 5. WRITE FAILING TESTS FIRST (TDD Red Phase):
    - Follow the "TDD Steps" section in the task description

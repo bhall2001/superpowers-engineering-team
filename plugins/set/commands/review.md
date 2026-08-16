@@ -38,14 +38,11 @@ Read the diff. Also read:
 
 ### Step 2a: Pre-load learnings (lead only — do this BEFORE any fan-out)
 
-Both review modes spawn multiple independent agents. **They must not call `mcp__serena__*` themselves.** Serena runs as a single stdio process whose active project is one mutable field shared by every caller, with no per-caller isolation; memory reads resolve through that pointer (`Tool.memories_manager` → `self.project.memories_manager`). Reviews run against a **worktree**, where Serena often starts unactivated — so a concurrent `activate_project` anywhere can leave a lens silently reading another project's memories. Fanning out N lenses × M modules multiplies the exposure.
-
-So load everything once, here, in the lead:
+Both review modes spawn multiple independent agents. Lens agents retrieve nothing themselves — load everything once, here, in the lead:
 
 1. Read `.claude/set/taxonomy.md` and derive the domains intersecting the diff.
 2. Read the matching `.claude/set/learnings/{domain}.md` shards — these are the source of truth.
-3. If `serena_enabled` is true in `.claude/set/config.json`, query Serena **once** for memories relevant to the diff scope. Dedupe against shards already loaded. On failure or timeout, warn and continue — never block the review on Serena.
-4. Bucket the result by lens: spec/plan context, security + validation + auth domains, architecture ("What Works"/"What Failed"), correctness ("Recurring Bugs").
+3. Bucket the result by lens: spec/plan context, security + validation + auth domains, architecture ("What Works"/"What Failed"), correctness ("Recurring Bugs").
 
 Inject each lens's bucket into its prompt as **text**. Lens agents receive learnings; they never fetch them. For code navigation, lens agents use Claude Code's built-in LSP tool, which is per-session and safe under parallel agents.
 

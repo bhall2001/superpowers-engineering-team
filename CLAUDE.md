@@ -11,7 +11,7 @@ SET (Superpowers Engineering Team) is a Claude Code plugin that provides a 6-com
 ## Repository Structure
 
 - `plugins/set/commands/*.md` — Core implementation. Each file is a markdown command spec that Claude Code loads as a slash command. This is the main code to edit.
-- `install.sh` — Installation orchestrator for SET + Superpowers + Serena. Modifies `~/.claude/settings.json` and installs command files to `~/.claude/commands/` by copying from `plugins/set/commands/` (or fetching them from GitHub raw when run via `curl | bash`). It no longer embeds command bodies — the plugin files are the single source of truth.
+- `install.sh` — Installation orchestrator for SET + Superpowers. Modifies `~/.claude/settings.json` and installs command files to `~/.claude/commands/` by copying from `plugins/set/commands/` (or fetching them from GitHub raw when run via `curl | bash`). It no longer embeds command bodies — the plugin files are the single source of truth.
 - `docs/` — User-facing documentation (getting-started, workflow, agents, commands, learning-loop).
 - `.claude-plugin/marketplace.json` — Plugin marketplace entry config.
 - `plugins/set/.claude-plugin/plugin.json` — Plugin metadata (name, version, author).
@@ -59,26 +59,11 @@ Each command in `plugins/set/commands/` is a self-contained prompt spec. Changes
 
 **Taxonomy:** `.claude/set/taxonomy.md` — one line per domain: `- name: short description`. Free-form, project-specific names.
 
-**Serena memories:** Runtime index of shard entries. Slugs are kebab-case key concepts. Frontmatter includes `domains:`, `date:`, `source:` fields. Written/read via `mcp__serena__*` tools. Shards are the source of truth; Serena is the index.
+**Retrieval is keyword search over plain markdown.** Shards under `.claude/set/learnings/` are the source of truth, and every command reads them with `grep`. Nothing in the pipeline depends on an MCP server, by design: when a team runs walled inside a devcontainer or isolated worktree, **no** agent can reach one — the lead included. Committing shards is what carries learnings between cycles, and that is the human's call at `/set-learn`.
 
-**Serena is optional.** It is a semantic index over the learning shards, nothing more. Shards under `.claude/set/learnings/` are plain markdown and the source of truth; every command degrades to keyword retrieval over them when Serena is absent, gated on `serena_enabled` in `.claude/set/config.json`. `install.sh` installs it best-effort; `/set-init` detects and records it.
+## What install.sh touches in `~/.claude/`
 
-This matters for autonomous teams: when the whole team runs walled inside a devcontainer or isolated worktree, **no** agent can reach an MCP server — the lead included. Serena being lead-only does not rescue that topology, so nothing in the pipeline may depend on it. Committing shards is what carries learnings between cycles, and that is the human's call at `/set-learn`.
-
-## Where MCP config lives
-
-Claude Code reads MCP servers from four places. `install.sh`'s `scan_legacy_serena`
-checks all four for a standalone `serena` key, because one running alongside the
-plugin's means duplicate `uvx` processes and `/plugin` reporting `-32000` on the
-conflicting keys:
-
-1. `~/.claude/settings.json` → `.mcpServers` — universal servers belong here
-2. `~/.claude.json` → `.projects["<abs path>"].mcpServers` — per-project, host-only
-3. `<repo>/.mcp.json` → `.mcpServers` — checked in, project-specific servers belong here
-4. `<repo>/.claude/settings.local.json` → `.mcpServers` — personal, not checked in
-
-The scan is diagnostic only — it warns and lists the paths, never edits these files,
-since per-project and repo-level config is the user's or their team's call.
-
-Note `~/.claude.json` sits OUTSIDE `~/.claude/`, so it does not cross into
-devcontainers that bind-mount `~/.claude` — anything stored there is host-only.
+`settings.json` only — `env` vars, `extraKnownMarketplaces`, and (once hooks ship) the
+`hooks` array, always merged rather than overwritten. It never edits `.mcpServers` in any
+of the four places Claude Code reads them from; MCP configuration is the user's or their
+team's call.

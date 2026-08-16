@@ -40,28 +40,10 @@ one opening line, not extra boundary lines.
 
 ## Before Starting
 
-### 0. Resolve Serena State (Lazy Detection)
-
-Reconcile Serena configuration. This handles users who installed Serena *after* running `/set-init`.
-
-1. Read `.claude/set/config.json` (create as `{}` if missing).
-2. If `serena_enabled` is **present** (true or false), skip the rest of this step — the user already decided.
-3. If the key is **missing**, detect Serena:
-   ```bash
-   ls .serena/ 2>/dev/null
-   grep -l '"serena"' ~/.claude/*.json ~/.config/claude/*.json .claude/*.json 2>/dev/null | head -1
-   ```
-   - **Detected** → prompt ONCE: "Serena MCP detected. Enable semantic learning retrieval during `/set-build`? [y/N]". Persist the answer to `config.json`. If yes, `mkdir -p .serena/memories`.
-   - **Not detected** → write `serena_enabled: false` silently.
-
-User can re-toggle later via `/set-update`.
-
-### Subsequent Steps
-
 1. Look for a plan in `.claude/plans/`. If none exists, tell the user to run `/set-plan` first.
 2. Read the plan thoroughly. Also read the linked design spec if referenced.
 3. Read CLAUDE.md — especially Build Commands and conventions.
-4. Read `.claude/set/config.json` for `serena_enabled`. Read `.claude/set/taxonomy.md` for the valid shard domains. Do NOT load all shard contents up front — shards are loaded per-task in Phase A.
+4. Read `.claude/set/taxonomy.md` for the valid shard domains. Do NOT load all shard contents up front — shards are loaded per-task in Phase A.
 5. **Scan `.claude/agents/`** — read each agent file to understand its domain specialty. The plan tags each task with a `Specialist`; you'll reference these by name in the brief.
 
 ## Resolve Worktree Mode
@@ -133,14 +115,9 @@ For each domain in the task's `Shards` field, read `.claude/set/learnings/{domai
 ### A2: Retrieve additional learnings beyond the task's tagged shards
 
 A1 covers the domains the plan tagged. A2 catches relevant learnings in *untagged*
-shards. Two interchangeable paths — both optional, neither ever blocks the build:
-
-**If `serena_enabled: true`:** query Serena for memories relevant to the task's `What` +
-`Done when` text. Cap at top 5 by relevance. If Serena fails or times out, log a warning
-and fall through to the keyword path below rather than giving up on retrieval entirely.
-
-**Otherwise (the default, and the only path in walled environments):** keyword-scan the
-shards directly. No MCP server required — shards are plain markdown on disk:
+shards by keyword-scanning them directly. Shards are plain markdown on disk, so this
+works everywhere — including walled environments with no network and no MCP server.
+It is optional and never blocks the build.
 
 1. Derive 3-6 distinctive keywords from the task's `What` + `Done when` (skip generic
    verbs like "add", "update", "fix"; keep domain nouns, API names, error strings).
@@ -150,9 +127,8 @@ shards directly. No MCP server required — shards are plain markdown on disk:
    ```
 3. Keep entries whose match is substantive, not incidental. Cap at top 5.
 
-Under either path, dedupe against shards already loaded in A1 (for Serena, skip memories
-whose `source:` points to an already-loaded shard). If nothing is found, omit the section
-from the bundle entirely — an empty heading is noise that costs every builder tokens.
+Dedupe against shards already loaded in A1. If nothing is found, omit the section from
+the bundle entirely — an empty heading is noise that costs every builder tokens.
 
 ### A3: Assemble the per-task context bundle
 ```
@@ -162,8 +138,8 @@ from the bundle entirely — an empty heading is noise that costs every builder 
 Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
 (If Specialist is "generic" or absent, no agent file — use general best practices.)
 NOTE: a specialist definition's `skills`/`mcpServers` frontmatter is NOT auto-applied to
-spawned agents. Do NOT call `mcp__serena__*` yourself — the learnings you need are already
-injected below. For code navigation, use Claude Code's built-in LSP tool.
+spawned agents. The learnings you need are already injected below. For code navigation,
+use Claude Code's built-in LSP tool.
 
 ## Relevant Learnings (from shards: {comma-separated domains})
 {shard contents}
@@ -326,7 +302,7 @@ TaskCreate({
 
 The `description` carries the **entire** A3 bundle — task description, TDD steps, files,
 tests, done-when criteria, self-review checklist, specialist guidance, shard learnings,
-and any Serena matches. Teammates do **not** re-read shards; everything is injected here.
+and any A2 keyword matches. Teammates do **not** re-read shards; everything is injected here.
 
 ### T2: Spawn builder teammates
 
@@ -370,17 +346,9 @@ binding on T2 and T3 below.
 Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
 to teammates — only `tools`, `model`, `permissionMode`, and `maxTurns` carry over.
 
-**Teammates must NOT call `mcp__serena__*`.** Serena runs as a single stdio process with
-one global `_active_project` pointer that `activate_project` permanently mutates. All
-teammates share that one process, and there is no per-caller isolation. Because the build
-runs in a **worktree** — where Serena often starts with no active project — concurrent
-`activate_project` calls from teammates can leave another teammate silently querying the
-wrong project. Tool calls are serialized (one task-executor thread), so nothing crashes;
-you just get wrong answers quietly.
-
-Serena is **lead-only**: Phase A queries it once and injects the results as text into each
-task bundle. For code navigation, teammates use Claude Code's **built-in LSP tool**
-(via code-intelligence plugins such as `typescript-lsp` or `pyright-lsp`), which is
+Learnings reach teammates as text in the A3 task bundle; they do not retrieve anything
+themselves. For code navigation, teammates use Claude Code's **built-in LSP tool** (via
+code-intelligence plugins such as `typescript-lsp` or `pyright-lsp`), which is
 per-session and therefore safe under parallel teammates.
 
 ### T3: Spawn a dedicated verifier per task
@@ -488,7 +456,7 @@ builder and verifier `agent()` call and `← {agentType} :: {passed/failed}` on 
 These lines are the only per-agent output that crosses back — the transcripts still stay
 in script variables.
 
-**Same MCP rule as the team path: builders and verifiers must NOT call `mcp__serena__*`.** A dynamic workflow runs many `agent()` calls concurrently against the *same* single Serena process, so it has the identical hazard described in Phase B-team — one shared, mutable `_active_project` pointer with no per-caller isolation, in a worktree where Serena often starts unactivated. Serena is queried once in Phase A (lead) and injected into each task bundle as text. For code navigation, workflow agents use Claude Code's built-in LSP tool.
+**Same rule as the team path:** learnings are compiled once in Phase A and injected into each task bundle as text; workflow agents retrieve nothing themselves. For code navigation they use Claude Code's built-in LSP tool.
 
 > SET no longer implements "max 5 retries / escalate after 3." The workflow's native verify-and-revise loop subsumes it. You specified the bar (A4) and the escalation policy (A5); the workflow runs the loop.
 
@@ -635,7 +603,7 @@ This is human-facing status only — nothing parses it. Builders never edit the 
 
 | Section | On `--resume` |
 |---|---|
-| Before Starting (Serena, plan, CLAUDE.md, agents) | **Runs** — you still need the plan and the agent roster |
+| Before Starting (plan, CLAUDE.md, agents) | **Runs** — you still need the plan and the agent roster |
 | Resolve Worktree Mode + Step 1 (create worktree) | **SKIPPED** — the worktree already exists; `git worktree add` on an existing branch fails |
 | 1d/1e (install deps, baseline tests) | **Runs**, as resume step 4 below |
 | Agent Team Availability Gate | **Runs**, unless `--use-workflow` was passed |
