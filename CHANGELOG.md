@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.2] — One-time fix for auto mode blocking updates
+
+### Added
+- **SET now tells you how to stop auto mode blocking the installer, instead of only working around it.** If you run Claude Code in auto mode, its classifier denies the installer's `curl … | bash` line, which meant typing that line by hand on every single update. `/set-init` and `/set-update` now detect this and offer to add a one-command exception to your `~/.claude/settings.json`, showing the change first. The installer prints the same guidance, and the README documents it for anyone searching the error text. Nothing appears unless you actually run in auto mode and the exception is missing.
+
+### Fixed
+- **`/set-update` claimed no setting could unblock the installer.** One can, and the command now points you at it rather than steering you away.
+
+### Notes
+- **The exception is narrow by design.** It names SET's installer only — auto mode stays on and nothing else is loosened. It does mean the classifier stops objecting to an unauthenticated script fetched from a mutable branch, which is the tradeoff you are accepting; declining costs you one `!` line per update and nothing else.
+- **On an older SET, break the loop once by hand.** The offer ships in the version you do not have yet, so run the installer line yourself with a leading `!` this one time. After that `/set-update` can make the change for you.
+- **Restart Claude Code after adding it** — settings are read at session start.
+
 ## [1.5.1] — `/set-update` finishes when the installer is blocked
 
 ### Fixed

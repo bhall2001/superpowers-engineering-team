@@ -91,6 +91,55 @@ Check `.claude/settings.json`:
 
 Show the user the change before writing.
 
+## Step 4a: Auto-mode allowlist for the installer (user settings)
+
+Only relevant when the user runs Claude Code in **auto mode**. Check:
+
+```bash
+jq -r '.permissions.defaultMode // "default"' ~/.claude/settings.json 2>/dev/null
+```
+
+If that prints anything other than `auto`, **skip this step silently** — it does not apply.
+
+Under auto mode, shell commands are routed through the permission classifier, and
+`/set-update`'s installer line (`curl … | bash`) is the shape it denies. Nothing is broken
+right now — `/set-init` does not run the network installer — but the user's first
+`/set-update` will stall until they run the line by hand. An `autoMode.allow` entry in
+**`~/.claude/settings.json`** prevents that. It is a **user-level** setting, not a project
+one: auto mode is a per-user preference and the entry must apply in every repo where they
+run SET.
+
+Skip silently if it is already there:
+
+```bash
+jq -e '[.autoMode.allow[]? | select(test("superpowers-engineering-team.*install\\.sh"))] | length > 0' \
+  ~/.claude/settings.json &>/dev/null && echo "present" || echo "absent"
+```
+
+If `absent`, show the exact change and offer to apply it:
+
+```json
+"autoMode": {
+  "allow": [
+    "$defaults",
+    "Bash(curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash)"
+  ]
+}
+```
+
+Explain what it does: it names SET's installer as an expected command so `/set-update` is
+not blocked later. It does not disable auto mode or loosen anything else. Declining is
+fine — the only cost is running one `!` line by hand at each update.
+
+**`"$defaults"` must be the first element** — it inherits the built-in classifier rules,
+and an `allow` list without it silently replaces them all instead of adding this one entry.
+Merge into any existing `autoMode` block rather than replacing it; `soft_deny`,
+`hard_deny`, and `environment` keys must survive untouched.
+
+**The write itself may be classifier-denied** — editing the classifier's own config is what
+it guards. If that happens, do not retry or route around it: print the JSON, name the file,
+and let the user paste it. Takes effect next session either way.
+
 ## Step 4b: Install SET enforcement hooks (project settings)
 
 SET ships two PreToolUse hooks that make the build's safety rules structural instead of

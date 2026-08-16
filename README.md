@@ -53,6 +53,41 @@ Then open Claude Code and install the prerequisite plugin:
 
 Dynamic workflows (used by `/set-review` and `/set-build --use-workflow`) are built into Claude Code (Pro/Max/Team/Enterprise). Pro users enable them once via `/config`; Max/Team/Enterprise have them on by default.
 
+### Running SET in auto mode
+
+**Only applies if you run Claude Code in auto mode** (`permissions.defaultMode: "auto"`). Skip this if you don't.
+
+Auto mode routes shell commands through the permission classifier, and the installer's `curl … | bash` line is a shape it denies:
+
+```
+Permission for this action was denied by the Claude Code auto mode classifier.
+Reason: Blocked by classifier.
+```
+
+This is the **permission gate, not the sandbox**, so disabling the sandbox does not help. `/set-update` cannot run the installer for you; it hands you the line to run yourself with a leading `!`, which works but means a manual step on every update.
+
+To allow just this one command, add to **`~/.claude/settings.json`** (your user settings — not the project's):
+
+```json
+"autoMode": {
+  "allow": [
+    "$defaults",
+    "Bash(curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash)"
+  ]
+}
+```
+
+`/set-init` and `/set-update` detect the situation and offer to make this change for you; the installer prints the same note when it applies.
+
+**Already on an older SET and hitting this?** The offer ships *in* the version you don't have yet, so the first time you have to break the loop by hand: run the installer line yourself with a leading `!` in the Claude Code prompt (or paste it into a terminal). That installs the current commands and prints the note above. From then on `/set-update` can offer the change for you — or add the JSON yourself and skip the middle step.
+
+Two things to get right:
+
+- **Keep `"$defaults"` first.** It inherits the built-in classifier rules. An `allow` list without it *replaces* every built-in rule instead of adding this one — a real security regression.
+- **Merge into any existing `autoMode` block.** If you already have `soft_deny`, `hard_deny`, or `environment` keys, they must survive; add `allow` alongside them rather than overwriting the block.
+
+It takes effect next session — settings are read at session start. This narrows the classifier for one exact command; it does not disable auto mode or loosen anything else. Note that it does tell the classifier to stop objecting to an unauthenticated script fetched from a mutable branch — see [What install.sh does](#install), and skip this if that tradeoff isn't one you want.
+
 ### Enforcement hooks
 
 SET ships two PreToolUse hooks that make the build's safety rules structural rather than prose. `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` (and `/set-update`, for existing projects) registers them in the **project's** `.claude/settings.json` — never in `~/.claude/settings.json`, so they bind only SET-managed repos.
