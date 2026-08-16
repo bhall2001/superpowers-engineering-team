@@ -187,6 +187,11 @@ Report: "I detected [languages], [framework], [test runner], [linter], [type che
 
 Append missing sections only. NEVER overwrite.
 
+This block is what SET adds to someone else's project, so it stays minimal: the
+pipeline, the build commands SET cannot detect at runtime, and the TDD bar. Anything
+discoverable from the project itself — the agent roster in `.claude/agents/`, the
+shards under `.claude/set/learnings/` — is not restated here.
+
 If CLAUDE.md doesn't exist, create a minimal one. Append only the missing sections:
 
 ```markdown
@@ -197,6 +202,8 @@ If CLAUDE.md doesn't exist, create a minimal one. Append only the missing sectio
 
 This project uses the Superpowers Engineering Team workflow:
 `/set-design` → `/set-plan` → `/set-build` → `/set-review` → `/set-learn`
+
+Specialists live in `.claude/agents/`; dated learnings in `.claude/set/learnings/{domain}.md`.
 
 ### Per-Task TDD Loop (enforced by /set-build for every builder)
 1. Write failing tests first (TDD red phase)
@@ -213,15 +220,14 @@ This project uses the Superpowers Engineering Team workflow:
 - Type check: `[DETECTED_TYPECHECK_COMMAND]`
 - Format: `[DETECTED_FORMAT_COMMAND]`
 - Dev server: `[DETECTED_DEV_COMMAND]`
-
-### Domain Specialists
-<!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
-- [List agents created in Step 7]
-
-<!-- Dated, accumulating learnings live in sharded `.claude/set/learnings/{domain}.md` files (not here). `/set-build` scopes shards per task to keep context small. Taxonomy is in `.claude/set/taxonomy.md`. -->
 ```
 
-Replace `[DETECTED_*]` placeholders with actual commands from Step 5.
+The TDD loop above is copied verbatim from `references/tdd-loop.md` — read it from
+there rather than retyping it, so this block and `/set-update`'s migration stay
+identical.
+
+Replace `[DETECTED_*]` placeholders with actual commands from Step 5. Omit any line
+whose command was not detected — an empty placeholder is worse than an absent line.
 
 Show the user exactly what will be appended. Get confirmation before writing.
 

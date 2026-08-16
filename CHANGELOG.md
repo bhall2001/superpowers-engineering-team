@@ -8,6 +8,9 @@
 - **`/set-update` warns when it upgraded itself mid-run** and lists what is still pending (hook registration, stale bookkeeping), so a one-run upgrade is not mistaken for a complete one.
 - **SET-spawned builders carry a `-set` name suffix**, making SET teammates identifiable in hook payloads, transcripts and logs.
 
+### Changed
+- **Command specs and context files trimmed.** Duplicated guidance was collapsed to a single source, and rules the new hooks now enforce structurally are stated once rather than restated per command. Behavior is unchanged; the brief each builder receives is smaller. `/set-init` also writes a leaner block into your project's CLAUDE.md.
+
 ### Removed
 - **Serena integration.** Retrieval is keyword search over the learning shards — the path that already ran by default. Serena was unreachable from the walled environments SET targets and could not serve parallel teammates. **Breaking:** `serena_enabled` is no longer read; `/set-update` removes SET's own bookkeeping (`serena_enabled`, `.serena-migrated`) and leaves `.serena/memories/` untouched.
 

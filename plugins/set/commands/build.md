@@ -107,7 +107,7 @@ Ready to compile the build brief.
 
 ## Phase A — Compile the Build Brief (main context, cheap)
 
-This is SET's methodology layer. Assemble ONE brief the execution path can run without re-deriving anything. For each task in the plan:
+Assemble ONE brief the execution path can run without re-deriving anything. For each task in the plan:
 
 ### A1: Load shards for the task
 For each domain in the task's `Shards` field, read `.claude/set/learnings/{domain}.md` and collect its contents (strip frontmatter, keep the What Works / What Failed / Recurring Bugs sections). If `Shards` is empty, skip.
@@ -137,9 +137,8 @@ the bundle entirely — an empty heading is noise that costs every builder token
 ## Specialist guidance
 Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
 (If Specialist is "generic" or absent, no agent file — use general best practices.)
-NOTE: a specialist definition's `skills`/`mcpServers` frontmatter is NOT auto-applied to
-spawned agents. The learnings you need are already injected below. For code navigation,
-use Claude Code's built-in LSP tool.
+The learnings you need are injected below; retrieve nothing yourself. For code
+navigation, use the built-in LSP tool.
 
 ## Relevant Learnings (from shards: {comma-separated domains})
 {shard contents}
@@ -316,21 +315,16 @@ Agent({
 })
 ```
 
-`name` makes the teammate addressable by `SendMessage`. That is the **only** reason to
-pass it. The `-set` suffix marks the spawn as SET's own — the marker SET controls rather
-than observes (`$CLAUDE_CODE_AGENT_NAME` is never set in hook subprocesses; the payload's
-`agent_type` carries the `name` verbatim). It is corroborating evidence for SET's hooks
-and legible in transcripts; it never grants anything — see
-`references/agent-return-channels.md`. Naming comes at a price: a named spawn's tool result is a mailbox receipt, not
-the agent's output. A builder is named because the coordinator talks to it and reads its
-progress from the task list — **never** expect a builder's work product to arrive as the
-`Agent` call's return value. Contrast T3, where the verifier's whole purpose is to return
-a verdict and therefore must be spawned unnamed.
+A builder is named because the coordinator `SendMessage`s it and reads its progress from
+the task list — never expect its work product to arrive as the `Agent` call's return
+value. Contrast T3, where the verifier exists to return a verdict and so must be unnamed.
+`references/agent-return-channels.md` governs this and is binding on T2 and T3; the `-set`
+suffix is defined there too, including why it never grants anything.
 
-`subagent_type` resolves from
-`.claude/agents/*.md` by the agent file's `name:` frontmatter field, which equals the
-filename stem, which equals the value `/set-plan` tags as `Specialist`. When `Specialist`
-is `generic` or absent, omit `subagent_type` and spawn a default builder.
+`subagent_type` resolves from `.claude/agents/*.md` by the agent file's `name:`
+frontmatter field, which equals the filename stem, which equals the value `/set-plan` tags
+as `Specialist`. When `Specialist` is `generic` or absent, omit `subagent_type` and spawn a
+default builder.
 
 Scale builders by task count: 2–3 tasks → 1 builder; 4–6 → 2; 7+ → 3. Prefer distinct
 specialists over duplicate generic builders.
@@ -346,16 +340,13 @@ teammate is spawned, and `← {Specialist}-set :: {pass/fail}` as each reports b
 from the `Agent` call, which for a named spawn never carries one.
 
 Read both reference files before spawning anything, plus
-`references/agent-return-channels.md` — it governs which spawns may carry a `name` and is
-binding on T2 and T3 below.
+`references/agent-return-channels.md`.
 
-Note: a specialist definition's `skills` and `mcpServers` frontmatter is **not** applied
-to teammates — only `tools`, `model`, `permissionMode`, and `maxTurns` carry over.
-
-Learnings reach teammates as text in the A3 task bundle; they do not retrieve anything
-themselves. For code navigation, teammates use Claude Code's **built-in LSP tool** (via
-code-intelligence plugins such as `typescript-lsp` or `pyright-lsp`), which is
-per-session and therefore safe under parallel teammates.
+Two teammate constraints: a specialist definition's `skills` and `mcpServers` frontmatter
+is **not** applied to teammates (only `tools`, `model`, `permissionMode`, and `maxTurns`
+carry over), and learnings reach teammates as text in the A3 bundle — they retrieve
+nothing themselves. For code navigation teammates use the built-in LSP tool, which is
+per-session and so safe under parallel teammates.
 
 ### T3: Spawn a dedicated verifier per task
 
@@ -373,14 +364,13 @@ Agent({
 })
 ```
 
-**Never pass `name` to a verifier spawn.** A named `Agent` call returns a mailbox
-receipt — `Spawned successfully … will receive instructions via mailbox` — instead of the
-agent's final message, so the verdict never reaches you. An unnamed spawn returns the
-agent's output as the tool result, which is the only supported way to collect it:
-`TaskOutput` is documented as deprecated for agent tasks, and its `.output` file is a
-symlink to the raw transcript that would overflow this context. The rule generalizes —
-**name an agent only when you intend to `SendMessage` it; never when you need its
-result.**
+**Never pass `name` to a verifier spawn.** A named `Agent` call returns a mailbox receipt
+instead of the agent's final message, so the verdict never reaches you, and there is no
+supported way to recover it afterward — `references/agent-return-channels.md` details why.
+The rule generalizes — **name an agent only when you intend to `SendMessage` it; never
+when you need its result.** `set-guard-agent-name.sh` denies this spawn shape at the
+`Agent` PreToolUse hook, but treat that as a backstop: it matches verifier-shaped prompts,
+so a verifier phrased differently still slips through. The rule is yours to keep.
 
 A verifier writes no code, so it can never verify its own work — this preserves the
 fresh-verifier guarantee the workflow path gets from a separate `agent({schema})` call.

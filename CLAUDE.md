@@ -16,11 +16,9 @@ SET (Superpowers Engineering Team) is a Claude Code plugin that provides a 6-com
 - `.claude-plugin/marketplace.json` — Plugin marketplace entry config.
 - `plugins/set/.claude-plugin/plugin.json` — Plugin metadata (name, version, author).
 
-## No Build System
+## Testing
 
-This is a plugin distribution, not a compiled app. Almost all "code" is markdown command specs and a bash installer. No build or lint tooling exists.
-
-**One exception:** the durable-run store under `plugins/set/bin/` is real JavaScript, with tests:
+This is a plugin distribution, not a compiled app: most "code" is markdown command specs and a bash installer, and there is no build or lint step. The JavaScript that does exist — the durable-run store and hook wiring under `plugins/set/bin/`, plus the hooks in `plugins/set/hooks/` — has tests:
 
 ```bash
 node --test "plugins/set/tests/*.test.mjs"
@@ -76,13 +74,13 @@ must resolve on the host, in a devcontainer, and on a collaborator's machine.
 ## Enforcement hooks
 
 `plugins/set/hooks/` — `set-deny-push.sh` (matcher `Bash`; agents cannot `git push` /
-`gh pr create|merge`, the human's own session can; fail-closed) and
-`set-guard-agent-name.sh` (matcher `Agent`; a named spawn with a verifier-shaped prompt is
-denied). Payload facts they rely on are recorded in
-`docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md` — re-probe before
-changing identity logic; the main-session carve-out is verified for in-process `Agent`
-spawns only (not workflow agents, not tmux teammates). `set-deny-push.sh` splits the
-command quote-aware with awk (heredoc bodies and quoted text are data), never globs
-(`set -f`), pre-filters segments with `grep -w`, and degrades to a coarse scan above 64 KB —
-all so it can never exceed its hook timeout, which Claude Code treats as fail-open.
-Table-driven tests live in `plugins/set/tests/`.
+`gh pr create|merge`, the human's own session can) and `set-guard-agent-name.sh` (matcher
+`Agent`; a named spawn with a verifier-shaped prompt is denied). Both fail closed on their
+own errors. Each script's header comments carry its parsing and timeout constraints — read
+them before editing, since a hook that exceeds its timeout is treated as fail-open.
+
+Payload facts the identity logic depends on are recorded in
+`docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md`; re-probe before
+changing it. The main-session carve-out is verified for in-process `Agent` spawns only —
+**not** workflow agents, **not** tmux teammates. Table-driven tests live in
+`plugins/set/tests/`.
