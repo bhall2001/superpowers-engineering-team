@@ -63,7 +63,18 @@ Each command in `plugins/set/commands/` is a self-contained prompt spec. Changes
 
 ## What install.sh touches in `~/.claude/`
 
-`settings.json` only — `env` vars, `extraKnownMarketplaces`, and (once hooks ship) the
-`hooks` array, always merged rather than overwritten. It never edits `.mcpServers` in any
-of the four places Claude Code reads them from; MCP configuration is the user's or their
-team's call.
+`settings.json` — `env` vars and `extraKnownMarketplaces` only, always merged rather than
+overwritten. It never edits `.mcpServers` in any of the four places Claude Code reads them
+from; MCP configuration is the user's or their team's call. It also places the enforcement
+hook scripts at `~/.claude/set/hooks/` but **never registers them there**: hooks are
+appended to a project's `.claude/settings.json` (`hooks.PreToolUse`) by `/set-init` /
+`/set-update` via `set-hooks.mjs`, so they bind only SET-managed repos.
+
+## Enforcement hooks
+
+`plugins/set/hooks/` — `set-deny-push.sh` (matcher `Bash`; agents cannot `git push` /
+`gh pr create|merge`, the human's own session can; fail-closed) and
+`set-guard-agent-name.sh` (matcher `Agent`; a named spawn with a verifier-shaped prompt is
+denied). Payload facts they rely on are recorded in
+`docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md` — re-probe before
+changing identity logic. Table-driven tests live in `plugins/set/tests/`.
