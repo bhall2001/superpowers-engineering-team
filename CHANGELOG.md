@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0] — Enforcement hooks; Serena removed
+
+### Added
+- **Two enforcement hooks make the build's safety rules structural.** `set-deny-push.sh` blocks agent-initiated `git push` / `gh pr create` / `gh pr merge` (including chained, `sudo`/`env`-prefixed, subshell and `sh -c` forms) — your own session can still push, and `git commit` is always allowed. `set-guard-agent-name.sh` rejects a **named** verifier spawn, whose verdict would otherwise never arrive. Both fail closed on a bad payload or missing `jq`.
+- **Hooks are registered per project.** `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` and `/set-update` append them to the project's `.claude/settings.json` (idempotent, never touching your other hooks). They never land in `~/.claude/settings.json`.
+- **`/set-update` warns when it upgraded itself mid-run** and lists what is still pending (hook registration, stale bookkeeping), so a one-run upgrade is not mistaken for a complete one.
+- **SET-spawned builders carry a `-set` name suffix**, making SET teammates identifiable in hook payloads, transcripts and logs.
+
+### Removed
+- **Serena integration.** Retrieval is keyword search over the learning shards — the path that already ran by default. Serena was unreachable from the walled environments SET targets and could not serve parallel teammates. **Breaking:** `serena_enabled` is no longer read; `/set-update` removes SET's own bookkeeping (`serena_enabled`, `.serena-migrated`) and leaves `.serena/memories/` untouched.
+
+### Notes
+- **Run `/set-update` twice** on an existing project: once to fetch this version, once to register the hooks. The second run says so if needed.
+- **Restart Claude Code after updating** — hooks are read at session start.
+- To push yourself, type `!git push origin <branch>` — `!` runs in your shell, no tool call, no hook.
+
 ## [1.4.0] — Agent Teams now start correctly
 
 ### Fixed
