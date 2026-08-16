@@ -76,28 +76,19 @@ excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op. `/set-
 checks this on new projects and `/set-update` checks it on existing ones, both offering
 the fix.
 
-Keep `.serena/` ignored — it is a rebuildable index, not source of truth.
+## Retrieval: keyword search over the shards
 
-## Optional Semantic Index → Serena MCP
+Retrieval is plain keyword search (`grep`) over the markdown shards, and nothing else.
+`/set-build` Phase A loads the shards each task is tagged with, then keyword-scans the
+untagged shards for a few more relevant entries (capped at five), and injects all of it
+as text into each task bundle. There is no MCP server, no index to build, and nothing to
+install.
 
-Serena is **optional and opt-in**. `install.sh` prompts before installing it (default no),
-and SET's full pipeline runs without any MCP server.
-
-If Serena is present and `serena_enabled` is `true` in `.claude/set/config.json`,
-`/set-learn` additionally mirrors each learning to `.serena/memories/` with domain tags in
-frontmatter. During `/set-build`, the lead queries Serena for the top-5
-semantically-relevant memories per task and injects them alongside the statically-selected
-shards.
-
-Shards remain the source of truth — Serena is an index over them. With Serena off,
-`/set-build` falls back to keyword search across untagged shards, so retrieval still
-happens; only the ranking quality differs. If Serena is uninstalled or a call fails, SET
-continues against the shards unchanged.
-
-**Autonomous teams:** when the whole team runs walled inside a devcontainer or isolated
-worktree, no agent can reach an MCP server — the lead included. Serena being lead-only does
-not rescue that topology, which is why nothing in the pipeline depends on it. Set
-`serena_enabled: false` there and rely on the committed shards.
+**Autonomous teams:** this is deliberate. When the whole team runs walled inside a
+devcontainer or isolated worktree, no agent can reach an MCP server — the lead included.
+Plain files on disk are the only retrieval that works in that topology, so nothing in the
+pipeline depends on anything else. Committing the shards is what carries learnings between
+cycles.
 
 ## What `/set-learn` Analyzes
 

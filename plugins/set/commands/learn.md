@@ -1,5 +1,5 @@
 ---
-description: "Extracts patterns, failures, and insights from the most recent SET cycle and persists them as sharded domain learnings and Serena memories, then evolves agent definitions. Use after /set-review completes, when a user says 'capture learnings', 'run learn', 'update the agents', or 'finish the cycle'. Do NOT use mid-build or when no build/review cycle has completed."
+description: "Extracts patterns, failures, and insights from the most recent SET cycle and persists them as sharded domain learnings, then evolves agent definitions. Use after /set-review completes, when a user says 'capture learnings', 'run learn', 'update the agents', or 'finish the cycle'. Do NOT use mid-build or when no build/review cycle has completed."
 ---
 
 # SET Learn — Extract, Learn, Improve
@@ -78,31 +78,7 @@ Examine the full arc — design through review — not just the final code:
 
 Learnings are sharded by domain into `.claude/set/learnings/{domain}.md` files. The domain taxonomy lives in `.claude/set/taxonomy.md`.
 
-#### 3a: Migrate existing shards to Serena memories (one-time)
-
-**Gate on `serena_enabled` first.** Read `.claude/set/config.json`. If `serena_enabled`
-is not `true` — including when the key or the file is **missing** — skip this step
-entirely and do not call `mcp__serena__*`. Only `/set-build` writes that key, so a
-project that has not built yet will legitimately have no value; absent means off. SET
-runs Serena-less by design in walled environments (devcontainers, isolated worktrees)
-where no MCP server is reachable; shards are the source of truth and lose nothing.
-
-Then check for the sentinel:
-```bash
-ls .claude/set/.serena-migrated 2>/dev/null
-```
-
-If the sentinel exists: skip this step entirely — migration already completed.
-
-If NOT present:
-1. Run `mcp__serena__list_memories` — get existing memory slugs.
-2. For each `.md` file in `.claude/set/learnings/`:
-   - Derive expected slugs from entries (kebab-case key concept).
-   - Write any un-mirrored entries using `mcp__serena__write_memory`.
-3. Write the sentinel: `touch .claude/set/.serena-migrated`
-4. Log: "Migrated N existing shard entries to Serena memories."
-
-#### 3b: Migrate monolithic `learnings.md` if present (first-run only)
+#### 3a: Migrate monolithic `learnings.md` if present (first-run only)
 
 If `.claude/set/learnings.md` exists, auto-split it:
 
@@ -124,7 +100,7 @@ If `.claude/set/learnings.md` exists, auto-split it:
 
    - {domain1}: {short description}
    ```
-5. Classify each entry into one or more domains. Duplicate cross-domain entries (see 3d).
+5. Classify each entry into one or more domains. Duplicate cross-domain entries (see 3c).
 6. Write each to `.claude/set/learnings/{domain}.md` with frontmatter:
    ```markdown
    ---
@@ -140,23 +116,23 @@ If `.claude/set/learnings.md` exists, auto-split it:
    ```
 7. Delete the old `.claude/set/learnings.md`. Tell the user it was split and deleted.
 
-#### 3c: Classify new learnings against the taxonomy
+#### 3b: Classify new learnings against the taxonomy
 
 For each new learning from this cycle:
 
-1. Read `.claude/set/taxonomy.md`. If empty, propose an initial taxonomy from this cycle's learnings (same approval flow as 3b step 3).
+1. Read `.claude/set/taxonomy.md`. If empty, propose an initial taxonomy from this cycle's learnings (same approval flow as 3a step 3).
 2. Match the learning against domain names + descriptions. Pick the best-fit domain(s).
-3. If the learning spans multiple domains, assign to ALL relevant domains (duplication is expected — see 3d).
+3. If the learning spans multiple domains, assign to ALL relevant domains (duplication is expected — see 3c).
 4. If NO existing domain fits, propose a new domain name + description.
    - **Without an autonomous chain:** ask the user to approve before adding it to `taxonomy.md`.
    - **In an autonomous chain:** add it without asking, and name every domain added this
      run in the Final Report.
 
-#### 3d: Duplicate cross-domain learnings
+#### 3c: Duplicate cross-domain learnings
 
 Learnings that apply to multiple domains are **copied into each relevant shard**. A learning about "validating user input on API routes that write to the DB" goes into BOTH `api.md` and `db.md`.
 
-#### 3e: Write to shard files
+#### 3d: Write to shard files
 
 Append each learning to `.claude/set/learnings/{domain}.md` under the correct section (`## What Works` / `## What Failed` / `## Recurring Bugs`). Create the file with frontmatter if it doesn't exist.
 
@@ -174,28 +150,9 @@ this project's acceptance bar, so a learning captured here may encode a mistake 
 pattern. Tagged entries stay traceable and removable rather than anonymous. Shards are
 plain markdown — a human can delete or promote the entry after verifying.
 
-#### 3f: Global-importance learnings → CLAUDE.md
+#### 3e: Global-importance learnings → CLAUDE.md
 
 A learning that every agent must always apply goes into `CLAUDE.md` instead of (or in addition to) a shard. Bar is high — examples: project-wide security rules, absolute conventions that cause silent bugs if missed. Most learnings do NOT meet this bar. When in doubt, shard.
-
-#### 3g: Mirror to Serena memories
-
-**Skip this entire step unless `serena_enabled` is `true` in `.claude/set/config.json`.**
-The shards written above are complete and authoritative on their own; the Serena mirror
-is a runtime index over them, rebuildable at any time by a session that has Serena. Never
-block or fail `/set-learn` on Serena being absent or erroring — log and continue.
-
-For each new learning, write a Serena memory using `mcp__serena__write_memory`:
-- Name/slug: short kebab-case from the learning's key concept (e.g. `shared-field-high-run-exclusion`)
-- Frontmatter:
-  ```
-  domains: [{domain1}, {domain2}]
-  date: {YYYY-MM-DD}
-  source: .claude/set/learnings/{domain1}.md
-  ```
-- Body: the full learning text
-
-Cross-domain learnings get ONE memory with multiple `domains:` tags. Shards are the source of truth; Serena is the runtime index.
 
 ### 4. Update Build Commands in CLAUDE.md (if needed)
 
@@ -300,8 +257,6 @@ If it prints `IGNORED`, warn prominently in the report:
 >
 > The trailing `*` is required. Git will not re-include a path whose parent directory is
 > itself excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op.
->
-> Keep `.serena/` ignored — it is a rebuildable index, not source of truth.
 
 Then list the shard files changed this cycle so the human can review and commit them:
 
@@ -315,7 +270,6 @@ git status --short .claude/set/
 - Any new domains proposed and added to the taxonomy
 - Whether a migration from monolithic `learnings.md` happened
 - Any updates to `CLAUDE.md` — these should be rare
-- Count of Serena memories written (new + migrated), or `skipped (serena_enabled: false)`
 - **Shard files changed, and whether they are trackable by git** — plus the ignored-path
   warning from 7b if it fired. State plainly that committing them is the user's call.
 - Which agents were updated and what was added

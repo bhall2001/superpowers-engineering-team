@@ -43,7 +43,7 @@ curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-tea
 
 Registers the Superpowers marketplace and installs SET commands directly into `~/.claude/commands/`. It also writes the Agent Teams environment flag, which the default `/set-build` path requires — restart Claude Code after the first install so the flag takes effect.
 
-The installer asks once whether to add [Serena MCP](#optional-serena-mcp-integration) (optional, default no). Piped and non-interactive runs skip it automatically. `jq` and the Claude Code CLI are the only hard prerequisites.
+`jq` and the Claude Code CLI are the only hard prerequisites.
 
 Then open Claude Code and install the prerequisite plugin:
 
@@ -52,6 +52,21 @@ Then open Claude Code and install the prerequisite plugin:
 ```
 
 Dynamic workflows (used by `/set-review` and `/set-build --use-workflow`) are built into Claude Code (Pro/Max/Team/Enterprise). Pro users enable them once via `/config`; Max/Team/Enterprise have them on by default.
+
+### Enforcement hooks
+
+SET ships two PreToolUse hooks that make the build's safety rules structural rather than prose. `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` (and `/set-update`, for existing projects) registers them in the **project's** `.claude/settings.json` — never in `~/.claude/settings.json`, so they bind only SET-managed repos.
+
+| Hook | Blocks | Why |
+|---|---|---|
+| `set-deny-push.sh` | Agent-initiated `git push`, `gh pr create`, `gh pr merge` (chained, wrapped, `sh -c`'d, in `if`/`for` bodies…). `git commit` is always allowed. | The human review gate. Your own session can still push; every spawned agent is denied. |
+| `set-guard-agent-name.sh` | A **named** `Agent` spawn whose prompt is verifier-shaped | A named spawn returns a mailbox receipt, not the agent's output — the verdict would never arrive and the build would stall. |
+
+The registered command path is the literal `$HOME/.claude/set/hooks/…`, so the same committed settings work on your host, inside a devcontainer whose `~/.claude` mount lives at another absolute path, and on a collaborator's machine. Hooks load at session start — restart Claude Code after registering. To push yourself, type `!git push origin <branch>` (`!` runs in your shell: no tool call, no hook). To remove them: `node ~/.claude/set/hooks/set-hooks.mjs uninstall --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'` — it removes only SET's entries.
+
+Both hooks fail **closed** on their own errors (missing `jq`, unparseable payload). The push gate is a heuristic over the command string, not a sandbox: `eval`, `$var` expansion, git aliases and scripts on disk are out of scope, and the "your own session may push" carve-out is verified for in-process `Agent` spawns (the default `/set-build`), not yet for workflow agents or separate-process (tmux) teammates.
+
+**Upgrading from 1.4.x or earlier:** run `/set-update` twice — the first run fetches the new command files, the second registers the hooks and removes stale bookkeeping.
 
 ## Upgrading from a pre-1.0 install
 
@@ -120,58 +135,17 @@ After each build/review cycle, run `/set-learn`. It:
 
 Next session, Claude reads CLAUDE.md, relevant shards per task, and evolved agent definitions. Each cycle makes the next one faster and more accurate.
 
-## Optional: Serena MCP Integration
-
-SET can optionally use [Serena MCP](https://github.com/oraios/serena) as a semantic index over your learning shards. It is **opt-in and never installed without asking** — `install.sh` prompts (default no), and declining changes nothing else. Shards remain the source of truth; Serena only adds recall.
-
-**What it adds:**
-- **Semantic retrieval per task.** `/set-build` queries Serena with each task's description and injects the top-5 most relevant memories alongside the statically-selected shards. Catches learnings the shard-tagging missed.
-- **Cross-domain matching.** A learning filed under `db` may still surface for an `api` task if it's semantically relevant — without duplicating it across shards.
-- **Lead-only by design.** `/set-build` queries Serena once in the lead session and injects the results into each task brief as text. Builder teammates never call Serena themselves — see [Code Intelligence for Agent Teams](#code-intelligence-for-agent-teams) for why.
-
-**Without it, nothing breaks.** Every command is gated on `serena_enabled` in `.claude/set/config.json`. When it's off, `/set-build` falls back to keyword search over the same shards, and `/set-learn` skips the mirror step. The shards are plain markdown either way.
-
-**How it works:**
-- Shards are authoritative. `/set-learn` mirrors each learning to `.serena/memories/` with domain tags in frontmatter.
-- If Serena is uninstalled or the call fails, SET falls back to shards unchanged — nothing breaks.
-- You can enable/disable at any time: `/set-init` detects and records it on fresh projects; `/set-build` detects lazily for existing projects (prompted once, persisted); `/set-update` reconciles the flag.
-
-**When it's worth it:**
-- Your learning base has grown past what static domain tagging catches cleanly
-- You want cross-project memory (Serena's memories can be shared across projects)
-- You already use Serena for its symbol tools and want the integration
-
-**When to skip it:**
-- **Your agents run walled** — inside a devcontainer or an isolated worktree with no MCP access. No agent reaches Serena there, the lead included, so the lead-only design doesn't help. Set `serena_enabled: false` and use keyword retrieval.
-- Smaller projects — sharding alone handles most scale.
-
 ## Code Intelligence for Agent Teams
 
 SET fans work out to many agents at once — builder and verifier teammates in `/set-build`, four review lenses × affected modules in `/set-review` — all inside a git worktree. That parallelism changes which code-navigation tools are safe to use.
 
-**Short version:** Serena is for the lead session only. Spawned agents use Claude Code's built-in LSP tool.
+**Short version:** spawned agents use Claude Code's built-in LSP tool, never an MCP server.
 
-This applies to **every** parallel path, not just one:
+### Why not an MCP server
 
-| Command | Fan-out | Serena |
-|---|---|---|
-| `/set-build` (default, Agent Team) | Builder + verifier teammates | Lead only — Phase A injects learnings as text |
-| `/set-build --use-workflow` | Parallel `agent()` calls | Lead only — same Phase A injection |
-| `/set-review` (default) | 4 lenses × N modules | Lead only — Step 2a pre-loads and buckets per lens |
-| `/set-review --light` | 4 parallel subagents | Lead only — same Step 2a pre-load |
-| `/set-learn` | None (runs in the lead) | Calls Serena directly — safe, single caller |
+An MCP server is a **single stdio subprocess** shared by the lead and every agent it spawns — not one instance each. Servers that hold mutable per-project state expose it to every caller at once, and stdio has no per-caller session to isolate them. Under fan-out inside a worktree, one agent reconfiguring the server silently changes what every other agent sees.
 
-### Why spawned agents must not call Serena
-
-Serena runs as a **single stdio subprocess** shared by the lead and every agent it spawns — not one instance each. Inside it, the active project is one mutable field on one object (`SerenaAgent._active_project`), and the `activate_project` tool permanently reassigns it. MCP's stdio transport has no per-caller session, so there is no isolation between callers.
-
-This matters specifically because SET works in a **worktree**, where Serena frequently starts with no active project. An agent that hits this calls `activate_project` — and moves the pointer for everyone.
-
-Reads are not exempt. Memory lookups resolve through the same pointer (`Tool.memories_manager` → `self.project.memories_manager`), so a lens that only calls `list_memories`/`read_memory` still depends on nobody having moved the project underneath it.
-
-Serena serializes tool calls through a single task-executor thread, so nothing crashes or corrupts. The failure is quieter than that: **wrong answers, silently**. That is the argument for avoiding it, not a crash risk.
-
-Serena remains valuable where SET already uses it — the lead queries it once and injects the matched learnings as plain text into each agent's prompt. Spawned agents get the benefit without touching the server. `/set-learn` calls Serena directly and is unaffected: it runs entirely in the lead with no fan-out, which is single-caller access.
+Calls are typically serialized, so nothing crashes. The failure is quieter: **wrong answers, silently**.
 
 ### What teammates use instead
 
@@ -197,11 +171,11 @@ Also available from `claude-plugins-official`: `clangd-lsp`, `csharp-lsp`, `gopl
 
 | Need | Use | Why |
 |---|---|---|
-| Learnings / semantic memory recall | Serena, **lead session only** | Phase A injects results as text; zero contention |
+| Learnings from past cycles | Injected as text by Phase A | Compiled once in the lead; zero contention |
 | Symbol navigation, references, diagnostics | **Built-in LSP tool** + a code-intelligence plugin | Per-session language server; safe under parallel teammates |
-| Spawned agents calling `mcp__serena__*` | **Avoid** | Shared mutable project pointer; silent wrong-project reads |
+| Spawned agents calling any MCP server | **Avoid** | One shared subprocess; mutable state with no per-caller isolation |
 
-> **Caveat.** Anthropic does not explicitly document "one language server process per session." The per-session model is inferred from the plugin architecture and from docs noting memory pressure across concurrent sessions. The Serena findings above, by contrast, are read directly from its source (`serena/agent.py`).
+> **Caveat.** Anthropic does not explicitly document "one language server process per session." The per-session model is inferred from the plugin architecture and from docs noting memory pressure across concurrent sessions.
 
 ## Current Status
 

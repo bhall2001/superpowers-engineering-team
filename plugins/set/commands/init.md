@@ -46,34 +46,7 @@ git status --short 2>/dev/null | head -5 || echo "Not a git repo"
 
 Report findings to the user before proceeding.
 
-## Step 3: Detect Serena MCP (optional)
-
-Serena is an **optional enhancement**, not a requirement. It adds semantic recall over
-the learning shards for the lead session. Shards themselves are plain markdown in
-`.claude/set/learnings/` and are the source of truth — SET's full pipeline runs without
-any MCP server. This matters for autonomous teams running inside devcontainers or
-isolated worktrees, where no MCP server is reachable by any agent, lead included.
-
-Detect it and record the result — never block on it:
-
-1. Check whether any `mcp__serena__*` tool is listed in your available tools.
-2. **Not available** → write `serena_enabled: false` to `.claude/set/config.json` and
-   continue. Mention once, without alarm:
-   > "Serena not detected — continuing without it. Learning shards work standalone;
-   > semantic recall over them is disabled. To add it later: `/plugin install serena@claude-plugins-official`."
-3. **Available** → write `serena_enabled: true` to `.claude/set/config.json`, then
-   initialize `.serena/project.yml` for this project (create `.serena/` if missing):
-   ```yaml
-   project_name: "{project-name-from-git-or-dirname}"
-   languages: []  # fill in your primary languages
-   ignore_all_files_in_gitignore: true
-   ```
-   Show the user the file before writing. Get confirmation.
-
-Keep `.serena/` gitignored — it is a rebuildable index. The shards under `.claude/set/`
-are what must be committed; see Step 3b.
-
-## Step 3b: Ensure learning shards are committable
+## Step 3: Ensure learning shards are committable
 
 Shards only carry forward to future cycles if git can see them. Many repos ignore
 `.claude/` wholesale, which would silently discard every learning SET produces:
@@ -118,6 +91,59 @@ Check `.claude/settings.json`:
 
 Show the user the change before writing.
 
+## Step 4b: Install SET enforcement hooks (project settings)
+
+SET ships two PreToolUse hooks that make the build's safety rules structural instead of
+prose:
+
+| Hook | Matcher | Enforces |
+|---|---|---|
+| `set-deny-push.sh` | `Bash` | No agent-initiated `git push` / `gh pr create` / `gh pr merge`. The human's own session may push; every spawned agent is denied. `git commit` stays allowed. |
+| `set-guard-agent-name.sh` | `Agent` | A **named** spawn with a verifier-shaped prompt is denied — a named verifier's verdict never arrives (mailbox receipt), so `/set-build` would stall. |
+
+The scripts live centrally at `~/.claude/set/hooks/` (placed by `install.sh`); the
+project's `.claude/settings.json` references them as **`$HOME/.claude/set/hooks/…`** —
+the literal string, not your expanded home directory. Claude Code runs hook commands
+through a shell, so `$HOME` resolves on every machine that opens the repo: your host, a
+devcontainer that bind-mounts `~/.claude` at a different absolute path, a collaborator's
+checkout. SET's target is autonomous teams in devcontainers, so this portability is the
+default — an expanded `/Users/you/...` path would leave the hooks silently absent exactly
+where the team runs. Registration is **per project**, never in `~/.claude/settings.json` —
+hooks apply only to SET-managed repos.
+
+Show the user the two entries that will be appended to `hooks.PreToolUse`, then run
+exactly this (the single quotes around `$HOME` are load-bearing — they stop your shell
+from expanding it):
+
+```bash
+node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'
+```
+
+It prints `{"installed": [...], "skipped": [...]}`. **If it prints nothing, or errors,
+the hooks are NOT registered** — say so; never report success from silence.
+
+Idempotent: re-running adds nothing when the entries are present. It **appends** to
+`hooks.PreToolUse` and never rewrites `hooks` wholesale — any hooks the user already has
+(SessionStart, other PreToolUse matchers) survive untouched. It creates
+`.claude/settings.json` if Step 4 did not. Requires `jq` (already required by SET).
+
+If `~/.claude/set/hooks/set-hooks.mjs` is absent, SET was installed by an older
+`install.sh`: tell the user to run `/set-update` (which re-runs the installer, then
+registers the hooks) and continue.
+
+Tell the user:
+- Hooks are read at session start, so they take effect on the next session.
+- To push themselves they type `!git push origin <branch>` — `!` runs in their shell, no
+  tool call, no hook.
+- The "your own session may push" carve-out is verified for agents spawned in-process
+  via the `Agent` tool (the default `/set-build`). It is **not yet verified** for
+  `--use-workflow` / `/set-review` workflow agents or for teammates run as separate
+  processes (tmux / split-pane teammate mode) — those may present a main-shaped payload.
+  Until re-probed, treat the gate as a safety net there, not a guarantee.
+- To remove the hooks later:
+  `node ~/.claude/set/hooks/set-hooks.mjs uninstall --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'`
+  — it removes only SET's entries (matched by that prefix) and leaves every other hook alone.
+
 ## Step 5: Detect Project Stack
 
 ```bash
@@ -161,6 +187,11 @@ Report: "I detected [languages], [framework], [test runner], [linter], [type che
 
 Append missing sections only. NEVER overwrite.
 
+This block is what SET adds to someone else's project, so it stays minimal: the
+pipeline, the build commands SET cannot detect at runtime, and the TDD bar. Anything
+discoverable from the project itself — the agent roster in `.claude/agents/`, the
+shards under `.claude/set/learnings/` — is not restated here.
+
 If CLAUDE.md doesn't exist, create a minimal one. Append only the missing sections:
 
 ```markdown
@@ -171,6 +202,8 @@ If CLAUDE.md doesn't exist, create a minimal one. Append only the missing sectio
 
 This project uses the Superpowers Engineering Team workflow:
 `/set-design` → `/set-plan` → `/set-build` → `/set-review` → `/set-learn`
+
+Specialists live in `.claude/agents/`; dated learnings in `.claude/set/learnings/{domain}.md`.
 
 ### Per-Task TDD Loop (enforced by /set-build for every builder)
 1. Write failing tests first (TDD red phase)
@@ -187,15 +220,14 @@ This project uses the Superpowers Engineering Team workflow:
 - Type check: `[DETECTED_TYPECHECK_COMMAND]`
 - Format: `[DETECTED_FORMAT_COMMAND]`
 - Dev server: `[DETECTED_DEV_COMMAND]`
-
-### Domain Specialists
-<!-- Agents in .claude/agents/ — SET routes tasks to the right specialist -->
-- [List agents created in Step 7]
-
-<!-- Dated, accumulating learnings live in sharded `.claude/set/learnings/{domain}.md` files (not here). `/set-build` scopes shards per task to keep context small. Taxonomy is in `.claude/set/taxonomy.md`. -->
 ```
 
-Replace `[DETECTED_*]` placeholders with actual commands from Step 5.
+The TDD loop above is copied verbatim from `references/tdd-loop.md` — read it from
+there rather than retyping it, so this block and `/set-update`'s migration stay
+identical.
+
+Replace `[DETECTED_*]` placeholders with actual commands from Step 5. Omit any line
+whose command was not detected — an empty placeholder is worse than an absent line.
 
 Show the user exactly what will be appended. Get confirmation before writing.
 
@@ -253,7 +285,7 @@ You are a {domain} specialist agent in the SET workflow. You have deep expertise
 - `description:` — one line stating when SET should route a task to this specialist.
 - `model:` — replaces the old `## Model` section; keep it in frontmatter only (no `## Model` body heading).
 - `tools:` — `[Read, Edit, Write, Bash, Grep, Glob]` for every specialist (builders write code, run tests, search). `qa-specialist` uses the same list; QA independence comes from `/set-build` using a fresh verifier agent, not from tool restriction.
-- Do NOT add `skills:` or `mcpServers:` keys — the Workflow tool does not apply them. The body already directs builders to call `mcp__serena__*` directly at runtime.
+- Do NOT add `skills:` or `mcpServers:` keys — the Workflow tool does not apply them.
 
 Read CLAUDE.md and any existing shards in `.claude/set/learnings/` to populate with real project-specific content — NOT generic placeholders. Show each file before writing. Get confirmation.
 
@@ -298,7 +330,6 @@ Stack detected:
   Type checker: [detected]
 
 Execution:   Agent Teams (default for /set-build) — dynamic workflows available via /set-build --use-workflow
-Serena MCP:  [✓ detected — semantic recall enabled | — not detected (optional; shards work standalone)]
 Learnings:   [✓ .claude/set/ is trackable by git | ⚠ gitignored — learnings will not persist]
 Domain specialists scaffolded:
   .claude/agents/db-specialist.md       — [if created]
@@ -317,6 +348,11 @@ Directories created:
 
 Files created:
   .claude/set/taxonomy.md         — Learning domain taxonomy (populated on first /set-learn)
+
+Enforcement hooks (.claude/settings.json → hooks.PreToolUse):
+  set-deny-push.sh        [✓ installed | ⚠ skipped — run /set-update]  — agents cannot push / open or merge PRs
+  set-guard-agent-name.sh [✓ installed | ⚠ skipped — run /set-update]  — named verifier spawns are rejected
+  (active from the next session; you push with `!git push origin <branch>`)
 
 CLAUDE.md augmented with:
   - SET pipeline reference

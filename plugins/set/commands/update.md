@@ -42,18 +42,7 @@ current session keeps failing until it restarts.
 
 Look for the old SET-generated block. The marker is a heading line `### Ralph Loop (All Teammates Follow This)`.
 
-If present, propose replacing **that heading and its numbered list** (steps 1–8, ending with the "message team lead with blocker" line) with the current block — leave everything else in `CLAUDE.md` untouched:
-
-```markdown
-### Per-Task TDD Loop (enforced by /set-build for every builder)
-1. Write failing tests first (TDD red phase)
-2. Implement minimal code to pass (TDD green phase)
-3. Refactor while keeping tests green
-4. Run tests — if fail: read error, fix, retry
-5. Run linter/type checker — if fail: fix and retry
-6. Self-review against acceptance criteria
-7. Only mark a task complete when ALL checks pass — a fresh verifier confirms the bar before the work is folded back
-```
+If present, propose replacing **that heading and its numbered list** (steps 1–8, ending with the "message team lead with blocker" line) with the fenced block in `references/tdd-loop.md` — read it from there, verbatim, and leave everything else in `CLAUDE.md` untouched. That file is the single source of truth for the loop; `/set-init` writes the same block into new projects, so a project migrated here matches a project initialized today.
 
 Show the user a diff of the old block vs. the new block. Apply only on confirmation.
 
@@ -92,45 +81,7 @@ Do **not** reformat or rewrite anything the user customized — touch only the k
 
 This normalization is **idempotent** and follows the same rule as the rest of Step 1: show each proposed per-file diff and apply only on confirmation.
 
-#### 1c: Offer to move Serena onto the official plugin
-
-Only relevant to users who already run Serena. **Serena is optional in SET** — skip this
-sub-step entirely for anyone who doesn't have it, and never suggest installing it here.
-
-When SET does install Serena it uses the official Claude Code plugin rather than a
-hand-written `mcpServers` entry. The installer (Step 2) deliberately **leaves an existing
-standalone entry alone** so nobody's Serena is swapped mid-cycle — which means this
-migration only ever happens here, if the user opts in.
-
-Check for a standalone entry:
-
-```bash
-jq -e '.mcpServers.serena' ~/.claude/settings.json &>/dev/null && echo "standalone" || echo "none"
-```
-
-If it prints `none`, skip this sub-step entirely — either the plugin is already in use or Serena isn't installed.
-
-If it prints `standalone`, offer the switch. Explain it plainly, including what does **not** change:
-
-> Your Serena is configured as a standalone `mcpServers` entry pointing at a locally-installed binary. The official plugin runs the same server via `uvx --from git+https://github.com/oraios/serena`, so it tracks upstream instead of staying pinned to whatever version you installed, and Claude Code manages its lifecycle across sessions.
->
-> This is a packaging change only — same stdio server, same one-instance-per-session behavior. It does **not** give spawned agents their own Serena: SET queries it in the lead and injects results as text, and that is unaffected either way.
->
-> Switch now? (Your local `serena` binary stays installed; you can remove it with `uv tool uninstall serena-agent` once you're happy.)
-
-On confirmation:
-
-```bash
-jq 'del(.mcpServers.serena)' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-  && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
-claude plugin install serena@claude-plugins-official
-```
-
-Run the `claude plugin install` line with the sandbox disabled (same reason as Step 2 — it writes under `~/.claude/`). Then tell the user to **restart Claude Code**, since MCP servers are wired up at session start.
-
-If the user declines, leave everything as-is and note it in the 1d report — the standalone entry keeps working and SET supports both.
-
-#### 1c-bis: Verify learning shards are committable
+#### 1c: Verify learning shards are committable
 
 Projects initialized before this check existed may be silently discarding every learning
 they produce. Shards only carry forward to future cycles if git can see them, and many
@@ -157,41 +108,68 @@ If `TRACKABLE`, note it and move on. If `IGNORED`, this is worth flagging clearl
 > The trailing `*` is required — git will not re-include a path whose parent directory is
 > excluded, so a bare `.claude/` line makes `!.claude/set/` a silent no-op.
 
-Show the proposed `.gitignore` change and apply only on confirmation. Keep `.serena/`
-ignored — it is a rebuildable index, not source of truth. Committing the now-visible
-shards is the user's call; don't stage or commit them here.
+Show the proposed `.gitignore` change and apply only on confirmation. Committing the
+now-visible shards is the user's call; don't stage or commit them here.
 
-#### 1c-ter: Reconcile `serena_enabled` with how this project actually runs
+#### 1c-bis: Remove stale Serena bookkeeping
 
-Serena is now **optional**, and `serena_enabled` in `.claude/set/config.json` decides
-whether `/set-build`, `/set-review`, and `/set-learn` call it at all. Projects predating
-that change may carry a stale `true`.
+SET no longer integrates Serena. Projects initialized under an earlier version carry
+bookkeeping for a mechanism that no longer exists. Remove **only what SET wrote**:
 
-Read the flag. If it is absent, leave it absent — `/set-build` resolves it lazily. If it
-is `true`, confirm the assumption still holds:
+```bash
+if [ -f .claude/set/config.json ] && jq -e 'has("serena_enabled")' .claude/set/config.json >/dev/null 2>&1; then
+  jq 'del(.serena_enabled)' .claude/set/config.json > .claude/set/config.json.tmp \
+    && mv .claude/set/config.json.tmp .claude/set/config.json \
+    && echo "removed: serena_enabled (config.json)"
+fi
+if [ -e .claude/set/.serena-migrated ]; then
+  rm -f .claude/set/.serena-migrated && echo "removed: .serena-migrated sentinel"
+fi
+```
 
-> `serena_enabled: true` — SET will query Serena for semantic recall over your learnings.
-> That works when the session running `/set-build` can reach an MCP server.
->
-> If this project's agents run **walled** — inside a devcontainer or an isolated worktree
-> — no agent reaches Serena, the lead included. In that case the flag should be `false`:
-> SET falls back to keyword search over the same shards, which is what actually runs there.
->
-> Keep `true`, or switch to `false`?
+Prints one `removed:` line per artifact it deleted, nothing otherwise — the report below
+is driven by that output.
 
-Only ask when the flag is `true`; a `false` value needs no reconciliation. Apply the
-user's answer to `.claude/set/config.json` and note it in the 1d report.
+Both are no-ops when already absent, so this sub-step is idempotent and needs no version
+detection. Every other key in `config.json` survives.
+
+**Never touch `.serena/memories/`, `.serena/`, the user's hooks, or their MCP config.**
+Serena owns that directory and it may hold memories SET never wrote. SET removes only what
+SET created, inside SET's own directories.
+
+Report what was removed, and say explicitly why the memories were left:
+
+```
+Removed stale Serena bookkeeping:
+  - serena_enabled (config.json)
+  - .serena-migrated sentinel
+
+Note: .serena/memories/ left untouched — Serena owns that directory.
+SET no longer reads it. Delete manually if you want it gone.
+```
+
+Print nothing when neither artifact was present.
 
 #### 1d: Report migration result
 
-List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; Serena: switched to plugin / declined / already plugin / not installed; shard trackability: already trackable / `.gitignore` fixed / still ignored by choice; `serena_enabled`: unchanged / switched to false / absent) or confirm the project was already current. Note that plans, specs, shards, and taxonomy need no migration — they are format-compatible with 1.0.
+List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; shard trackability: already trackable / `.gitignore` fixed / still ignored by choice; stale Serena bookkeeping: removed / already absent) or confirm the project was already current. Note that plans, specs, shards, and taxonomy need no migration — they are format-compatible with 1.0.
 
 If shards were just made trackable, say so plainly: the learnings are now visible to `git status` and committing them is the user's call.
 
 ### 2. Update SET commands
 
-Re-run the installer to pull the latest commands. It will offer Serena as an optional
-opt-in prompt (default no); declining changes nothing about the update:
+Record the version this run **started as** — Step 4c compares it against what the
+installer leaves on disk. Each Bash call is a fresh shell, so a variable does **not**
+survive to Step 4c: this prints the value, and you carry it in your context.
+
+```bash
+echo "SET_VERSION_BEFORE=$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
+```
+
+Note the printed value (e.g. `1.4.0`, or `unknown`) — you will substitute it literally in
+Step 4c.
+
+Re-run the installer to pull the latest commands:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
@@ -234,20 +212,90 @@ echo "=== Agent Teams: experimental flag ==="
 jq -e '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' ~/.claude/settings.json &>/dev/null \
   && echo "OK" || echo "MISSING CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
-echo "=== Serena MCP (optional) ==="
-if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' ~/.claude/settings.json &>/dev/null; then
-  echo "present (plugin)"
-elif jq -e '.mcpServers.serena' ~/.claude/settings.json &>/dev/null; then
-  echo "present (standalone mcpServers entry)"
-else
-  echo "not installed — fine; SET uses keyword search over the same shards"
-fi
-
 echo "=== Learning shards trackable by git ==="
 git check-ignore -q .claude/set/ 2>/dev/null \
-  && echo "IGNORED — learnings will not persist (see migration step 1c-bis)" \
+  && echo "IGNORED — learnings will not persist (see migration step 1c)" \
   || echo "OK"
+
+echo "=== Enforcement hooks: scripts installed centrally ==="
+ls ~/.claude/set/hooks/set-deny-push.sh ~/.claude/set/hooks/set-guard-agent-name.sh ~/.claude/set/hooks/set-hooks.mjs 2>/dev/null \
+  && echo "OK" || echo "MISSING — installer predates hooks or failed; see Step 2"
+
+echo "=== Enforcement hooks: registered in THIS project ==="
+jq -e '[.hooks.PreToolUse[]?.hooks[]?.command | select(test("/set/hooks/set-deny-push\\.sh$"))] | length > 0' .claude/settings.json &>/dev/null \
+  && echo "OK" || echo "hooks: MISSING from .claude/settings.json — registered in Step 4b"
 ```
+
+### 4b. Register enforcement hooks in this project
+
+SET's two PreToolUse hooks (`set-deny-push.sh` on `Bash`: no agent-initiated push / PR
+create / PR merge; `set-guard-agent-name.sh` on `Agent`: no named verifier spawns) are
+registered **per project**, in `.claude/settings.json` — never in `~/.claude/settings.json`.
+A project initialized before hooks shipped has none until this step runs. Show the user
+the two entries that will be appended to `hooks.PreToolUse`, then run exactly this — the
+single quotes around `$HOME` are load-bearing; the literal `$HOME/.claude/set/hooks/…`
+must land in the committed project file so it resolves on the host, in a devcontainer
+whose `~/.claude` mount sits at another absolute path, and on a collaborator's machine:
+
+```bash
+node ~/.claude/set/hooks/set-hooks.mjs install --settings .claude/settings.json --hooks-dir '$HOME/.claude/set/hooks'
+```
+
+It prints `{"installed": [...], "skipped": [...]}` — `"installed": []` when already
+registered. **Nothing printed, or an error, means NOT registered** — report that; never
+infer success from silence. Appends only; the user's existing hooks (SessionStart, other
+PreToolUse matchers) are untouched by construction. If `set-hooks.mjs` is absent, Step 2
+did not place it (older installer, or the read-only-mount container case above where the
+host has not yet been updated) — leave the hooks unregistered and say so in the report;
+do not hand-write the entries.
+
+If the file already holds an entry whose command is this machine's *expanded* home path
+(`/Users/you/.claude/set/hooks/…`, written by a pre-release build), tell the user: it works
+only on this machine; remove it by hand and re-run this step so the portable form replaces
+it.
+
+Hooks are read at session start: they take effect next session. The human pushes with
+`!git push origin <branch>` (`!` runs in the shell — no tool call, no hook). The
+main-session carve-out is verified for in-process `Agent` spawns (default `/set-build`)
+and not yet for workflow agents or separate-process (tmux) teammates — say so if the user
+relies on either.
+
+### 4c. Warn if the command files changed under you
+
+The `/set-update` you are executing right now was loaded **before** Step 2 swapped the
+files. If the installer changed the version, any migration or registration this version
+adds did not run — the old command did not know about it. Compare:
+
+```bash
+# Replace {before} with the value Step 2 printed — literally, not as a shell variable
+# (it did not survive; every Bash call is a fresh shell).
+SET_VERSION_AFTER="$(head -n1 ~/.claude/commands/.set-version 2>/dev/null || echo unknown)"
+[ "{before}" = "$SET_VERSION_AFTER" ] && echo "same-version" || echo "CHANGED: {before} -> $SET_VERSION_AFTER"
+```
+
+If you did not run Step 2 (container case) or lost the value, treat it as `same-version`
+— never print the warning on a guess; a false alarm on every run trains the user to
+ignore it.
+
+If it printed `same-version`, print nothing — a clean exit is the signal the user is done.
+If it printed `CHANGED`, print this, listing **by name** only the items whose check below
+still fails (nothing pending → still print the first paragraph, since a newer command may
+carry work this one cannot see):
+
+```
+⚠  SET was upgraded during this run ({before} → {after}).
+
+The migration steps for this version did not run — you were executing the
+previous /set-update. Run /set-update once more to complete the upgrade.
+
+Pending for this project:
+  - Register SET enforcement hooks in .claude/settings.json (set-deny-push.sh,
+    set-guard-agent-name.sh)          ← when Step 4's "registered in THIS project" check is not OK
+  - Remove stale Serena bookkeeping (serena_enabled, .serena-migrated)
+                                      ← when either artifact from Step 1c-bis is still present
+```
+
+Self-clearing: on the second run the versions match and nothing prints.
 
 ### 5. Report
 
@@ -297,5 +345,7 @@ Then tell the user:
 - Which plugins were updated successfully
 - Any that failed (with suggested fix)
 - Whether this project needed migration (Step 1) and what changed
-- Serena MCP status — as a neutral fact, not a warning; absent is a supported state
 - Whether learning shards are trackable by git, and if not, that learnings are being lost
+- Whether the enforcement hooks are registered in this project's `.claude/settings.json`
+  (Step 4b), and that they take effect next session
+- The Step 4c warning verbatim, if it fired

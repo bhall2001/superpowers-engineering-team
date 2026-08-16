@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.5.0] — Enforcement hooks; Serena removed
+
+### Added
+- **Two enforcement hooks make the build's safety rules structural.** `set-deny-push.sh` blocks `git push` / `gh pr create` / `gh pr merge` / `gh api` writes to a pulls endpoint **from agents running inside an active `/set-build`** — including chained (`&&`, `;`, `|`, `&`, newline), wrapped (`sudo`, `env`, `timeout`, `nice`, `xargs`, `nohup`), keyword-bodied (`if … then`, `for … do`), subshell and `sh -c` forms. Quoted text and heredoc bodies are data, so a commit message that mentions `git push` is not a push, and `git commit` is always allowed. `set-guard-agent-name.sh` rejects a **named** verifier spawn, whose verdict would otherwise never arrive. Both fail closed on a bad payload or missing `jq`, and the push gate is built never to exceed its hook timeout (which would fail open).
+- **The push gate is scoped to a running build, not to who is asking.** `/set-build` writes `.claude/set/RUN-IN-PROGRESS.md` in its worktree before spawning anyone and deletes it when it finishes; the hook denies only while that marker is live. So asking Claude to push or open a PR in an ordinary session works normally — it is only agents *mid-build* that are stopped. Your own session is allowed either way, and `!git push` bypasses hooks entirely. Scoping is by location, so a build in one repo never gates a push in another. A build that crashes leaves its marker behind, so the marker records the session pid and a start time: once that process is gone — or after 15 minutes with no pid recorded — the gate releases itself. Every ambiguous case (unknown pid, another host, an unparseable marker) keeps the gate **on**, and the denial message names the file to delete.
+- **Hooks are registered per project, portably.** `install.sh` places the scripts at `~/.claude/set/hooks/`; `/set-init` and `/set-update` append them to the project's `.claude/settings.json` (idempotent, never touching your other hooks) as the literal `$HOME/.claude/set/hooks/…`, so the committed settings resolve on the host, in a devcontainer, and on a collaborator's machine. They never land in `~/.claude/settings.json`. Remove with `set-hooks.mjs uninstall`, which drops only SET's entries.
+- **`/set-update` warns when it upgraded itself mid-run** and lists what is still pending (hook registration, stale bookkeeping), so a one-run upgrade is not mistaken for a complete one.
+- **SET-spawned builders carry a `-set` name suffix**, making SET teammates identifiable in hook payloads, transcripts and logs.
+
+### Changed
+- **Command specs and context files trimmed.** Duplicated guidance was collapsed to a single source, and rules the new hooks now enforce structurally are stated once rather than restated per command. Behavior is unchanged; the brief each builder receives is smaller. `/set-init` also writes a leaner block into your project's CLAUDE.md.
+
+### Removed
+- **Serena integration.** Retrieval is keyword search over the learning shards — the path that already ran by default. Serena was unreachable from the walled environments SET targets and could not serve parallel teammates. **Breaking:** `serena_enabled` is no longer read; `/set-update` removes SET's own bookkeeping (`serena_enabled`, `.serena-migrated`) and leaves `.serena/memories/` untouched.
+
+### Notes
+- **Run `/set-update` twice** on an existing project: the first run (your old `/set-update`) fetches this version's files; the second registers the hooks and removes stale Serena bookkeeping. From this version on, `/set-update` warns when it upgraded itself mid-run and lists what is still pending.
+- **The push gate is a safety net, not a sandbox.** `eval`, `$var` expansion, git/gh aliases and scripts written to disk are out of scope. The "your own session may push" carve-out is verified for in-process `Agent` spawns (the default `/set-build`); workflow agents (`--use-workflow`, `/set-review`) and separate-process (tmux) teammates were not probed and may present a main-shaped payload. Two cases fail **open** by design and are worth knowing: if `/set-build` dies before writing its marker, that build runs ungated, and a `cwd` outside any git repo reads as "no build running".
+- **`.claude/settings.json` is now committed**, so a clone of a SET-managed repo gets the enforcement hooks instead of silently getting none. Cloning such a repo therefore installs hooks that intercept `git push` and `Agent` calls in that project. Personal settings stay in `.claude/settings.local.json`, which is git-ignored along with the transient run marker.
+- **Restart Claude Code after updating** — hooks are read at session start.
+- To push yourself, type `!git push origin <branch>` — `!` runs in your shell, no tool call, no hook.
+
 ## [1.4.0] — Agent Teams now start correctly
 
 ### Fixed

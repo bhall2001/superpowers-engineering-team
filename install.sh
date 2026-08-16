@@ -23,6 +23,10 @@ set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 RUNS_BIN_DIR="$CLAUDE_DIR/set-runs/bin"
+# Enforcement hooks live centrally; project settings reference them by absolute path so
+# N SET projects share one copy. Registration happens per project in /set-init and
+# /set-update — this installer never writes hooks into ~/.claude/settings.json.
+HOOKS_DIR="$CLAUDE_DIR/set/hooks"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
 # Marketplace sources
@@ -75,113 +79,6 @@ if ! command -v jq &> /dev/null; then
   exit 1
 fi
 info "jq found: $(which jq)"
-
-# Check for uv (Serena's plugin launches via uvx). Serena is OPTIONAL and opt-in, so a
-# missing uv is a skip, not a failure — SET's learning shards are plain markdown and work
-# without any MCP server.
-HAVE_UV=1
-if ! command -v uv &> /dev/null; then
-  HAVE_UV=0
-else
-  info "uv found: $(which uv)"
-fi
-
-# Serena is opt-in. Prompt only when a human is actually there to answer: under
-# `curl | bash`, stdin is the SCRIPT ITSELF, so a bare `read` would swallow installer
-# source as the answer. Read from /dev/tty instead, and skip entirely when there is no
-# tty (CI, devcontainer builds, piped installs) — default is no.
-ask_yes_no() {
-  local prompt="$1" reply=""
-  # /dev/tty's device node exists even when it cannot be opened (piped install, CI,
-  # container build), so test that it actually opens rather than that it exists.
-  { : < /dev/tty; } 2>/dev/null || return 1
-  read -r -p "$prompt" reply < /dev/tty 2>/dev/null || return 1
-  [[ "$reply" =~ ^[Yy] ]]
-}
-
-# Install Serena as a Claude Code plugin (optional enhancement)
-bold ""
-bold "Step 0: Serena MCP (optional)"
-bold "-----------------------------"
-
-# Claude Code reads MCP servers from four places, not one. A standalone Serena in
-# ANY of them runs alongside the plugin's — duplicate uvx processes, and /plugin
-# reporting -32000 from the conflicting config keys. Scan all four and report the
-# ones that hold a `serena` key. Purely diagnostic: we never edit these files,
-# because per-project and repo-level config is the user's (or their team's) call.
-#
-# Note ~/.claude.json sits OUTSIDE ~/.claude/, so it does not cross into
-# devcontainers that bind-mount ~/.claude — anything stored there is host-only.
-LEGACY_SERENA_LOCATIONS=()
-
-scan_legacy_serena() {
-  LEGACY_SERENA_LOCATIONS=()
-
-  # 1. Global settings — universal MCP servers belong here.
-  if jq -e '.mcpServers.serena' "$SETTINGS_FILE" &>/dev/null; then
-    LEGACY_SERENA_LOCATIONS+=("$SETTINGS_FILE (.mcpServers.serena)")
-  fi
-
-  # 2. Per-project servers, keyed by absolute path.
-  if [ -f "$HOME/.claude.json" ]; then
-    while IFS= read -r proj; do
-      [ -n "$proj" ] && LEGACY_SERENA_LOCATIONS+=("$HOME/.claude.json (project: $proj)")
-    done < <(jq -r '.projects // {} | to_entries[] | select(.value.mcpServers.serena) | .key' \
-      "$HOME/.claude.json" 2>/dev/null)
-  fi
-
-  # 3+4. Repo-local config in the cwd — checked in (.mcp.json) and personal
-  # (.claude/settings.local.json). Only meaningful when install.sh runs from a project.
-  local f
-  for f in ".mcp.json" ".claude/settings.local.json"; do
-    if [ -f "$f" ] && jq -e '.mcpServers.serena' "$f" &>/dev/null; then
-      LEGACY_SERENA_LOCATIONS+=("$(pwd)/$f (.mcpServers.serena)")
-    fi
-  done
-}
-
-scan_legacy_serena
-
-# SET installs Serena via the official plugin rather than a hand-written
-# mcpServers entry. The plugin ships the same stdio server, but launches it with
-# `uvx --from git+...` so it tracks upstream instead of pinning whatever binary
-# happened to be installed, and Claude Code refcounts its lifecycle across
-# sessions. Existing standalone installs are left alone — see below.
-if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
-  warn "Serena is already configured standalone in:"
-  for loc in "${LEGACY_SERENA_LOCATIONS[@]}"; do
-    warn "  - $loc"
-  done
-  warn "  Leaving it as-is. Running it alongside the plugin starts duplicate"
-  warn "  Serena processes and makes /plugin report -32000 on the conflicting keys."
-  warn "  To switch to the plugin, remove the serena entry from the file(s) above,"
-  warn "  then run: claude plugin install serena@claude-plugins-official"
-elif jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null 2>&1; then
-  info "Serena plugin already installed"
-elif [ "$HAVE_UV" -eq 0 ]; then
-  info "Serena not installed — uv not found (Serena launches via uvx)."
-  info "  Optional. SET works without it; learning shards are plain markdown."
-  info "  To add it later: install uv (https://docs.astral.sh/uv/), then run"
-  info "  /plugin install serena@claude-plugins-official"
-else
-  echo ""
-  echo "  Serena adds semantic recall over your learning shards. SET works fully"
-  echo "  without it — the same shards are searched by keyword instead. It is not"
-  echo "  usable inside walled devcontainers, where no agent can reach an MCP server."
-  echo ""
-  if ask_yes_no "  Install Serena? [y/N] "; then
-    info "Installing Serena plugin..."
-    if claude plugin install serena@claude-plugins-official 2>/dev/null; then
-      info "Serena plugin installed"
-    else
-      warn "Could not install the Serena plugin (optional — SET works without it)."
-      warn "  To retry, in Claude Code run: /plugin install serena@claude-plugins-official"
-    fi
-  else
-    info "Skipping Serena (optional)."
-    info "  To add it later: /plugin install serena@claude-plugins-official"
-  fi
-fi
 
 # Ensure .claude directory exists
 mkdir -p "$CLAUDE_DIR" 2>/dev/null || true
@@ -304,7 +201,7 @@ mkdir -p "$COMMANDS_DIR/references"
 
 # Single source of truth for reference files — the install loop and the Step 5
 # verify loop both read this. Adding a reference means editing this line only.
-SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode run-store agent-return-channels"
+SET_REFERENCES="enhanced-builder-prompt enhanced-qa-prompt learn-entry-format autonomous-mode run-store agent-return-channels tdd-loop"
 
 # ERRORS may be referenced before Step 5 initializes it; ensure it exists.
 ERRORS=${ERRORS:-0}
@@ -552,6 +449,34 @@ if [ -n "$PLUGIN_ROOT" ]; then
     install_file "references/$ref.md" "references/$ref.md"
   done
 
+  # Enforcement hooks (deny-push, guard-agent-name) plus the set-hooks.mjs registrar
+  # that /set-init and /set-update run against a project's .claude/settings.json.
+  # Plain bash + jq + node, no sqlite — installed unconditionally.
+  if [ -d "$PLUGIN_ROOT/hooks" ]; then
+    mkdir -p "$HOOKS_DIR" 2>/dev/null || true
+    cp "$PLUGIN_ROOT"/hooks/*.sh "$HOOKS_DIR/" 2>/dev/null || true
+    cp "$PLUGIN_ROOT"/bin/set-hooks.mjs "$HOOKS_DIR/" 2>/dev/null || true
+    chmod +x "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/*.mjs 2>/dev/null || true
+
+    # Never claim success on an unchecked copy. A read-only ~/.claude (the container
+    # bind-mount case) silently copies nothing; /set-init would then register settings
+    # entries pointing at absent scripts, and a hook command that is "not found" is a
+    # NON-BLOCKING error — the push gate would be silently absent, which is worse than
+    # visibly missing.
+    HOOKS_MISSING=""
+    for hook in set-deny-push.sh set-guard-agent-name.sh set-hooks.mjs; do
+      [ -f "$HOOKS_DIR/$hook" ] || HOOKS_MISSING="$HOOKS_MISSING $hook"
+    done
+    if [ -z "$HOOKS_MISSING" ]; then
+      info "Installed enforcement hooks → $HOOKS_DIR (registered per project by /set-init or /set-update)"
+    else
+      warn "Enforcement hooks NOT installed (could not write$HOOKS_MISSING to $HOOKS_DIR)."
+      warn "  If ~/.claude is a read-only mount, run this installer on the host."
+      warn "  Do NOT register hooks in a project until they exist: a missing hook command"
+      warn "  fails open, so the push gate would be silently absent."
+    fi
+  fi
+
   # Durable run store. Needs node:sqlite — stable on Node 24, flagged on Node 22.
   # A failure here is not fatal: the other six commands do not touch the store.
   if [ -d "$PLUGIN_ROOT/bin" ]; then
@@ -638,27 +563,6 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-# Re-scan: the plugin install above may have changed things, and a standalone
-# entry anywhere counts as "configured" — erroring out on a working per-project
-# Serena would be a false negative.
-scan_legacy_serena
-if jq -e '.enabledPlugins | keys[] | select(startswith("serena@"))' "$SETTINGS_FILE" &>/dev/null; then
-  info "Serena MCP: installed as a plugin"
-  if [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
-    warn "  Conflict: a standalone Serena is also configured in ${#LEGACY_SERENA_LOCATIONS[@]} location(s)."
-    for loc in "${LEGACY_SERENA_LOCATIONS[@]}"; do
-      warn "    - $loc"
-    done
-    warn "  Remove the serena entry there — duplicate servers cause /plugin -32000 errors."
-  fi
-elif [ ${#LEGACY_SERENA_LOCATIONS[@]} -gt 0 ]; then
-  info "Serena MCP: configured (standalone entry in ${LEGACY_SERENA_LOCATIONS[0]})"
-else
-  info "Serena MCP: not installed (optional) — SET runs without it"
-  info "  Learning shards in .claude/set/learnings/ are the source of truth and work"
-  info "  standalone. Serena adds semantic recall over them for the lead session only."
-fi
-
 # Check commands exist. Also assert no stale pre-1.0 markers leaked through — a bare
 # existence check would pass even if nothing was written this run, which is how a
 # silently-failed update can look "successful". The pre-1.0 commands referenced the
@@ -684,6 +588,15 @@ for ref in $SET_REFERENCES; do
     info "Reference: $ref.md"
   else
     error "Missing reference: $ref.md"
+    ERRORS=$((ERRORS + 1))
+  fi
+done
+
+for hook in set-deny-push.sh set-guard-agent-name.sh set-hooks.mjs; do
+  if [ -x "$HOOKS_DIR/$hook" ]; then
+    info "Hook: $hook"
+  else
+    error "Missing or non-executable hook: $HOOKS_DIR/$hook"
     ERRORS=$((ERRORS + 1))
   fi
 done
@@ -780,6 +693,5 @@ warn "succeed, install Superpowers manually. In Claude Code, run:"
 warn "  /plugin install superpowers@claude-plugins-official"
 echo ""
 info "  Dynamic workflows: built into Claude Code (Pro users enable via /config)"
-info "  Serena MCP:    ✓ installed"
 info "To initialize a project, open it in Claude Code and run: /set-init"
 echo ""

@@ -11,16 +11,14 @@ SET (Superpowers Engineering Team) is a Claude Code plugin that provides a 6-com
 ## Repository Structure
 
 - `plugins/set/commands/*.md` — Core implementation. Each file is a markdown command spec that Claude Code loads as a slash command. This is the main code to edit.
-- `install.sh` — Installation orchestrator for SET + Superpowers + Serena. Modifies `~/.claude/settings.json` and installs command files to `~/.claude/commands/` by copying from `plugins/set/commands/` (or fetching them from GitHub raw when run via `curl | bash`). It no longer embeds command bodies — the plugin files are the single source of truth.
+- `install.sh` — Installation orchestrator for SET + Superpowers. Modifies `~/.claude/settings.json` and installs command files to `~/.claude/commands/` by copying from `plugins/set/commands/` (or fetching them from GitHub raw when run via `curl | bash`). It no longer embeds command bodies — the plugin files are the single source of truth.
 - `docs/` — User-facing documentation (getting-started, workflow, agents, commands, learning-loop).
 - `.claude-plugin/marketplace.json` — Plugin marketplace entry config.
 - `plugins/set/.claude-plugin/plugin.json` — Plugin metadata (name, version, author).
 
-## No Build System
+## Testing
 
-This is a plugin distribution, not a compiled app. Almost all "code" is markdown command specs and a bash installer. No build or lint tooling exists.
-
-**One exception:** the durable-run store under `plugins/set/bin/` is real JavaScript, with tests:
+This is a plugin distribution, not a compiled app: most "code" is markdown command specs and a bash installer, and there is no build or lint step. The JavaScript that does exist — the durable-run store and hook wiring under `plugins/set/bin/`, plus the hooks in `plugins/set/hooks/` — has tests:
 
 ```bash
 node --test "plugins/set/tests/*.test.mjs"
@@ -59,26 +57,45 @@ Each command in `plugins/set/commands/` is a self-contained prompt spec. Changes
 
 **Taxonomy:** `.claude/set/taxonomy.md` — one line per domain: `- name: short description`. Free-form, project-specific names.
 
-**Serena memories:** Runtime index of shard entries. Slugs are kebab-case key concepts. Frontmatter includes `domains:`, `date:`, `source:` fields. Written/read via `mcp__serena__*` tools. Shards are the source of truth; Serena is the index.
+**Retrieval is keyword search over plain markdown.** Shards under `.claude/set/learnings/` are the source of truth, and every command reads them with `grep`. Nothing in the pipeline depends on an MCP server, by design: when a team runs walled inside a devcontainer or isolated worktree, **no** agent can reach one — the lead included. Committing shards is what carries learnings between cycles, and that is the human's call at `/set-learn`.
 
-**Serena is optional.** It is a semantic index over the learning shards, nothing more. Shards under `.claude/set/learnings/` are plain markdown and the source of truth; every command degrades to keyword retrieval over them when Serena is absent, gated on `serena_enabled` in `.claude/set/config.json`. `install.sh` installs it best-effort; `/set-init` detects and records it.
+## What install.sh touches in `~/.claude/`
 
-This matters for autonomous teams: when the whole team runs walled inside a devcontainer or isolated worktree, **no** agent can reach an MCP server — the lead included. Serena being lead-only does not rescue that topology, so nothing in the pipeline may depend on it. Committing shards is what carries learnings between cycles, and that is the human's call at `/set-learn`.
+`settings.json` — `env` vars and `extraKnownMarketplaces` only, always merged rather than
+overwritten. It never edits `.mcpServers` in any of the four places Claude Code reads them
+from; MCP configuration is the user's or their team's call. It also places the enforcement
+hook scripts at `~/.claude/set/hooks/` but **never registers them there**: hooks are
+appended to a project's `.claude/settings.json` (`hooks.PreToolUse`) by `/set-init` /
+`/set-update` via `set-hooks.mjs`, so they bind only SET-managed repos. The registered
+command is the **literal** `$HOME/.claude/set/hooks/<script>` (Claude Code runs hook
+commands through a shell), never an expanded home path — the project file is committed and
+must resolve on the host, in a devcontainer, and on a collaborator's machine.
 
-## Where MCP config lives
+## Enforcement hooks
 
-Claude Code reads MCP servers from four places. `install.sh`'s `scan_legacy_serena`
-checks all four for a standalone `serena` key, because one running alongside the
-plugin's means duplicate `uvx` processes and `/plugin` reporting `-32000` on the
-conflicting keys:
+`plugins/set/hooks/` — `set-deny-push.sh` (matcher `Bash`) and `set-guard-agent-name.sh`
+(matcher `Agent`; a named spawn with a verifier-shaped prompt is denied). Both fail closed on
+their own errors. Each script's header comments carry its parsing and timeout constraints —
+read them before editing, since a hook that exceeds its timeout is treated as fail-open.
 
-1. `~/.claude/settings.json` → `.mcpServers` — universal servers belong here
-2. `~/.claude.json` → `.projects["<abs path>"].mcpServers` — per-project, host-only
-3. `<repo>/.mcp.json` → `.mcpServers` — checked in, project-specific servers belong here
-4. `<repo>/.claude/settings.local.json` → `.mcpServers` — personal, not checked in
+The push gate denies `git push` / `gh pr create|merge` only when **both** hold: the caller is
+a spawned agent, **and** `<worktree>/.claude/set/RUN-IN-PROGRESS.md` exists and is live.
+`/set-build` writes that marker before spawning anyone (`build.md` step 1g) and deletes it at
+gate-back. Identity alone cannot separate a builder from the assistant helping a human — the
+payloads are identical outside a run — so run state is the discriminator.
 
-The scan is diagnostic only — it warns and lists the paths, never edits these files,
-since per-project and repo-level config is the user's or their team's call.
+Liveness mirrors `probeDead`/`staleMinutes` in `bin/claim.mjs`: dead **only** on an explicit
+"no such process". EPERM, an unknown pid, another host, or an unparseable marker all keep the
+gate **on**. `kill -0` cannot distinguish ESRCH from EPERM by exit status and `ps -p` is
+unreliable under the hook sandbox, so the check reads `kill`'s message — do not "simplify" it
+back to an exit-status test. A stale marker denying is recoverable with `rm`; a gate dropping
+mid-build is not.
 
-Note `~/.claude.json` sits OUTSIDE `~/.claude/`, so it does not cross into
-devcontainers that bind-mount `~/.claude` — anything stored there is host-only.
+Design: `docs/superpowers/specs/2026-08-16-run-scoped-push-gate-design.md`. The run store
+(`~/.claude/set-runs/runs.db`) is **not** consulted by this gate.
+
+Payload facts the identity logic depends on are recorded in
+`docs/superpowers/specs/2026-08-16-hook-payload-probe-findings.md`; re-probe before
+changing it. The main-session carve-out is verified for in-process `Agent` spawns only —
+**not** workflow agents, **not** tmux teammates. Table-driven tests live in
+`plugins/set/tests/`.

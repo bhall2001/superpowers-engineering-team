@@ -18,6 +18,25 @@ The `Agent` tool has two return modes, selected by the presence of `name`:
 A named spawn's work product **never appears in the tool result**. The receipt is not a
 truncation or a delay — the value is not delivered through that channel at all.
 
+## The `-set` suffix on named spawns
+
+Every SET-spawned **named** agent carries a `-set` name suffix — `build.md` T2 spawns
+`odm-db-drizzle-set`, not `odm-db-drizzle`. Verifiers stay unnamed, per the rule above.
+`[SET]` cannot be used: the `name` pattern (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) excludes
+brackets. The suffix does not disturb `subagent_type` routing (probe-verified).
+
+Why: it is a marker SET **controls** rather than observes. Hook subprocesses never see
+`$CLAUDE_CODE_AGENT_NAME`; what a PreToolUse payload does carry is `agent_type`, which for
+a named spawn is the `name` verbatim. So `-set` makes "this is a SET teammate" structural
+in hook payloads, transcripts and logs — useful during autonomous-run review.
+
+**Polarity — read this twice.** The marker is **corroborating evidence for a denial, never
+the trigger for one**. A hook that denied only on seeing `-set` would allow everything
+unmarked: any non-SET agent, any truncated name, any future spawn path that forgets the
+convention. That is fail-open on a push gate. **The absence of the marker never implies
+permission.** SET's push gate keys on the presence of *any* agent identity in the payload
+(`agent_id` / `agent_type`), and on the payload's shape; unknown identity denies.
+
 ## Why a named result is unrecoverable
 
 There is no supported retrieval path:

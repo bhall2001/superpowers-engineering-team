@@ -10,7 +10,7 @@ Two review stages per task — spec compliance first, then code quality. Both mu
 READ FIRST (once, at start):
 - CLAUDE.md — conventions and build commands
 - `.claude/set/taxonomy.md` — domain list
-- For each task you review: use `mcp__serena__list_memories` to find relevant shards, then `mcp__serena__read_memory` to fetch them
+- For each task you review: read the `.claude/set/learnings/{domain}.md` shards matching its domains
 
 WORKFLOW:
 1. Monitor TaskList() — wait for builder tasks to reach "completed"
