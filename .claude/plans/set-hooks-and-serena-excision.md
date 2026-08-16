@@ -87,7 +87,7 @@ mechanical and agent-free at every step:
 - [x] T-uninstall-payload-probe — passed 2026-08-16 (commit 37a5926)
 - [x] T-hook-test-harness — passed 2026-08-16T00:00Z
 - [x] T-deny-push-hook — passed 2026-08-16
-- [ ] T-guard-agent-name-hook — pending
+- [x] T-guard-agent-name-hook — passed 2026-08-16
 - [ ] T-hook-settings-merge-and-uninstall — pending
 - [ ] T-wire-hooks-into-init-and-update — pending
 - [ ] T-add-set-name-suffix-to-spawns — pending
