@@ -83,10 +83,10 @@ mechanical and agent-free at every step:
 - [x] T-excise-serena-from-install-sh — passed 2026-08-16T00:00Z (commit 6ffcde9)
 - [x] T-reconcile-serena-bookkeeping-in-upda — passed 2026-08-16T00:00Z (commit 6ffcde9)
 - [x] T-install-payload-probe — passed 2026-08-16T00:00Z (awaiting human restart)
-- [ ] T-run-probe-matrix-and-write-findings — pending
-- [ ] T-uninstall-payload-probe — pending
+- [x] T-run-probe-matrix-and-write-findings — passed 2026-08-16 (commit 3d22566)
+- [x] T-uninstall-payload-probe — passed 2026-08-16 (commit 37a5926)
 - [x] T-hook-test-harness — passed 2026-08-16T00:00Z
-- [ ] T-deny-push-hook — pending
+- [x] T-deny-push-hook — passed 2026-08-16
 - [ ] T-guard-agent-name-hook — pending
 - [ ] T-hook-settings-merge-and-uninstall — pending
 - [ ] T-wire-hooks-into-init-and-update — pending
