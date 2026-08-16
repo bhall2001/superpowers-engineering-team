@@ -25,8 +25,6 @@ style: |
 
   section {
     background: var(--ground);
-    background-image: linear-gradient(#ffffff08 1px, transparent 1px);
-    background-size: 100% 40px;
     color: var(--ink);
     font-family: var(--f-body);
     font-size: 23px;
