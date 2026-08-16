@@ -79,10 +79,10 @@ mechanical and agent-free at every step:
 
 <!-- Orchestrator-maintained. Builders never edit this section. -->
 
-- [ ] T-excise-serena-from-command-specs — pending
-- [ ] T-excise-serena-from-install-sh — pending
-- [ ] T-reconcile-serena-bookkeeping-in-upda — pending
-- [ ] T-install-payload-probe — pending
+- [x] T-excise-serena-from-command-specs — passed 2026-08-16T00:00Z (commit 6ffcde9)
+- [x] T-excise-serena-from-install-sh — passed 2026-08-16T00:00Z (commit 6ffcde9)
+- [x] T-reconcile-serena-bookkeeping-in-upda — passed 2026-08-16T00:00Z (commit 6ffcde9)
+- [x] T-install-payload-probe — passed 2026-08-16T00:00Z (awaiting human restart)
 - [ ] T-run-probe-matrix-and-write-findings — pending
 - [ ] T-uninstall-payload-probe — pending
 - [ ] T-hook-test-harness — pending
@@ -638,5 +638,5 @@ Not a TDD task — it is measurement. The discipline is instead:
 1. Probe outcome decides whether the push-deny gets an identity carve-out. Pre-committed
    both ways in the spec; not blocking.
 2. `-set` suffix ships only if Q5/Q6 confirm. Task drops cleanly if not.
-3. CLAUDE.md's "No build System / no test tooling" line is stale — `plugins/set/tests/`
-   exists. Out of scope here; worth a follow-up.
+3. ~~CLAUDE.md's "no test tooling" line is stale~~ — checked during build; CLAUDE.md
+   already documents the `plugins/set/bin/` test exception. No action needed.
