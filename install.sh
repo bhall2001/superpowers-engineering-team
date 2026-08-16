@@ -684,6 +684,38 @@ if [ "$ERRORS" -ne 0 ]; then
   exit 1
 fi
 
+# Auto-mode allowlist note. Only shown when the user actually runs in auto mode AND
+# has not already allowlisted this installer — an unconditional note would be noise on
+# every run. Never allowed to fail the install: every read degrades to silence.
+if [ -n "${SETTINGS_FILE:-}" ] && command -v jq >/dev/null 2>&1; then
+  AUTO_MODE="$(jq -r '.permissions.defaultMode // empty' "$SETTINGS_FILE" 2>/dev/null || true)"
+  if [ "$AUTO_MODE" = "auto" ] && ! jq -e \
+      '[.autoMode.allow[]? | select(test("superpowers-engineering-team.*install\\.sh"))] | length > 0' \
+      "$SETTINGS_FILE" >/dev/null 2>&1; then
+    warn "NOTE: You run Claude Code in auto mode, which routes shell commands"
+    warn "through the permission classifier. It denies this installer's"
+    warn "'curl … | bash' line, so /set-update cannot run it for you — you"
+    warn "would have to type it yourself with a leading ! on every update."
+    warn ""
+    warn "To allow just this one command, add to ~/.claude/settings.json:"
+    warn "  \"autoMode\": {"
+    warn "    \"allow\": ["
+    warn "      \"\$defaults\","
+    warn "      \"Bash(curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash)\""
+    warn "    ]"
+    warn "  }"
+    warn ""
+    warn "Keep \"\$defaults\" first — it inherits the built-in classifier rules;"
+    warn "without it the list REPLACES them all. Merge into any existing"
+    warn "\"autoMode\" block rather than overwriting it. Takes effect next session."
+    warn ""
+    warn "Or let SET do it: the /set-init and /set-update now on disk detect"
+    warn "this and offer the same change with a diff to confirm. Running"
+    warn "/set-update again is enough — no need to edit the file by hand."
+    echo ""
+  fi
+fi
+
 info "Pipeline:"
 info "  /set-init (once per project)"
 info "  /set-design → /set-plan → /set-build → /set-review → /set-learn"

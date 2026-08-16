@@ -186,15 +186,71 @@ Permission for this action was denied by the Claude Code auto mode classifier.
 Reason: Blocked by classifier.
 ```
 
-This block is at the **permission gate, not the sandbox** — piping a network fetch into a shell is what the classifier objects to, so `dangerouslyDisableSandbox` cannot clear it and neither can any setting you control. Do **not** retry the call, and do **not** restructure the command to get around the classifier (splitting the `curl` from the `bash`, staging the script to a temp file, wrapping it in another interpreter). Evading a permission gate is out of bounds even when the underlying command is legitimate — and this one is legitimate, which is why the handoff is a normal outcome rather than a failure.
+This block is at the **permission gate, not the sandbox** — piping a network fetch into a shell is what the classifier objects to, so `dangerouslyDisableSandbox` cannot clear it. Do **not** retry the call, and do **not** restructure the command to get around the classifier (splitting the `curl` from the `bash`, staging the script to a temp file, wrapping it in another interpreter). Evading a permission gate is out of bounds even when the underlying command is legitimate — and this one is legitimate, which is why the handoff is a normal outcome rather than a failure.
 
-Instead, tell the user to run it themselves by typing it with a leading `!` in the Claude Code prompt:
+**Unblock it for good — offer the `autoMode.allow` entry (see "Auto-mode allowlist" below), then** tell the user to run this now, by typing it with a leading `!` in the Claude Code prompt:
 
 ```
 !curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash
 ```
 
-Then continue to Step 3. This is the **expected** path on hosts where the classifier is strict — treat it as routine, not as an error to report. Note that the installer's stdout does not reach you on this path; Step 5 says how to reach a verdict without it.
+Then continue to Step 3. Note that the installer's stdout does not reach you on this path; Step 5 says how to reach a verdict without it.
+
+#### Auto-mode allowlist (the durable fix)
+
+Running SET under auto mode (`permissions.defaultMode: "auto"`) routes shell commands
+through the classifier, and the installer's `curl … | bash` is the shape it objects to.
+An `autoMode.allow` entry in the user's **`~/.claude/settings.json`** names this one
+command as expected, so it stops being denied on every update. This is a **user-level**
+setting, not a project one — auto mode is a per-user preference, and the entry must apply
+in every repo where they run SET.
+
+Check whether it is already there:
+
+```bash
+jq -e '[.autoMode.allow[]? | select(test("superpowers-engineering-team.*install\\.sh"))] | length > 0' \
+  ~/.claude/settings.json &>/dev/null && echo "present" || echo "absent"
+```
+
+If `present`, say nothing — a note on every run trains the user to ignore it.
+
+Offer the change when it is `absent` **and** either the classifier denial fired this run,
+**or** the user ran the installer via `!` (which is what a denial forces, and the run
+before this one may have hit exactly that). Both cases mean the next update is blocked
+too. If neither holds — the Bash call ran fine — stay silent: auto mode is not costing
+them anything and the entry is not needed.
+
+When offering, show the exact change:
+
+```json
+"autoMode": {
+  "allow": [
+    "$defaults",
+    "Bash(curl -sL https://raw.githubusercontent.com/bhall2001/superpowers-engineering-team/main/install.sh | bash)"
+  ]
+}
+```
+
+Say plainly what it does before they decide: it tells the classifier this one command is
+expected, so future `/set-update` runs are not blocked. It does not disable auto mode or
+loosen anything else.
+
+**`"$defaults"` must be the first element.** It is the sentinel that inherits the built-in
+classifier rules; an `allow` list without it silently replaces every built-in rule instead
+of adding to this one. Never write the array without it.
+
+Merge into any existing `autoMode` block rather than replacing it — the user may already
+have `soft_deny`, `hard_deny`, or `environment` keys, and those must survive untouched.
+If `autoMode.allow` exists but lacks this entry, append to that array (keeping
+`"$defaults"` wherever it already sits) instead of rewriting it.
+
+**Your own write may be denied by the classifier too** — editing the classifier's own
+config is exactly what it guards. That is expected, not a failure. If it happens, do not
+retry and do not find another route: print the JSON above, name the file
+(`~/.claude/settings.json`), and let the user paste it themselves.
+
+Either way, tell them it takes effect **next session** — settings are read at session
+start.
 
 > Re-running the installer overwrites this `/set-update` command with the latest version. That's expected and safe now that migration (Step 1) has already run.
 
