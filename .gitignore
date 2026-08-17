@@ -10,3 +10,6 @@ docs/superpowers/*
 # Transient /set-build run marker. Committing one mid-build would gate every clone
 # permanently — the worst failure this control has.
 .claude/set/RUN-IN-PROGRESS.md
+
+# Marp render output (regenerate with marp-cli)
+docs/*.html
