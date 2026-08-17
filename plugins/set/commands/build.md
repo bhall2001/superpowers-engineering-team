@@ -14,7 +14,7 @@ SET's default build path is a **native Agent Team**: the lead session (you) is t
 coordinator, spawning builder and verifier teammates that coordinate through a shared
 task list. This is a deliberate lean toward durable, autonomous teams.
 
-Check `$ARGUMENTS`:
+Check the command argument string:
 
 - **Default (no flag)** → the **Agent Team path** (Phase B-team). Requires
   `CLAUDE_CODE_ENABLE_TODO_TOOLS` and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`; see
@@ -26,6 +26,13 @@ Check `$ARGUMENTS`:
   Do not warn, do not print a deprecation notice — it simply selects the default path.
 - `--autonomous` / `--verbose` — parse and strip per
   `~/.claude/commands/references/autonomous-mode.md`.
+
+**When `--autonomous` or `--verbose` appears, read
+`~/.claude/commands/references/autonomous-mode.md` in full before emitting the opening
+boundary line or doing any other work.** That file defines the line's exact format, the
+gate suppression this phase applies, and the hop this phase must execute at the end.
+Emitting the boundary line first and reading afterwards is how the format drifts and the
+hop gets skipped.
 - **`--resume {run-id}`** → resume a crashed run instead of starting a new one. See
   "Resuming a Crashed Run". Parse and strip it like the others; the remainder is still the
   feature name.
@@ -37,6 +44,23 @@ Phase C. Under `--autonomous` the same lines carry the chain annotation and `[n/
 without it, omit both. Emit each line once per run. The `--autonomous`-only reports below
 (worktree dir default, failing baseline, Agent Teams unavailable) are annotations on that
 one opening line, not extra boundary lines.
+
+**The literal opening line, when `--autonomous` is set** (copy this shape exactly —
+comma before `autonomous chain`, brackets last, nothing parenthesized):
+
+```
+▶ SET build — starting, autonomous chain [n/N]
+```
+
+`[n/N]` depends only on where the run **entered**, which never changes mid-chain:
+
+| Entered at | build's line |
+|---|---|
+| `design` | `[3/5]` |
+| `plan` | `[2/4]` |
+| `build` (typed directly) | `[1/3]` |
+
+Without `--autonomous`, emit `▶ SET build — starting` with no chain annotation.
 
 ## Before Starting
 
@@ -50,7 +74,7 @@ one opening line, not extra boundary lines.
 
 Precedence (first match wins):
 
-1. **CLI flag in `$ARGUMENTS`** — `--no-worktree` disables; `--worktree` forces enable.
+1. **CLI flag in the arguments** — `--no-worktree` disables; `--worktree` forces enable.
 2. **CLAUDE.md setting** — a line matching `SET: no-worktree` (case-insensitive) disables worktrees for this project.
 3. **Default** — worktrees enabled.
 
@@ -700,12 +724,25 @@ When the selected execution path returns:
 
    - **Without `--autonomous`** — suggest: "Run `/set-review` for the independent holistic review, then `/set-learn` to capture learnings."
 
-   - **With `--autonomous`** — do not suggest; after the closing phase-boundary line, chain
-     to `/set-review` per the Chaining Contract, passing the branch/worktree location and
-     the per-task verdicts. The verification report travels as **claims to audit**,
-     exactly as in a supervised run — autonomy does not upgrade self-grading into truth.
-     The branch/worktree location must reach the end of the chain: it is reported to the
-     user in the Autonomous Final Report as an artifact they own.
+   - **With `--autonomous`** — do not suggest, and **do not ask the user whether to
+     proceed**. Chain to `/set-review` per the Chaining Contract, passing the
+     branch/worktree location and the per-task verdicts. The verification report travels
+     as **claims to audit**, exactly as in a supervised run — autonomy does not upgrade
+     self-grading into truth. The branch/worktree location must reach the end of the
+     chain: it is reported to the user in the Autonomous Final Report as an artifact
+     they own.
+
+     Execute the hop now, in this same turn, per **The hop is a procedure, not an
+     intention**: read `~/.claude/commands/set-review.md`, emit
+     `⇢ SET chain — build → review [n/N]`, then execute that file's contents with the
+     carried flags and payload.
+
+     **This is the most common place the chain breaks.** The build has just finished, the
+     results look like a natural stopping point, and "ready for review?" feels like the
+     helpful thing to say. It is not — there is no one to answer it. If the build raised
+     a concern (tests failing at baseline, tasks that could not be verified, work that
+     modifies SET's own machinery), record it in `concerns_raised` and chain anyway.
+     Do not end the turn here.
 
 If a worktree was created, do NOT remove it — `/set-review` handles cleanup (and under
 `--autonomous`, no phase removes it; the user is handed the location instead).

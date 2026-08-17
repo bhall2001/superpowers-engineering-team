@@ -12,7 +12,7 @@ Take a Superpowers design spec and produce a plan optimized for parallel dynamic
 
 User provides: `/set-plan $ARGUMENTS`
 
-`$ARGUMENTS` is either:
+That argument string is either:
 - A feature name matching an existing design spec in `docs/superpowers/specs/`
 - A path to a design spec file
 - Empty — search `docs/superpowers/specs/` for the most recent spec and confirm with user
@@ -21,12 +21,35 @@ Parse `--autonomous` and `--verbose` per
 `~/.claude/commands/references/autonomous-mode.md` and strip them before
 interpreting the remainder as the spec name or path.
 
+**When `--autonomous` or `--verbose` appears, read
+`~/.claude/commands/references/autonomous-mode.md` in full before emitting the opening
+boundary line or doing any other work.** That file defines the line's exact format, the
+gate suppression this phase applies, and the hop this phase must execute at the end.
+Emitting the boundary line first and reading afterwards is how the format drifts and the
+hop gets skipped.
+
 **Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
 Verbosity Levels format from that reference: the `▶ SET plan — starting` line once flags
 are parsed, and the `◀ SET plan — {task count}, {plan path}` line as the phase ends. Under
 `--autonomous` the same lines carry the chain annotation and `[n/N]`; without it, omit
 both. Emit each line once per run. This phase dispatches no agents, so `--verbose` adds
 no per-agent lines here.
+
+**The literal opening line, when `--autonomous` is set** (copy this shape exactly —
+comma before `autonomous chain`, brackets last, nothing parenthesized):
+
+```
+▶ SET plan — starting, autonomous chain [n/N]
+```
+
+`[n/N]` depends only on where the run **entered**, which never changes mid-chain:
+
+| Entered at | plan's line |
+|---|---|
+| `design` (chained in) | `[2/5]` |
+| `plan` (you were typed directly) | `[1/4]` |
+
+Without `--autonomous`, emit `▶ SET plan — starting` with no chain annotation.
 
 Under `--autonomous` with an empty remainder, do not "confirm with user" — take
 the most recent spec in `docs/superpowers/specs/` and report which one was chosen
@@ -171,10 +194,20 @@ After approval:
 
 > "Plan saved to `.claude/plans/{feature-name}.md`. Ready to build? Run `/set-build {feature-name}` to execute it as a native Agent Team by default (or `/set-build {feature-name} --use-workflow` for the dynamic-workflow path)."
 
-**With `--autonomous`:** Do not wait. Re-read the plan against the Step 4 review
-criteria (parallelism marks are real, acceptance criteria are verifiable, TDD steps
-make sense, no missing tasks) and fix what fails. Then, after the closing phase-boundary
-line, chain to `/set-build {feature-name}` per the Chaining Contract.
+**With `--autonomous`:** Do not wait, and do not ask the user to approve the plan. Re-read
+the plan against the Step 4 review criteria (parallelism marks are real, acceptance
+criteria are verifiable, TDD steps make sense, no missing tasks) and fix what fails. Then
+chain to `/set-build {feature-name}` per the Chaining Contract, executing the hop in this
+same turn: read `~/.claude/commands/set-build.md`, emit
+`⇢ SET chain — plan → build [n/N]`, then execute that file's contents with the carried
+flags and the feature name.
+
+**Reservations about the plan do not stop the chain.** If the build looks inadvisable —
+it modifies SET's own machinery, the project was never `/set-init`'d so every task routes
+to `generic` with no shards, or most tasks have no executable test for the TDD loop to
+grip — record each as a `concerns_raised` entry and chain anyway. Those are judgment calls
+for the human reading the Final Report, not grounds for ending a run they asked to be
+autonomous.
 
 Carry the plan's Unresolved Questions into the chain: they are reported in the
 Autonomous Final Report rather than blocking, since there is no human to answer them.

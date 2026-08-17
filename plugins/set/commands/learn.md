@@ -8,9 +8,15 @@ Extract and persist learnings from the most recent SET cycle.
 
 ## Input
 
-`$ARGUMENTS` is optional — a feature name or context hint. If empty, analyze the most recent build/review cycle.
+The command argument string is optional — a feature name or context hint. If empty, analyze the most recent build/review cycle.
 
 Parse `--verbose` per `~/.claude/commands/references/autonomous-mode.md`.
+
+**When `--verbose` appears, or when a Final Report payload arrived from `/set-review`,
+read `~/.claude/commands/references/autonomous-mode.md` in full before emitting the
+opening boundary line or doing any other work.** That file defines the line's exact
+format, the gates this phase suppresses in a chained run, and the Autonomous Final
+Report shape this phase is the sole producer of.
 
 **Emit phase-boundary lines on every run**, whether or not this phase was reached via a
 chain, in the Verbosity Levels format from that reference: the `▶ SET learn — starting`
@@ -18,6 +24,25 @@ line once flags are parsed, and the `◀ SET learn — {shards written}` line as
 ends, before the Step 8 report. In a chained run the same lines carry the chain annotation
 and `[n/N]`; otherwise omit both. Emit each line once per run. This phase dispatches no
 agents, so `--verbose` adds no per-agent lines here.
+
+**The literal opening line, in a chained run** (copy this shape exactly — comma before
+`autonomous chain`, brackets last, nothing parenthesized):
+
+```
+▶ SET learn — starting, autonomous chain [n/N]
+```
+
+`/set-learn` is always the **last** phase, so `n` always equals `N`:
+
+| Entered at | learn's line |
+|---|---|
+| `design` | `[5/5]` |
+| `plan` | `[4/4]` |
+| `build` | `[3/3]` |
+| `review` | `[2/2]` |
+| `learn` (typed directly) | `[1/1]` |
+
+Outside a chain, emit `▶ SET learn — starting` with no chain annotation.
 
 **`--autonomous` is valid here.** `/set-learn` is the last phase, so it chains nowhere —
 but this phase asks the user to approve a taxonomy, approve new domains, and approve
@@ -280,8 +305,16 @@ git status --short .claude/set/
 **When reached via an autonomous chain,** emit the Autonomous Final Report from
 `~/.claude/commands/references/autonomous-mode.md` instead of the normal report,
 filling in every field from the chain: phases run, build results, review verdict,
-`rounds_spent`, `exit_condition`, `remaining_findings`, the plan's unresolved
-questions, artifact paths, and the shards written this run.
+`rounds_spent`, `exit_condition`, `remaining_findings`, `concerns_raised`, the plan's
+unresolved questions, artifact paths, and the shards written this run.
+
+**Render every `concerns_raised` entry** under its own heading in the report. These are
+problems an earlier phase saw and deliberately chained past instead of halting on — the
+whole reason non-halting is safe is that they surface here. Do not summarize them away,
+merge them into review findings, or drop them because the run otherwise succeeded. Each
+entry names the phase that raised it and what it saw. If the list is empty, say "none"
+rather than omitting the section, so the user can tell the difference between "no concerns"
+and "concerns lost in the chain".
 
 **A halted run still reaches you, and still gets a report.** `/set-review` chains here
 on every exit — including `BLOCK` and `lens FAILED`. Do NOT treat those as a chain abort

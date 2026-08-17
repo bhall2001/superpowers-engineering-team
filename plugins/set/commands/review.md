@@ -11,18 +11,43 @@ Review's entire value is being an **uncorrelated** check on the build. Independe
 
 ## What to Review
 
-If the user provides a branch/PR/commit range with `$ARGUMENTS`, use that. Otherwise: `git diff main...HEAD`.
+If the user provides a branch/PR/commit range as an argument, use that. Otherwise: `git diff main...HEAD`.
 
 ## Step 1: Gather Context
 
-Check `$ARGUMENTS` for `--light`. Parse and strip `--autonomous` and `--verbose` per
+Check the command arguments for `--light`. Parse and strip `--autonomous` and `--verbose` per
 `~/.claude/commands/references/autonomous-mode.md`.
+
+**When `--autonomous` or `--verbose` appears, read
+`~/.claude/commands/references/autonomous-mode.md` in full before emitting the opening
+boundary line or doing any other work.** That file defines the line's exact format, the
+gate suppression this phase applies, and the hop this phase must execute at the end.
+Emitting the boundary line first and reading afterwards is how the format drifts and the
+hop gets skipped.
 
 **Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
 Verbosity Levels format from that reference: the `▶ SET review — starting` line once flags
 are parsed, and the `◀ SET review — {verdict}` line once Step 3 synthesizes (or, under
 `--autonomous`, once Step 3b exits its loop). Under `--autonomous` the same lines carry
 the chain annotation and `[n/N]`; without it, omit both. Emit each line once per run.
+
+**The literal opening line, when `--autonomous` is set** (copy this shape exactly —
+comma before `autonomous chain`, brackets last, nothing parenthesized):
+
+```
+▶ SET review — starting, autonomous chain [n/N]
+```
+
+`[n/N]` depends only on where the run **entered**, which never changes mid-chain:
+
+| Entered at | review's line |
+|---|---|
+| `design` | `[4/5]` |
+| `plan` | `[3/4]` |
+| `build` | `[2/3]` |
+| `review` (typed directly) | `[1/2]` |
+
+Without `--autonomous`, emit `▶ SET review — starting` with no chain annotation.
 
 ```bash
 git diff main...HEAD --stat
@@ -265,12 +290,23 @@ rounds.
 
 Whichever exit fired — `clean`, `no new findings`, `round cap`, `BLOCK`, `lens FAILED` —
 chain to `/set-learn` per the Chaining Contract. Carry forward: `rounds_spent`,
-`exit_condition`, `remaining_findings`, the **branch and worktree location** received from
-`/set-build`, and everything accumulated down the chain that the Autonomous Final Report
-needs (entry phase, phases run, each phase's headline results and artifact paths).
+`exit_condition`, `remaining_findings`, `concerns_raised`, the **branch and worktree
+location** received from `/set-build`, and everything accumulated down the chain that the
+Autonomous Final Report needs (entry phase, phases run, each phase's headline results and
+artifact paths).
+
+Execute the hop now, in this same turn, per **The hop is a procedure, not an intention**:
+read `~/.claude/commands/set-learn.md`, emit `⇢ SET chain — review → learn [n/N]`, then
+execute that file's contents with the carried payload. Pass `--verbose` if set; do **not**
+pass `--autonomous` (see the last-hop exception) — the payload itself is what tells
+`/set-learn` it was reached via a chain.
 
 Nothing here hands back to a human directly. `/set-learn` emits the Final Report, which is
-what the human reads.
+what the human reads. **A `BLOCK` verdict is not an exception to this.** It is a finding
+to report, not a reason to stop the chain: `/set-learn` still runs, still writes shards,
+and still emits the report that tells the user what blocked. Ending the turn after a
+`BLOCK` — or after any verdict — leaves the user with no Final Report at all, which is
+strictly worse than the verdict itself.
 
 ## Step 4: Route the Verdict
 

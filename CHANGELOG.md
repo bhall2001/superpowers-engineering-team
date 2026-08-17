@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.3] — `--autonomous` actually chains
+
+### Fixed
+- **An autonomous run stopped at every phase boundary and waited for you.** `--autonomous` was parsed correctly and announced correctly, then each phase finished its work and ended its turn anyway — so you had to retype the flag on `/set-plan`, `/set-build`, `/set-review` and `/set-learn`, which is exactly what the flag exists to avoid. The handoff to the next phase was the one step in the pipeline described only in prose ("reads the next command file and continues"), with no concrete procedure behind it, and it lost every time to the natural instinct to stop and report at the end of a phase. It is now four explicit steps — resolve the next phase from the fixed chain order, read its command file, announce the hop, execute it in the same turn — written into each phase at the point the hop happens rather than only in the shared contract.
+- **A broken chain was indistinguishable from a finished phase.** Every hop now prints `⇢ SET chain — build → review [n/N]` before it happens, so a chain that breaks is visible in the transcript at the moment it breaks instead of being inferred later from a phase that simply never ran.
+- **Phase counters were wrong.** A run entered at `/set-design` reported `[1/2]` instead of `[1/5]`, and a `/set-review` reached from `/set-build` reported `[3/4]` instead of `[2/3]`. Each phase now carries a precomputed table of its own position for every entry point, so the numbers are looked up rather than derived.
+- **Phase-boundary lines were reformatted from memory** (`▶ SET design — starting (autonomous, chain [1/2])` in place of `▶ SET design — starting, autonomous chain [1/5]`). The exact shape is now stated in each phase file, and phases are told to read the autonomous-mode contract before emitting anything rather than after.
+- **Prose references to the arguments token rendered as empty backticks** in the expanded commands, so `/set-review` was literally instructed to "check `` for `--light`". Those references are now written as plain words; the two genuine substitution points are unchanged.
+
+### Changed
+- **A phase can no longer end an autonomous run because it disagrees with it.** Phases previously halted the chain on judgment — a build that would modify SET's own machinery, a project never `/set-init`'d, tasks with no executable test — which quietly turned a run you asked to be autonomous back into a supervised one. Those concerns are now recorded and carried to the end, where `/set-learn` reports them under **Concerns raised during the run**. Only genuine impossibility stops a chain: a missing command file, a phase with nothing to run on, or a Hard Boundary. A `BLOCK` verdict is explicitly not a stop — the chain still reaches `/set-learn`, because a run that ends without a Final Report is worse than one that reports being blocked.
+
+### Notes
+- **Autonomy is still conversation-only and still never written to disk.** Nothing here makes a chain resumable or lets a stale record re-enter autonomous mode; a broken chain is restarted by typing the flag again.
+- **The Hard Boundaries are unchanged.** An autonomous run still never pushes, opens a PR, merges, or claims the work is verified.
+
 ## [1.5.2] — One-time fix for auto mode blocking updates
 
 ### Added

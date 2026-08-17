@@ -33,7 +33,11 @@ This phase uses Superpowers' brainstorming skill to produce a validated design s
 
      > "Design complete and saved to `<path>`. Ready to plan the implementation? Run `/set-plan <feature-name>` to create a parallel-execution plan for the build workflow."
 
-   - **With `--autonomous`** — do not print the prompt above. After the closing phase-boundary line, chain to `/set-plan` per the Chaining Contract.
+   - **With `--autonomous`** — do not print the prompt above, and do not ask whether to
+     proceed. Chain to `/set-plan` per the Chaining Contract, executing the hop in this
+     same turn: read `~/.claude/commands/set-plan.md`, emit
+     `⇢ SET chain — design → plan [n/N]`, then execute that file's contents with the
+     carried flags and the spec path.
 
 ## Key Difference from Standard Superpowers
 
@@ -70,11 +74,29 @@ Parse `--autonomous` and `--verbose` per
 `~/.claude/commands/references/autonomous-mode.md` and strip them; the remainder
 is the feature idea.
 
+**When `--autonomous` or `--verbose` appears, read
+`~/.claude/commands/references/autonomous-mode.md` in full before emitting the opening
+boundary line or doing any other work.** That file defines the line's exact format, the
+gate suppression this phase applies, and the hop this phase must execute at the end.
+Emitting the boundary line first and reading afterwards is how the format drifts and the
+hop gets skipped.
+
 **Emit phase-boundary lines on every run**, with or without `--autonomous`, in the
 Verbosity Levels format from that reference: the `▶ SET design — starting` line once
 flags are parsed, and the `◀ SET design — {spec path}` line as the phase ends. Under
 `--autonomous` the same lines carry the chain annotation and `[n/N]`; without it, omit
 both. Emit each line once per run — the Autonomous Mode section below does not repeat it.
+
+**The literal opening line, when `--autonomous` is set** (copy this shape exactly —
+comma before `autonomous chain`, brackets last, nothing parenthesized):
+
+```
+▶ SET design — starting, autonomous chain [1/5]
+```
+
+`/set-design` can only ever be an entry phase — nothing chains into it — so its position
+is **always `[1/5]`**. Do not compute this; there is one correct value. Without
+`--autonomous`, emit `▶ SET design — starting` with no chain annotation and no brackets.
 
 If the remainder is empty **and** `--autonomous` is not set, ask: "What would you
 like to build?"
