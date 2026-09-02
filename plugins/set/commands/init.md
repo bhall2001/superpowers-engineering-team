@@ -195,42 +195,192 @@ Tell the user:
 
 ## Step 5: Detect Project Stack
 
+**Detect, do not assume.** A finding counts only if a command below printed
+something. Never infer a language, framework, or layer from the project's name,
+its README prose, or from what similar projects usually have. In particular: a
+project has a UI only if this step finds UI framework evidence — an API-only
+service and a CLI have none.
+
+### 5a: Languages and dependency manifests
+
 ```bash
-echo "=== Language ==="
-ls *.py pyproject.toml setup.py 2>/dev/null && echo "Python detected"
-ls package.json tsconfig.json 2>/dev/null && echo "JavaScript/TypeScript detected"
-ls go.mod 2>/dev/null && echo "Go detected"
-ls Cargo.toml 2>/dev/null && echo "Rust detected"
-
-echo "=== Package manager ==="
-ls pnpm-lock.yaml yarn.lock bun.lock package-lock.json 2>/dev/null
-
-echo "=== Framework ==="
-cat package.json 2>/dev/null | grep -E '"(next|react|vue|svelte|astro|express|fastify|hono|tanstack)"' | head -5
-cat pyproject.toml 2>/dev/null | head -20
-
-echo "=== Test runner ==="
-ls jest.config* vitest.config* playwright.config* cypress.config* pytest.ini conftest.py 2>/dev/null
-cat package.json 2>/dev/null | grep -E '"test"' | head -1
-
-echo "=== Linter ==="
-ls .eslintrc* eslint.config* biome.json .ruff.toml ruff.toml 2>/dev/null
-
-echo "=== Type checker ==="
-ls tsconfig.json mypy.ini 2>/dev/null
-
-echo "=== Database ==="
-ls drizzle.config* prisma/schema.prisma alembic.ini 2>/dev/null
-grep -rl "drizzle\|prisma\|sqlalchemy\|typeorm\|sequelize" src/db/ src/lib/db/ 2>/dev/null | head -3
-
-echo "=== API layer ==="
-ls src/routes/ src/api/ app/api/ pages/api/ 2>/dev/null | head -5
-
-echo "=== CI ==="
-ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -3
+echo "=== Manifests ==="
+ls package.json deno.json jsr.json 2>/dev/null                                   # JS/TS
+ls pyproject.toml setup.py setup.cfg requirements*.txt Pipfile 2>/dev/null       # Python
+ls composer.json 2>/dev/null                                                     # PHP
+ls *.csproj *.fsproj *.sln Directory.Packages.props packages.config 2>/dev/null  # .NET
+ls Gemfile *.gemspec 2>/dev/null                                                 # Ruby
+ls pom.xml build.gradle build.gradle.kts settings.gradle* 2>/dev/null            # Java/Kotlin
+ls go.mod 2>/dev/null                                                            # Go
+ls Cargo.toml 2>/dev/null                                                        # Rust
+ls Package.swift *.xcodeproj 2>/dev/null                                         # Swift
+ls pubspec.yaml 2>/dev/null                                                      # Dart/Flutter
+ls mix.exs 2>/dev/null                                                           # Elixir
+ls CMakeLists.txt Makefile meson.build 2>/dev/null                               # C/C++
+ls DESCRIPTION 2>/dev/null                                                       # R
 ```
 
-Report: "I detected [languages], [framework], [test runner], [linter], [type checker], [database], [API layer]."
+Manifests can be nested (a monorepo, or `src/` / `backend/` / `services/`), so if the
+root looks empty, widen once before concluding:
+
+```bash
+find . -maxdepth 3 \( -name node_modules -o -name vendor -o -name .git -o -name target \
+  -o -name dist -o -name build -o -name .venv -o -name venv \) -prune -o \
+  -type f \( -name package.json -o -name pyproject.toml -o -name requirements.txt \
+  -o -name composer.json -o -name Gemfile -o -name go.mod -o -name Cargo.toml \
+  -o -name pom.xml -o -name 'build.gradle*' -o -name '*.csproj' -o -name mix.exs \
+  -o -name pubspec.yaml \) -print 2>/dev/null | head -20
+```
+
+As a last resort, when no manifest is found anywhere, fall back to source-file counts —
+and say so in the report, because a language without a manifest usually means no
+dependency layer to route tasks around:
+
+```bash
+git ls-files 2>/dev/null | sed -n 's/.*\.\([A-Za-z0-9]\{1,10\}\)$/\1/p' | sort | uniq -c | sort -rn | head -15
+```
+
+### 5b: Lockfiles / package manager
+
+```bash
+ls pnpm-lock.yaml yarn.lock bun.lock package-lock.json 2>/dev/null
+ls poetry.lock uv.lock Pipfile.lock pdm.lock 2>/dev/null
+ls composer.lock Gemfile.lock go.sum Cargo.lock packages.lock.json mix.lock 2>/dev/null
+```
+
+### 5c: Frameworks — read each manifest that 5a actually found
+
+Only run the greps for manifests that exist. Each command below is scoped to one
+ecosystem; do not treat a hit in one as evidence about another.
+
+```bash
+# JS/TS
+grep -E '"(next|react|react-native|vue|nuxt|svelte|@angular/core|solid-js|astro|remix|qwik|lit|htmx|express|fastify|hono|nestjs|koa|@tanstack)' package.json 2>/dev/null | head -8
+
+# Python
+grep -iE '(django|flask|fastapi|starlette|litestar|pyramid|tornado|aiohttp|sanic|streamlit|dash|celery|pydantic|sqlalchemy)' pyproject.toml requirements*.txt setup.py Pipfile 2>/dev/null | head -8
+
+# PHP
+grep -E '"(laravel/|symfony/|slim/|cakephp/|yiisoft/|laminas/|drupal/|wordpress|livewire|inertiajs)' composer.json 2>/dev/null | head -8
+
+# .NET
+grep -hoE 'Include="(Microsoft\.AspNetCore[^"]*|Microsoft\.EntityFrameworkCore[^"]*|Blazor[^"]*|MassTransit|Dapper|MediatR)"' *.csproj **/*.csproj 2>/dev/null | sort -u | head -8
+grep -E '<(Project Sdk|TargetFramework|OutputType)' *.csproj 2>/dev/null | head -5
+
+# Ruby
+grep -E "gem ['\"](rails|sinatra|hanami|grape|roda|rack|sidekiq|rspec)" Gemfile 2>/dev/null | head -8
+
+# Java/Kotlin
+grep -oE '(spring-boot[a-z-]*|quarkus[a-z-]*|micronaut[a-z-]*|jakarta\.[a-z]+|ktor[a-z-]*)' pom.xml build.gradle build.gradle.kts 2>/dev/null | sort -u | head -8
+
+# Go / Rust / Elixir / Dart
+grep -E '(gin-gonic|echo|fiber|chi|gorilla|gorm|sqlc|ent\.)' go.mod 2>/dev/null | head -5
+grep -E '^(axum|actix-web|rocket|warp|tokio|diesel|sqlx|leptos|yew|tauri|bevy)' Cargo.toml 2>/dev/null | head -8
+grep -E '[:{](phoenix|ecto|plug|absinthe)' mix.exs 2>/dev/null | head -5
+grep -E '^\s+(flutter|dio|riverpod|bloc):' pubspec.yaml 2>/dev/null | head -5
+```
+
+### 5d: UI presence — decide explicitly, and default to "none"
+
+The project has a UI **only** if one of these prints something. An API service, a
+CLI, a library, a data pipeline, and a worker all legitimately have no UI, and
+scaffolding a UI specialist for one is a defect, not a harmless extra.
+
+The counting probes print `0` when there is no evidence — read the number, not the
+mere presence of output:
+
+```bash
+echo "=== UI evidence ==="
+echo -n "component/template files: "
+git ls-files 2>/dev/null | grep -icE '\.(jsx|tsx|vue|svelte|astro|razor|cshtml|blade\.php|erb|haml|slim|hbs|mustache|twig|jinja2?|html?|xaml|storyboard|dart)$'
+echo -n "stylesheets: "
+git ls-files 2>/dev/null | grep -icE '\.(css|scss|sass|less|styl)$'
+echo -n "js ui deps: "
+grep -cE '"(react|react-native|vue|svelte|@angular/core|solid-js|astro|lit|htmx)"' package.json 2>/dev/null || echo 0
+echo "template dirs:"; ls -d templates/ views/ resources/views/ app/views/ Pages/ Views/ Components/ 2>/dev/null
+echo "asset roots:";   ls -d public/ static/ wwwroot/ assets/ 2>/dev/null
+```
+
+Weigh the counts. A handful of `.html` files is a coverage report, a docs page, or
+an email template — not a UI. Stylesheets or an `assets/` directory alone prove
+nothing. What proves a UI is a body of component/template files, or a declared UI
+framework dependency.
+
+Classify the project as exactly one of, and state which in the report:
+
+- **UI present** — component/template files or a UI framework dependency found.
+  Note *which kind*: client-side SPA, server-rendered templates, mobile, or desktop.
+- **API/service only** — HTTP handlers, RPC, or message consumers, but no UI evidence.
+- **CLI / library / job** — neither.
+
+### 5e: Test runner, linter, type checker, formatter
+
+```bash
+echo "=== Test ==="
+ls jest.config* vitest.config* playwright.config* cypress.config* karma.conf* 2>/dev/null
+ls pytest.ini conftest.py tox.ini nose.cfg 2>/dev/null
+ls phpunit.xml phpunit.xml.dist pest.php 2>/dev/null
+ls .rspec spec/spec_helper.rb 2>/dev/null
+ls -d test/ tests/ spec/ __tests__/ 2>/dev/null
+grep -E '"test"' package.json 2>/dev/null | head -1
+grep -E '\[tool\.(pytest|hatch\.envs)' pyproject.toml 2>/dev/null | head -3
+grep -E '"scripts"' composer.json 2>/dev/null | head -1
+
+echo "=== Lint / format / types ==="
+ls .eslintrc* eslint.config* biome.json .prettierrc* 2>/dev/null
+ls .ruff.toml ruff.toml .flake8 .pylintrc mypy.ini setup.cfg 2>/dev/null
+ls .php-cs-fixer*.php phpcs.xml* phpstan.neon* psalm.xml 2>/dev/null
+ls .rubocop.yml .editorconfig .golangci.yml rustfmt.toml clippy.toml 2>/dev/null
+ls tsconfig.json jsconfig.json .Directory.Build.props 2>/dev/null
+grep -E '<(Nullable|TreatWarningsAsErrors|EnableNETAnalyzers)>' *.csproj 2>/dev/null | head -3
+```
+
+### 5f: Data layer
+
+```bash
+ls drizzle.config* prisma/schema.prisma alembic.ini 2>/dev/null                  # JS/Python
+ls -d migrations/ db/migrate/ database/migrations/ Migrations/ priv/repo/ 2>/dev/null
+grep -lE '(drizzle|prisma|typeorm|sequelize|knex|mongoose)' package.json 2>/dev/null
+grep -liE '(sqlalchemy|alembic|django\.db|tortoise|psycopg|asyncpg|pymongo)' pyproject.toml requirements*.txt 2>/dev/null
+grep -lE '(doctrine/|illuminate/database|eloquent)' composer.json 2>/dev/null
+grep -lE '(EntityFrameworkCore|Dapper|NHibernate)' *.csproj 2>/dev/null
+grep -lE 'gem ["'"'"'](activerecord|sequel|mongoid)' Gemfile 2>/dev/null
+docker compose config --services 2>/dev/null | head -10
+```
+
+### 5g: API layer
+
+```bash
+ls -d src/routes/ src/api/ app/api/ pages/api/ routes/ api/ Controllers/ app/Http/Controllers/ 2>/dev/null
+ls openapi.* swagger.* *.proto 2>/dev/null
+git ls-files 2>/dev/null | grep -icE '(controller|handler|endpoint|resolver|router)s?\.[a-z]+$'
+```
+
+### 5h: CI and container
+
+```bash
+ls .github/workflows/*.y*ml .gitlab-ci.yml azure-pipelines.yml Jenkinsfile .circleci/config.yml 2>/dev/null | head -5
+ls Dockerfile* docker-compose*.y*ml .devcontainer/devcontainer.json 2>/dev/null
+```
+
+### 5i: Report
+
+Report only what the commands actually printed, in this shape:
+
+```
+Languages:    {from manifests found, with the manifest that proved each}
+Frameworks:   {per ecosystem, or "none detected"}
+Project type: {UI present (kind) | API/service only | CLI/library/job}
+Tests:        {runner + command, or "none detected"}
+Lint/types:   {tools, or "none detected"}
+Data layer:   {ORM/migrations, or "none detected"}
+API layer:    {routes/controllers/proto, or "none detected"}
+CI:           {workflows, or "none detected"}
+```
+
+Write "none detected" rather than guessing. If a detection looks wrong to the user,
+they correct it here — Steps 6 and 7 consume this report, so a wrong entry becomes a
+wrong specialist.
 
 ## Step 6: Augment CLAUDE.md
 
@@ -263,6 +413,28 @@ Specialists live in `.claude/agents/`; dated learnings in `.claude/set/learnings
 6. Self-review against acceptance criteria
 7. Only mark a task complete when ALL checks pass — a fresh verifier confirms the bar before the work is folded back
 
+### Testing Principles (enforced by /set-build for every builder)
+1. Fewer, longer tests — one test per behavior/workflow, not one per assertion.
+   Multiple related assertions in one test is expected, not a smell.
+2. No shared mutable setup hooks (`beforeEach`/`afterEach`, pytest fixtures,
+   `@BeforeEach`, etc.) — inline setup per test. Extract a shared plain
+   function only after real duplication pain across many tests.
+3. No tautological assertions — an assertion needs an independent oracle.
+   Reject identity predicates, constant-to-self pins, algorithm echoes
+   (rebuilding `expected` with the same logic as the code under test), and
+   self-equality checks.
+4. High bar to add a test, especially slow/integration ones — default to
+   not adding one; add only when it falsifies real behavior a faster test
+   can't reach.
+5. No regression tests for improbable bugs unless the flow's importance
+   justifies the ongoing maintenance cost.
+6. No prose/copy-pinning — don't assert on incidental strings (descriptions,
+   warnings). Test behavior and contracts, not copy.
+7. Absence assertions only when state flips (present → action → absent) —
+   not as a lone post-deletion check.
+8. Pick the lightest test flavor that can falsify the behavior — unit
+   before integration before end-to-end.
+
 ### Build Commands
 - Tests: `[DETECTED_TEST_COMMAND]`
 - Lint: `[DETECTED_LINT_COMMAND]`
@@ -273,10 +445,15 @@ Specialists live in `.claude/agents/`; dated learnings in `.claude/set/learnings
 
 The TDD loop above is copied verbatim from `references/tdd-loop.md` — read it from
 there rather than retyping it, so this block and `/set-update`'s migration stay
-identical.
+identical. The Testing Principles block is copied verbatim from
+`references/testing-principles.md` the same way.
 
 Replace `[DETECTED_*]` placeholders with actual commands from Step 5. Omit any line
 whose command was not detected — an empty placeholder is worse than an absent line.
+"Dev server" in particular does not exist for a library, CLI, or worker; drop the
+line rather than inventing one. Write each command in the project's own idiom
+(`pytest`, `composer test`, `dotnet test`, `bundle exec rspec`, `go test ./...`,
+`mix test`, `./gradlew test`) — never normalize to an `npm run` form.
 
 Show the user exactly what will be appended. Get confirmation before writing.
 
@@ -292,15 +469,45 @@ If agents exist, read each and report what domains are covered. Identify gaps ba
 
 ### 7b: Determine which specialists to scaffold
 
-| Detected | Agent to scaffold | Covers |
-|---|---|---|
-| Database (Drizzle, Prisma, SQLAlchemy, etc.) | `db-specialist.md` | Schema, migrations, queries, ORM patterns |
-| React/Vue/Svelte/frontend framework | `ui-specialist.md` | Components, state management, styling, accessibility |
-| API routes / Express / FastAPI | `api-specialist.md` | Endpoints, validation, error handling, auth |
-| Test runner detected | `qa-specialist.md` | Test strategy, edge cases, integration tests, spec compliance |
-| TypeScript or Python with types | `architect.md` | Type design, module boundaries, dependency direction |
+Drive this table **only** from the Step 5i report. Each row's trigger names the
+evidence that must be present; if Step 5 wrote "none detected" for that evidence,
+the row does not fire.
 
-Only propose agents for domains actually present. Do NOT scaffold agents for absent domains.
+| Trigger (from Step 5i) | Agent to scaffold | Covers |
+|---|---|---|
+| Data layer detected (any ORM, migrations dir, or schema file) | `db-specialist.md` | Schema, migrations, queries, ORM patterns |
+| Project type is **UI present** | `ui-specialist.md` | Components/templates, state, styling, accessibility |
+| API layer detected (routes, controllers, handlers, `.proto`, OpenAPI) | `api-specialist.md` | Endpoints, validation, error handling, auth |
+| Test runner detected | `qa-specialist.md` | Test strategy, lean coverage, integration tests, spec compliance |
+| Any typed language, or a type checker / static analyzer configured | `architect.md` | Type design, module boundaries, dependency direction |
+
+**The UI row is the one that goes wrong.** Scaffold `ui-specialist` only when Step 5d
+classified the project as *UI present*. An API-only service, a CLI, a library, a data
+pipeline, and a worker each get **no** UI specialist — an idle specialist is not
+harmless, because `/set-plan` will route tasks to it and `/set-build` will spawn it.
+If you scaffold one, name in the proposal the file or dependency that proved the UI,
+and match the agent to the *kind* found: an SPA specialist is wrong for a Blade,
+Razor, ERB, or Jinja codebase, and both are wrong for Flutter or SwiftUI.
+
+Name and describe every agent after the **detected** stack, not a default one:
+`django-api`, `laravel-eloquent`, `efcore-data`, `fastapi-service`, `rails-views`
+all beat a generic label. Nothing about the roster is fixed — these five rows are a
+floor, not a ceiling. Propose an extra specialist when Step 5 surfaced a substantial
+domain the table misses (infrastructure/IaC, data pipeline, ML, mobile, embedded,
+game, CLI/DX, messaging), and skip a listed row whose domain is trivial in this
+project.
+
+Present the proposed roster with its evidence and let the user cut or add before
+anything is written:
+
+```
+Proposed specialists (from detection):
+  ✓ {agent}  ← {the Step 5 evidence that triggered it}
+  ✗ {agent}  ← not scaffolded: {what was absent}
+```
+
+Only propose agents for domains actually present. Do NOT scaffold agents for absent
+domains, and never scaffold a full default roster "just in case".
 
 ### 7c: Write agent files
 
@@ -327,6 +534,7 @@ You are a {domain} specialist agent in the SET workflow. You have deep expertise
 
 ## Conventions
 - {Domain-specific conventions from CLAUDE.md or detected patterns}
+- Follow `references/testing-principles.md` for any tests you write or review.
 ```
 
 **Frontmatter rules (these make the agent spawnable — do not skip):**
@@ -374,6 +582,7 @@ Pipeline: /set-design → /set-plan → /set-build → /set-review → /set-lear
 Stack detected:
   Languages:    [detected]
   Framework:    [detected]
+  Project type: [UI present (kind) | API/service only | CLI/library/job]
   Test runner:  [detected]
   Linter:       [detected]
   Type checker: [detected]
@@ -381,11 +590,8 @@ Stack detected:
 Execution:   Agent Teams (default for /set-build) — dynamic workflows available via /set-build --use-workflow
 Learnings:   [✓ .claude/set/ is trackable by git | ⚠ gitignored — learnings will not persist]
 Domain specialists scaffolded:
-  .claude/agents/db-specialist.md       — [if created]
-  .claude/agents/ui-specialist.md       — [if created]
-  .claude/agents/api-specialist.md      — [if created]
-  .claude/agents/qa-specialist.md       — [if created]
-  .claude/agents/architect.md           — [if created]
+  [one line per agent actually written, with the evidence that triggered it —
+   list nothing for domains this project does not have]
 
 Directories created:
   .claude/plans/                  — Implementation plans

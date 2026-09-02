@@ -25,7 +25,7 @@ WORKFLOW:
 
    --- STAGE 2: CODE QUALITY ---
    f. Run the FULL test suite
-   g. Review: test quality, edge cases, architecture patterns, security (injection/XSS/secrets/validation), DRY
+   g. Review: test leanness per `references/testing-principles.md` (flag bloat, shared-fixture overuse, tautological assertions), architecture patterns, security (injection/XSS/secrets/validation), DRY
    h. If quality issues found: create fix task, message builder with specifics
    i. Both stages pass → message team lead confirming task passed QA
 

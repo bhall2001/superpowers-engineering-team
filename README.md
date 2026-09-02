@@ -212,11 +212,68 @@ Also available from `claude-plugins-official`: `clangd-lsp`, `csharp-lsp`, `gopl
 
 > **Caveat.** Anthropic does not explicitly document "one language server process per session." The per-session model is inferred from the plugin architecture and from docs noting memory pressure across concurrent sessions.
 
+## Language and Framework Neutrality
+
+**SET is not intended to favor any language, framework, or stack.** Nothing in the
+pipeline is written against a particular ecosystem: `/set-plan`, `/set-build`, and
+`/set-review` route work to whatever specialists exist in `.claude/agents/`, and those
+are scaffolded from what `/set-init` actually finds in your repo.
+
+`/set-init` detects, it does not assume. It classifies every project as **UI present**,
+**API/service only**, or **CLI/library/job**, and a specialist is proposed only when
+there is evidence for its domain — an API-only service and a CLI get no UI specialist.
+When a UI *is* found, the specialist is matched to the kind found, so a Blade, Razor,
+ERB, or Jinja codebase does not get a specialist written for a JavaScript SPA.
+
+### Ecosystems SET detects today
+
+Detection is by dependency manifest, and each ecosystem's framework, test, lint, and
+data-layer probes are scoped to that ecosystem:
+
+| Ecosystem | Manifests detected |
+|---|---|
+| JavaScript / TypeScript | `package.json`, `deno.json`, `jsr.json` |
+| Python | `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements*.txt`, `Pipfile` |
+| PHP | `composer.json` |
+| .NET (C# / F#) | `*.csproj`, `*.fsproj`, `*.sln`, `Directory.Packages.props`, `packages.config` |
+| Ruby | `Gemfile`, `*.gemspec` |
+| Java / Kotlin | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle*` |
+| Go | `go.mod` |
+| Rust | `Cargo.toml` |
+| Swift | `Package.swift`, `*.xcodeproj` |
+| Dart / Flutter | `pubspec.yaml` |
+| Elixir | `mix.exs` |
+| C / C++ | `CMakeLists.txt`, `Makefile`, `meson.build` |
+| R | `DESCRIPTION` |
+
+Package managers recognized include npm, pnpm, yarn, bun, pip, poetry, uv, pipenv, pdm,
+Composer, NuGet, Bundler, Maven, Gradle, Go modules, Cargo, Hex, and pub. Manifests
+nested in a monorepo or under `src/`, `backend/`, or `services/` are found too.
+
+A language missing from this table is not blocked — SET falls back to source-file
+counts, and you can write specialist agents in `.claude/agents/` by hand. What you lose
+is automatic detection and routing.
+
+### Need a language that isn't here?
+
+Reach out to Bob Hall (<bob@bobhall.net>) or
+[open an issue](https://github.com/bhall2001/superpowers-engineering-team/issues) with:
+
+- The language and, if relevant, the framework
+- Its dependency manifest and lockfile names
+- Its usual test runner, linter, formatter, and type checker commands
+- Its migration/ORM conventions, if it has a data layer
+- Whether projects in it typically have a UI, and of what kind
+
+Bias reports are as welcome as additions. If `/set-init` scaffolds a specialist your
+project has no use for — or misses one it needs — that is a bug worth reporting, and
+the detection output from Step 5 is the useful thing to include.
+
 ## Current Status
 
 SET is functional and has been used in production development, but it is early-stage.
 
-- Tested on one production codebase (TypeScript/React + Python + PostgreSQL + AWS)
+- Tested on one production codebase (TypeScript/React + Python + PostgreSQL + AWS). Stack detection covers many more ecosystems than that (see [Language and Framework Neutrality](#language-and-framework-neutrality)), but they have had less real-world exercise — reports welcome
 - The workflow will evolve as more teams use it
 - The default `/set-build` path runs on Claude Code's Agent Teams (experimental; the installer sets the required env flag). `/set-review` and `/set-build --use-workflow` run on dynamic workflows (Pro/Max/Team/Enterprise; Pro opt-in via `/config`)
 - Token cost is higher than single-agent work — this is a premium workflow that trades cost for quality

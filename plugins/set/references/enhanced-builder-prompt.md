@@ -13,6 +13,7 @@ WORKFLOW — TDD LOOP:
 
 5. WRITE FAILING TESTS FIRST (TDD Red Phase):
    - Follow the "TDD Steps" section in the task description
+   - Follow `references/testing-principles.md` — one test per workflow/behavior, no shared setup hooks, no tautological assertions
    - Run them — they MUST fail. If they pass, your test isn't testing new behavior
    - If no TDD steps, write tests for the acceptance criteria before coding
 
@@ -31,7 +32,7 @@ WORKFLOW — TDD LOOP:
     Check EVERY item in the task's acceptance criteria and self-review checklist:
     - Did I implement exactly what was specified?
     - Did I add anything beyond spec? Remove it.
-    - Do my tests cover happy path AND at least one edge case?
+    - Are my tests workflow-shaped per `references/testing-principles.md` — no redundant or tautological cases, lightest flavor that falsifies the behavior?
     - Does my code follow CLAUDE.md conventions and the learning shards?
     - Any hardcoded values, missing validation, or security issues?
     If ANY check fails: fix it, rerun tests, re-check.

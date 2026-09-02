@@ -6,7 +6,8 @@ file, so edit it here and nowhere else.
 
 ```markdown
 ### Per-Task TDD Loop (enforced by /set-build for every builder)
-1. Write failing tests first (TDD red phase)
+1. Write failing tests first (TDD red phase) — one test per workflow/behavior,
+   per `references/testing-principles.md`, not one per assertion
 2. Implement minimal code to pass (TDD green phase)
 3. Refactor while keeping tests green
 4. Run tests — if fail: read error, fix, retry
