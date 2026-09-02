@@ -207,6 +207,9 @@ The bar EVERY task must clear before the execution path folds its output back:
 - **Spec compliance:** every "Done when" criterion met; nothing implemented beyond spec.
 - **Quality gates:** lint and typecheck commands from CLAUDE.md "Build Commands" pass clean.
 - **Self-review:** every item in the task's Self-Review Checklist is satisfied.
+- **Test leanness:** tests follow `references/testing-principles.md`. This is advisory,
+  not a blocking gate — record bloat, shared-fixture setup, or tautological assertions
+  in the verdict's `notes` field. Never add a new verdict field for this.
 
 ### A5: Define the escalation policy
 What the execution path does when a task can't meet the bar after its own revise loop: stop that task, record the specific failing criterion + what was tried, and return it as a **failed task** in the report (do NOT fold partial/failing work back as if it passed). Other independent tasks continue.
