@@ -46,6 +46,17 @@ If present, propose replacing **that heading and its numbered list** (steps 1–
 
 Show the user a diff of the old block vs. the new block. Apply only on confirmation.
 
+**Then check for the Testing Principles block.** Search `CLAUDE.md` for the heading
+`### Testing Principles`. If **absent**, propose inserting the fenced block from
+`references/testing-principles.md` — read it from there, verbatim — immediately after
+the `### Per-Task TDD Loop` block (or, if that block is also being added/replaced in
+this same step, immediately after it in the new content). If the heading is **already
+present**, leave it untouched — this migration only adds a missing block, it never
+rewrites an existing one (a present block may carry project-specific customization).
+
+Show the user a diff (empty-to-new, since this is an insertion) and apply only on
+confirmation. Report this alongside the TDD-loop migration result in Step 1d.
+
 #### 1b: Migrate agent scaffolds in `.claude/agents/*.md`
 
 For each file, check the opening line for the stale phrase `specialist on a SET Agent Team`. If found, propose replacing **only** that phrase:
@@ -152,7 +163,7 @@ Print nothing when neither artifact was present.
 
 #### 1d: Report migration result
 
-List exactly what was migrated (CLAUDE.md block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; shard trackability: already trackable / `.gitignore` fixed / still ignored by choice; stale Serena bookkeeping: removed / already absent) or confirm the project was already current. Note that plans, specs, shards, and taxonomy need no migration — they are format-compatible with 1.0.
+List exactly what was migrated (CLAUDE.md TDD-loop block: yes/no; CLAUDE.md Testing Principles block: yes/no; which agent files had stale-phrase edits; which agent files had frontmatter added, `name:` fixed, or were flagged for review; shard trackability: already trackable / `.gitignore` fixed / still ignored by choice; stale Serena bookkeeping: removed / already absent) or confirm the project was already current. Note that plans, specs, shards, and taxonomy need no migration — they are format-compatible with 1.0.
 
 If shards were just made trackable, say so plainly: the learnings are now visible to `git status` and committing them is the user's call.
 
