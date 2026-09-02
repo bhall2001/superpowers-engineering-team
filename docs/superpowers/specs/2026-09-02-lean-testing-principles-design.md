@@ -24,8 +24,9 @@ in scope, so this applies across all SET projects, not just JS/TS.
 ## Approach
 
 Treat this as a constraint layer on the existing TDD loop, not a redesign. One new
-reference file carries the principles; four existing files get pointed at it or
-edited where they currently reward volume.
+reference file carries the principles; seven existing files get pointed at it or
+edited where they currently reward volume — spanning every pipeline stage from
+project init through build-time verification, not just the per-task bundle.
 
 ### 1. New file: `plugins/set/references/testing-principles.md`
 
@@ -102,6 +103,47 @@ This makes verifier feedback on test quality **advisory** (surfaced in `notes` f
 the human review/`/set-review` pass) rather than a new blocking gate — consistent
 with the "no hard numeric ceiling" decision below.
 
+### 7. `commands/init.md` — CLAUDE.md block and specialist scaffolding
+
+Two separate hooks here, both confirmed by reading the file:
+
+- **CLAUDE.md block (Step 6, lines ~407–422).** The `### Per-Task TDD Loop` block is
+  copied verbatim from `references/tdd-loop.md` into every project's CLAUDE.md, and
+  the comment directly below it says to read that file rather than retype the loop
+  "so this block and `/set-update`'s migration stay identical." Add a parallel
+  `### Testing Principles` block copied verbatim from the new
+  `references/testing-principles.md`, with the same "copied verbatim, read from
+  there" note. This is what makes the principles visible project-wide (any human or
+  agent reading CLAUDE.md), not just injected into per-task bundles at build time.
+  `/set-update`'s migration path picks this up automatically since it already
+  re-syncs the TDD loop block the same way.
+- **Specialist scaffolding (Step 7c, the per-agent starter template).** The
+  generated agent file template has a `## Conventions` section
+  ("Domain-specific conventions from CLAUDE.md or detected patterns"). Add one
+  bullet there, populated for every scaffolded specialist (not just
+  `qa-specialist`): "Follow `references/testing-principles.md` for any tests you
+  write or review." Also fix Step 7b's routing table: `qa-specialist.md`'s "Covers"
+  cell currently reads "Test strategy, **edge cases**, integration tests, spec
+  compliance" — drop "edge cases" (it's the same volume-rewarding phrase flagged in
+  the builder prompt) in favor of "Test strategy, lean coverage, integration tests,
+  spec compliance."
+
+`design.md` was checked and has no test-related content to update — it's pure
+requirements/spec brainstorming with no mention of tests, so it's not a surface for
+this change. Test shape only enters the pipeline at plan time onward.
+
+### 8. `commands/update.md` — migrate existing projects
+
+Confirmed by reading Step 1a: it migrates **only** the TDD-loop heading and its
+numbered list, matched specifically ("that heading and its numbered list") against
+the block `tdd-loop.md` defines. It has no knowledge of a Testing Principles block
+and would silently skip it for projects `/set-init`'d before this change — this is
+a required edit, not just a thing to confirm later. Add a companion migration step
+(1a-equivalent): if `### Testing Principles` is absent from a project's CLAUDE.md,
+propose adding the fenced block from `references/testing-principles.md` verbatim,
+same pattern as the existing TDD-loop migration. Report it alongside the TDD-loop
+migration result in Step 1d.
+
 ## Explicitly out of scope
 
 - **No numeric ceiling** (e.g. "max N tests per task"). Kent's own material never
@@ -121,18 +163,19 @@ with the "no hard numeric ceiling" decision below.
 
 This is a documentation/prompt-spec change — no executable code changes, so no
 automated test suite applies. Verification is: re-read `tdd-loop.md`, `plan.md`,
-`build.md`, `enhanced-builder-prompt.md`, `enhanced-qa-prompt.md` after editing for
-internal consistency (the same "lean tests" phrasing appears at plan-time,
-build-time self-review, QA-time, and verifier-time, all pointing at the one
-`testing-principles.md` source of truth) and confirm no other file duplicates TDD
-loop text that would drift (`tdd-loop.md`'s own header states it is cited, not
-copied, elsewhere — confirm that still holds after edits).
+`build.md`, `init.md`, `update.md`, `enhanced-builder-prompt.md`,
+`enhanced-qa-prompt.md` after editing for internal consistency (the same "lean
+tests" phrasing appears at plan-time, build-time self-review, QA-time,
+verifier-time, and now project-wide via CLAUDE.md and every scaffolded specialist,
+all pointing at the one `testing-principles.md` source of truth) and confirm no
+other file duplicates TDD loop or testing-principles text that would drift
+(`tdd-loop.md`'s own header states it is cited, not copied, elsewhere — the new
+file should carry the same header convention, and both files' "copied verbatim"
+claims into `init.md`'s CLAUDE.md block, and `update.md`'s migration match text,
+must actually match word-for-word after editing).
 
 ## Unresolved Questions
 
 - Shard interaction: should `set-learn` be told to write lean-testing violations
   into learning shards when a builder repeatedly bloats tests? Not designed here —
   can follow naturally once `set-learn` sees the new `notes` content in practice.
-- Whether `/set-init`-scaffolded specialist agents should also get a pointer to
-  `testing-principles.md` in their own definitions, vs. relying solely on the
-  per-task A3 bundle injection. Leaning "injection is enough" but not confirmed.
