@@ -103,14 +103,39 @@ cd {worktree-dir}/{feature-name}
 ```
 
 ### 1d: Run project setup
+
+Prefer the setup command from CLAUDE.md "Build Commands" if one is recorded — it
+was detected against this project and beats the guesses below. Otherwise run only
+the branches whose manifest exists:
+
 ```bash
-if [ -f package.json ]; then npm install || pnpm install || yarn install; fi
-if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-if [ -f pyproject.toml ]; then poetry install || uv sync; fi
-if [ -f go.mod ]; then go mod download; fi
-if [ -f Cargo.toml ]; then cargo build; fi
+# JS/TS — lockfile picks the manager
+if [ -f pnpm-lock.yaml ]; then pnpm install
+elif [ -f yarn.lock ]; then yarn install
+elif [ -f bun.lock ]; then bun install
+elif [ -f package.json ]; then npm install; fi
+
+# Python — resolver order matters; requirements.txt is the fallback, not the default
+if [ -f uv.lock ]; then uv sync
+elif [ -f poetry.lock ]; then poetry install
+elif [ -f Pipfile.lock ]; then pipenv install --dev
+elif [ -f pyproject.toml ]; then pip install -e ".[dev]" || pip install -e .
+elif [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+if [ -f composer.json ]; then composer install; fi                  # PHP
+if ls *.sln *.csproj >/dev/null 2>&1; then dotnet restore; fi       # .NET
+if [ -f Gemfile ]; then bundle install; fi                          # Ruby
+if [ -f go.mod ]; then go mod download; fi                          # Go
+if [ -f Cargo.toml ]; then cargo fetch; fi                          # Rust
+if [ -f mix.exs ]; then mix deps.get; fi                            # Elixir
+if [ -f pubspec.yaml ]; then dart pub get || flutter pub get; fi    # Dart
+if [ -f pom.xml ]; then mvn -q dependency:go-offline; fi            # Maven
+if ls build.gradle build.gradle.kts >/dev/null 2>&1; then ./gradlew dependencies --quiet || gradle dependencies --quiet; fi
 ```
-Use the package manager from CLAUDE.md if specified.
+
+A manifest nested under `src/`, `backend/`, or a monorepo package dir needs the same
+setup run in **that** directory. If no branch fires, do not treat it as an error —
+some projects have no dependency step. Record what ran and move on.
 
 ### 1e: Verify clean baseline
 Run the test suite from CLAUDE.md "Build Commands".
