@@ -104,7 +104,7 @@ High-level strategy. Why this over alternatives.
 - **Shards**: {comma-separated domain names from `.claude/set/taxonomy.md` — the learning shards relevant to this task. Empty list if none apply or taxonomy is empty.}
 - **What**: Clear deliverable
 - **Files**: Specific paths to create/modify
-- **Tests**: What tests to write and exact commands to run them
+- **Tests**: Workflow-shaped test description(s) — one test per behavior end-to-end, not a case list — plus exact commands to run them (see `references/testing-principles.md`)
 - **Blocked by**: Other task slugs (if any)
 - **Done when**: Acceptance criteria — specific, verifiable conditions
 
@@ -118,7 +118,7 @@ High-level strategy. Why this over alternatives.
 #### Self-Review Checklist
 - [ ] All acceptance criteria met — nothing missing
 - [ ] No extra features beyond what was specified
-- [ ] Tests cover happy path AND edge cases
+- [ ] Tests are workflow-shaped per `references/testing-principles.md` — no redundant or tautological cases, lightest flavor that falsifies the behavior
 - [ ] Follows project conventions from CLAUDE.md and the learning shards injected for this task
 - [ ] No hardcoded values, missing validation, or security issues
 
