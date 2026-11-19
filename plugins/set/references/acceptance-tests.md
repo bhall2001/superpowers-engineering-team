@@ -77,5 +77,5 @@ with why — the lead decides.
 
 - `git diff {sha}..HEAD -- {files}` is empty (the builder did not touch them).
 - They pass now, and each was red for a right reason when authored.
-- Throwaway probes and one guard mutation run in a detached worktree, never the shared tree
-  (`commands/build.md` T3).
+- Up to 3 throwaway probes run under a lock, by explicit file path, and are deleted in the
+  same command. No worktrees, no source edits, nothing committed (`commands/build.md` T3).

@@ -79,7 +79,7 @@ Spawns one builder teammate per task, each routed by the task's specialist (matc
 
 **Per-task verification rubric:**
 - Spec compliance (every acceptance criterion verified independently)
-- Acceptance tests present, red for the right reason, green, and unmodified; throwaway probes and a guard mutation in a detached worktree
+- Acceptance tests present, red for the right reason, green, and unmodified; throwaway probe tests (added and removed, never committed)
 - Lint and typecheck clean
 
 ### Wrap Up

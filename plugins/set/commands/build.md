@@ -204,7 +204,7 @@ navigation, use the built-in LSP tool.
 ### A4: Compose the global verification rubric
 The bar EVERY task must clear before the execution path folds its output back:
 - **Acceptance tests (`tdd_followed`):** when the task has Acceptance Workflows, its acceptance tests exist (Phase B0), were red for a right reason, pass now, and are unchanged since the author's commit (`git diff {sha}..HEAD -- {files}` is empty). Any tests the builder added obey the project's testing standard (`CLAUDE.md` names it) and falsify real behavior. A task with `None` is judged on spec, lint and typecheck alone. The verdict key keeps its name; the guard hook and Phase C key off it.
-- **Independent probing:** the verifier tries to break the work beyond the acceptance tests (see T3). A probe that fails is a `failing_criteria` entry.
+- **Independent probing:** the verifier tries to break the work beyond the acceptance tests with throwaway probe files (see T3). A probe that fails is a `failing_criteria` entry.
 - **Spec compliance:** every "Done when" criterion met; nothing implemented beyond spec.
 - **Quality gates:** lint and typecheck commands from CLAUDE.md "Build Commands" pass clean.
 - **Self-review:** every item in the task's Self-Review Checklist is satisfied.
@@ -438,21 +438,26 @@ Agent({
 })
 ```
 
-**Probing block (pass it verbatim).** Beyond the acceptance tests, try to break the work:
+**Probing block (pass it verbatim).** Beyond the acceptance tests, try to break the work.
+No worktrees and no source edits — the verifier only ever adds a file and removes it:
 
 1. Check `git diff {sha}..HEAD -- {acceptance files}` is empty. Any change is a failing criterion.
-2. Work in a throwaway detached worktree, never the shared tree (other agents are running
-   in it): `git worktree add --detach "$TMPDIR/set-verify-{task-id}" HEAD`. Remove it when
-   done. If the project's `CLAUDE.md` gives no way to run tests there, skip steps 3–4 and say
-   so in `notes` — a skipped probe is not a failure.
-3. Write up to 3 throwaway probe tests for behavior the acceptance tests do not reach — an
-   edge, an ordering, a failure path — derived from `Done when`. **Never commit them and
-   never copy them into the project.** A failing probe goes in `failing_criteria` with the
-   failing assertion inline; the builder gets a fix task and adds permanent coverage only if
-   the flow is important and the project's testing standard allows it.
-4. Pick one guard the implementation relies on, break it in the throwaway worktree, and
-   confirm an acceptance test fails for the right reason. None fails → `failing_criteria`:
-   "acceptance tests do not constrain {guard}".
+2. Write up to 3 throwaway probe tests for behavior the acceptance tests do not reach — an
+   edge, an ordering, a failure path — derived from `Done when`. Name each
+   `zz-set-probe-{task-id}-{n}` with the project's normal test extension and put it where the
+   project's runner already finds tests. Follow the project's testing standard for shape.
+3. Take the probe lock before writing: `mkdir "$(git rev-parse --git-common-dir)/set-probe.lock"`
+   (atomic; if it exists, another verifier is probing — retry for up to 2 minutes, then skip).
+   Run each probe by explicit file path with the test command from `CLAUDE.md`, then delete
+   the probe file and the lock in the same command, pass or fail. If `CLAUDE.md` gives no way
+   to run a single test file, skip probing and say so in `notes` — a skipped probe is not a failure.
+4. Never edit an existing file, never commit a probe, never leave one behind. A failing probe
+   goes in `failing_criteria` with the failing assertion inline; the builder gets a fix task
+   and adds permanent coverage only if the flow is important and the project's testing
+   standard allows it.
+5. Do not mutate source to prove a guard. Mutation-proving is the builder's job where the
+   project's standard requires it; check the builder's `notes` name the guard and the test
+   that caught it, and flag a guard with no named test.
 
 **Never pass `name` to a verifier spawn.** A named `Agent` call returns a mailbox receipt
 instead of the agent's final message, so the verdict never reaches you, and there is no
@@ -507,8 +512,9 @@ request shutdown, and report the blocker to the user.
 1. `SendMessage` a shutdown request to each teammate; await acknowledgement. Teammates
    may accept or reject — there is no forced-termination tool.
 2. Run the full test suite one final time.
-3. Collect the per-task verdicts and hand them to Phase C.
-4. Report the worktree location or branch name. Do **not** remove the worktree —
+3. Confirm no `zz-set-probe-*` file or `set-probe.lock` directory remains (`git status --porcelain`, `ls "$(git rev-parse --git-common-dir)"`); remove any stray one.
+4. Collect the per-task verdicts and hand them to Phase C.
+5. Report the worktree location or branch name. Do **not** remove the worktree —
    `/set-review` handles cleanup. Under `--autonomous`, `/set-review` does not clean up
    either; it carries the location forward to `/set-learn`, which hands it to the user in
    the Final Report. Either way, pass the location along.

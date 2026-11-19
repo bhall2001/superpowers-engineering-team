@@ -58,6 +58,7 @@ WORKFLOW — TESTS FIRST, AGAINST TESTS YOU DID NOT WRITE:
 14. No tasks left → message team lead: "All my tasks are done"
 
 RULES:
+- A file named `zz-set-probe-*` belongs to a verifier and lasts seconds: do not edit or delete it; if it fails your run, rerun.
 - NEVER touch the acceptance tests. Tests come before code when the task has behavior to falsify; ceremony without a falsifiable test is not TDD
 - NEVER mark a task complete if any check fails
 - If you need to modify a file another teammate is working on, message them FIRST
