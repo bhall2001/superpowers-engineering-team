@@ -1,12 +1,12 @@
 ---
-description: "Converts an approved design spec into a parallel-execution implementation plan with TDD steps, specialist routing, and shard tagging for dynamic-workflow builders. Use after /set-design produces a spec, when a user says 'create a plan', 'plan this out', or 'ready to plan'. Do NOT use before a design spec exists or when the user wants to jump straight to building."
+description: "Converts an approved design spec into a parallel-execution implementation plan with acceptance workflows, specialist routing, and shard tagging for dynamic-workflow builders. Use after /set-design produces a spec, when a user says 'create a plan', 'plan this out', or 'ready to plan'. Do NOT use before a design spec exists or when the user wants to jump straight to building."
 ---
 
 # SET Plan — Bridge Superpowers Design to a Workflow-Ready Plan
 
 You are running the **planning** phase of the Superpowers Engineering Team (SET) workflow.
 
-Take a Superpowers design spec and produce a plan optimized for parallel dynamic-workflow execution. The `Specialist`, `Shards`, `Blocked by`, TDD-steps, and self-review fields map directly to how `/set-build` compiles its brief: `Specialist` → the builder's `agentType`, `Shards` → injected learning context, `Blocked by` → the workflow's dependency graph, and the TDD + self-review content → the verification rubric.
+Take a Superpowers design spec and produce a plan optimized for parallel dynamic-workflow execution. The `Specialist`, `Shards`, `Blocked by`, acceptance-workflow, and self-review fields map directly to how `/set-build` compiles its brief: `Specialist` → the builder's `agentType`, `Shards` → injected learning context, `Blocked by` → the workflow's dependency graph, `Acceptance Workflows` → the tests a separate author writes before any builder starts, and the acceptance + self-review content → the verification rubric.
 
 ## Input
 
@@ -104,16 +104,16 @@ High-level strategy. Why this over alternatives.
 - **Shards**: {comma-separated domain names from `.claude/set/taxonomy.md` — the learning shards relevant to this task. Empty list if none apply or taxonomy is empty.}
 - **What**: Clear deliverable
 - **Files**: Specific paths to create/modify
-- **Tests**: What tests to write and exact commands to run them
+- **Tests**: Exact commands to run the tests, plus any non-acceptance tests worth adding (the Acceptance Workflows below define what the acceptance tests cover)
 - **Blocked by**: Other task slugs (if any)
 - **Done when**: Acceptance criteria — specific, verifiable conditions
 
-#### TDD Steps
-1. Write failing test(s) for [specific behavior]
-2. Run tests — verify they fail with expected error
-3. Implement minimal code to pass
-4. Run tests — verify green
-5. Refactor if needed, verify still green
+#### Acceptance Workflows
+- {a workflow named as a sentence about behavior, e.g. "offline edit survives reconnect and loses to a newer remote edit"}
+  1. {action} → {what a caller observes}
+  2. {next action} → {what a caller observes}
+
+Or: `None — {scaffolding | types | config | refactor with existing coverage}`.
 
 #### Self-Review Checklist
 - [ ] All acceptance criteria met — nothing missing
@@ -168,7 +168,7 @@ human-facing status only — nothing parses it to decide what to skip.
 
 **Parallelism:** Tasks that touch different files and have no data dependencies should NOT have `Blocked by` entries. Maximize the number of tasks that can run in parallel.
 
-**TDD steps in every task:** Each task includes a TDD cycle. The builder writes the failing test FIRST, then implements. This is enforced in the builder prompt during `/set-build`.
+**Acceptance workflows in every task:** list the workflows a user or caller can perform that this task makes true, each as an ordered action → observable-result sequence. Fewest that cover the task: a workflow is one test, not one per `Done when` line. Write `None` when there is no workflow to falsify (scaffolding, types, config, a refactor already covered). `/set-build` has a separate agent write these as failing tests before any builder starts (`references/acceptance-tests.md`); the builder cannot edit them. If the project's `CLAUDE.md` names a testing standard, workflows must be expressible within it — it governs test shape and count.
 
 **Self-review checklist in every task:** Each task includes the checklist. Builders must check every box before marking complete. This catches spec drift before QA.
 
@@ -183,7 +183,7 @@ human-facing status only — nothing parses it to decide what to skip.
 After writing, review critically:
 - Can tasks actually run in parallel as marked?
 - Are acceptance criteria specific enough to verify?
-- Do TDD steps make sense for each task?
+- Does each task's Acceptance Workflows list name real caller-observable behavior (or an honest `None`), with no per-criterion padding?
 - Any missing tasks?
 
 ### 5. Present for Approval
@@ -196,7 +196,7 @@ After approval:
 
 **With `--autonomous`:** Do not wait, and do not ask the user to approve the plan. Re-read
 the plan against the Step 4 review criteria (parallelism marks are real, acceptance
-criteria are verifiable, TDD steps make sense, no missing tasks) and fix what fails. Then
+criteria are verifiable, acceptance workflows are real, no missing tasks) and fix what fails. Then
 chain to `/set-build {feature-name}` per the Chaining Contract, executing the hop in this
 same turn: read `~/.claude/commands/set-build.md`, emit
 `⇢ SET chain — plan → build [n/N]`, then execute that file's contents with the carried
@@ -204,7 +204,7 @@ flags and the feature name.
 
 **Reservations about the plan do not stop the chain.** If the build looks inadvisable —
 it modifies SET's own machinery, the project was never `/set-init`'d so every task routes
-to `generic` with no shards, or most tasks have no executable test for the TDD loop to
+to `generic` with no shards, or most tasks have no acceptance workflow for the test author to
 grip — record each as a `concerns_raised` entry and chain anyway. Those are judgment calls
 for the human reading the Final Report, not grounds for ending a run they asked to be
 autonomous.

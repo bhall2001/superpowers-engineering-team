@@ -31,7 +31,7 @@ Agents that repeatedly make the same mistake get that mistake added to their ins
 
 **Domain specialist routing.** `/set-init` scaffolds specialist agents (DB, UI, API, QA, architect) based on your detected stack. `/set-plan` tags each task with the best-fit specialist. `/set-build` routes tasks to the right agent.
 
-**Per-task TDD loop.** Every builder writes failing tests first, implements minimal code to pass, then refactors — looping until all checks (tests, lint, typecheck, self-review) pass. A dedicated verifier teammate then audits each task against a rubric (spec compliance, TDD, lint/typecheck), and the team runs a verify-and-revise loop until each task meets the bar.
+**Per-task TDD loop.** A separate agent writes each task's acceptance tests first (workflow-level, and shaped by your project's testing standard); the builder implements against them without editing them, then refactors — looping until all checks (tests, lint, typecheck, self-review) pass. A dedicated verifier teammate then audits each task against a rubric (spec compliance, acceptance tests, independent probes, lint/typecheck), and the team runs a verify-and-revise loop until each task meets the bar.
 
 ## Install
 
@@ -131,7 +131,7 @@ After this one-time upgrade you'll have the v1 `/set-update`, and from then on *
 |---------|-------|-------------|
 | `/set-init` | Setup (once) | Detects stack, scaffolds agents, augments CLAUDE.md, creates directories |
 | `/set-design` | Design | Superpowers brainstorming → approved design spec |
-| `/set-plan` | Plan | Transposes design spec into parallelizable task plan with TDD steps and specialist tags |
+| `/set-plan` | Plan | Transposes design spec into parallelizable task plan with acceptance workflows and specialist tags |
 | `/set-build` | Build | Native Agent Team — spawns builder teammates (one per task, routed by specialist) each running the per-task TDD loop, plus a dedicated verifier teammate per task that checks it against a rubric. `--use-workflow` runs the same brief as a dynamic workflow instead |
 | `/set-review` | Review | Dynamic-workflow fan-out across 4 lenses (spec compliance, security, architecture, correctness) × affected modules; `--light` runs 4 plain parallel subagents for small diffs |
 | `/set-learn` | Learn | Extracts learnings to CLAUDE.md + evolves agent definitions based on cycle performance |

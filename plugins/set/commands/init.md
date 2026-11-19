@@ -255,7 +255,8 @@ This project uses the Superpowers Engineering Team workflow:
 Specialists live in `.claude/agents/`; dated learnings in `.claude/set/learnings/{domain}.md`.
 
 ### Per-Task TDD Loop (enforced by /set-build for every builder)
-1. Write failing tests first (TDD red phase)
+0. Read the testing standards this file names, if any, before writing a test — they govern test shape and count and override this loop
+1. Write failing tests first (TDD red phase) — the task's acceptance tests are already written and read-only; add your own only for behavior they cannot reach, and confirm each fails for the RIGHT reason
 2. Implement minimal code to pass (TDD green phase)
 3. Refactor while keeping tests green
 4. Run tests — if fail: read error, fix, retry

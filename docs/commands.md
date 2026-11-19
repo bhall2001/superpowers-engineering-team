@@ -35,7 +35,7 @@ Reads the latest design spec and transposes it into a parallelizable task plan o
 
 **Each task in the plan includes:**
 - Acceptance criteria ("Done when...")
-- TDD steps (specific tests to write first)
+- Acceptance workflows (the caller-observable behavior a separate agent turns into failing tests first)
 - Self-review checklist
 - Specialist tag (which agent should handle it)
 - Dependency links (blockedBy)
@@ -68,10 +68,10 @@ Creates a `feat/{feature-name}` branch in an isolated worktree. Runs project set
 Precedence: CLI flag > CLAUDE.md > default (enabled). In no-worktree mode, project setup and baseline tests still run, but on the current branch with no `cd`.
 
 ### Step 2–4: Parallel Build and Verify
-Spawns one builder teammate per task, each routed by the task's specialist (matched from `.claude/agents/`). Each builder runs the per-task TDD loop. A dedicated verifier teammate — one that did not write the code — then checks each task against a rubric before it folds back. SET no longer hand-rolls retry or escalation mechanics: the team runs a verify-and-revise loop until each task meets the bar.
+Spawns one builder teammate per task, each routed by the task's specialist (matched from `.claude/agents/`). A separate test author first writes each task's acceptance tests, which the builder cannot edit. Each builder then runs the per-task TDD loop against them. A dedicated verifier teammate — one that did not write the code — then checks each task against a rubric before it folds back. SET no longer hand-rolls retry or escalation mechanics: the team runs a verify-and-revise loop until each task meets the bar.
 
 **Per-task TDD loop:**
-1. Write failing tests first
+1. Acceptance tests are already written (read-only); run them red, add your own only for what they cannot reach
 2. Implement minimal code to pass
 3. Refactor while keeping green
 4. Lint → typecheck → self-review
@@ -79,7 +79,7 @@ Spawns one builder teammate per task, each routed by the task's specialist (matc
 
 **Per-task verification rubric:**
 - Spec compliance (every acceptance criterion verified independently)
-- TDD discipline (failing test first, then green)
+- Acceptance tests present, red for the right reason, green, and unmodified; throwaway probes and a guard mutation in a detached worktree
 - Lint and typecheck clean
 
 ### Wrap Up

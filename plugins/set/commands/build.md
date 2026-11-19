@@ -185,7 +185,7 @@ the bundle entirely — an empty heading is noise that costs every builder token
 
 ### A3: Assemble the per-task context bundle
 ```
-{full task description from plan, INCLUDING TDD Steps, Files, Tests, Done-when, and Self-Review Checklist}
+{full task description from plan, INCLUDING Acceptance Workflows, Files, Tests, Done-when, and Self-Review Checklist}
 
 ## Specialist guidance
 Read `.claude/agents/{Specialist}.md` and use it as base context for this task.
@@ -203,7 +203,8 @@ navigation, use the built-in LSP tool.
 
 ### A4: Compose the global verification rubric
 The bar EVERY task must clear before the execution path folds its output back:
-- **TDD discipline:** a failing test was written first (red), minimal code made it pass (green), then refactor — tests stay green.
+- **Acceptance tests (`tdd_followed`):** when the task has Acceptance Workflows, its acceptance tests exist (Phase B0), were red for a right reason, pass now, and are unchanged since the author's commit (`git diff {sha}..HEAD -- {files}` is empty). Any tests the builder added obey the project's testing standard (`CLAUDE.md` names it) and falsify real behavior. A task with `None` is judged on spec, lint and typecheck alone. The verdict key keeps its name; the guard hook and Phase C key off it.
+- **Independent probing:** the verifier tries to break the work beyond the acceptance tests (see T3). A probe that fails is a `failing_criteria` entry.
 - **Spec compliance:** every "Done when" criterion met; nothing implemented beyond spec.
 - **Quality gates:** lint and typecheck commands from CLAUDE.md "Build Commands" pass clean.
 - **Self-review:** every item in the task's Self-Review Checklist is satisfied.
@@ -309,6 +310,25 @@ session, and hits the identical failure.
 Do not persist the answer to `config.json`. This gate asks each cycle while
 Agent Teams are unavailable — the choice is not persisted between runs.
 
+## Phase B0 — Author Acceptance Tests (both paths)
+
+Run after the availability gate, before any builder exists. **Read
+`references/acceptance-tests.md` first** — it holds the author prompt, the sequencing rule,
+and the read-only block the builder receives.
+
+For each task whose Acceptance Workflows are not `None`, spawn one **unnamed** test author
+(team path: `Agent`; `--use-workflow`: `agent({schema})`). Tasks with a `Blocked by` list
+wait for those tasks' authors; independent tasks run in parallel, ceiling 4. Append each
+author's result to that task's A3 bundle as the `## Acceptance tests (read-only)` block,
+so `TaskCreate` (T1) and the workflow builders both carry it.
+
+The project's testing standard governs what authors write. If `CLAUDE.md` names testing
+docs, the author prompt already tells them to read those first; a suite that breaks the
+standard's own enforcement test is a failed author, not a finished one.
+
+Wrong-reason red after one retry fails the task per A5. Under `--verbose`, emit
+`→ spawn test-author :: {task name}` and `← test-author :: {n} tests, red ok|red wrong`.
+
 ## Phase B — Fork by Execution Mode
 
 Phase A above and Phase C below are **shared and harness-agnostic** — they run
@@ -352,9 +372,9 @@ TaskCreate({
 })
 ```
 
-The `description` carries the **entire** A3 bundle — task description, TDD steps, files,
-tests, done-when criteria, self-review checklist, specialist guidance, shard learnings,
-and any A2 keyword matches. Teammates do **not** re-read shards; everything is injected here.
+The `description` carries the **entire** A3 bundle — task description, acceptance workflows,
+the read-only acceptance tests block, files, tests, done-when criteria, self-review
+checklist, specialist guidance, shard learnings, and any A2 keyword matches. Teammates do **not** re-read shards; everything is injected here.
 
 ### T2: Spawn builder teammates
 
@@ -408,14 +428,31 @@ Each task gets its **own** verifier, separate from its builder:
 ```
 Agent({
   subagent_type: "{a specialist that did NOT author this task, or general-purpose}",
-  prompt: "You verify one task. You write NO code — verification only.
+  prompt: "You verify one task. You write NO code into the project — verification only.
            Task: {task name}
            Context: {A3 bundle}
            Rubric: {A4 rubric}
+           Probing: {the T3 probing block below}
            Return ONLY this JSON: { task, passed, tdd_followed, spec_compliant,
            lint_pass, typecheck_pass, failing_criteria, notes }"
 })
 ```
+
+**Probing block (pass it verbatim).** Beyond the acceptance tests, try to break the work:
+
+1. Check `git diff {sha}..HEAD -- {acceptance files}` is empty. Any change is a failing criterion.
+2. Work in a throwaway detached worktree, never the shared tree (other agents are running
+   in it): `git worktree add --detach "$TMPDIR/set-verify-{task-id}" HEAD`. Remove it when
+   done. If the project's `CLAUDE.md` gives no way to run tests there, skip steps 3–4 and say
+   so in `notes` — a skipped probe is not a failure.
+3. Write up to 3 throwaway probe tests for behavior the acceptance tests do not reach — an
+   edge, an ordering, a failure path — derived from `Done when`. **Never commit them and
+   never copy them into the project.** A failing probe goes in `failing_criteria` with the
+   failing assertion inline; the builder gets a fix task and adds permanent coverage only if
+   the flow is important and the project's testing standard allows it.
+4. Pick one guard the implementation relies on, break it in the throwaway worktree, and
+   confirm an acceptance test fails for the right reason. None fails → `failing_criteria`:
+   "acceptance tests do not constrain {guard}".
 
 **Never pass `name` to a verifier spawn.** A named `Agent` call returns a mailbox receipt
 instead of the agent's final message, so the verdict never reaches you, and there is no
@@ -425,7 +462,7 @@ when you need its result.** `set-guard-agent-name.sh` denies this spawn shape at
 `Agent` PreToolUse hook, but treat that as a backstop: it matches verifier-shaped prompts,
 so a verifier phrased differently still slips through. The rule is yours to keep.
 
-A verifier writes no code, so it can never verify its own work — this preserves the
+A verifier writes no project code (its probes are throwaway), so it can never verify its own work — this preserves the
 fresh-verifier guarantee the workflow path gets from a separate `agent({schema})` call.
 
 Under `--verbose`, emit `→ spawn verifier-{task-id} :: {task name}` at each verifier spawn
@@ -488,13 +525,13 @@ request shutdown, and report the blocker to the user.
 Invoke the **`Workflow` tool** with a script that executes the brief. The script must:
 
 1. **Respect the dependency graph.** Tasks with no `Blocked by` run in parallel; dependent tasks wait. Use `pipeline()` / `parallel()` honoring each task's `Blocked by`.
-2. **Spawn one builder `agent()` per task**, passing `agentType` = the task's `Specialist` (omit / generic builder when "generic"). Inject the task's Phase-A context bundle as the prompt. Instruct the builder to run the TDD loop (red → green → refactor → lint → typecheck → self-review) and commit when its work is coherent — **not** one forced commit per task, since you also take checkpoint commits and the two would split or duplicate each other.
+2. **Spawn one builder `agent()` per task**, passing `agentType` = the task's `Specialist` (omit / generic builder when "generic"). Inject the task's Phase-A context bundle — including the Phase B0 acceptance tests block — as the prompt. Instruct the builder to run the TDD loop against those read-only tests (red → green → refactor → lint → typecheck → self-review) and commit when its work is coherent — **not** one forced commit per task, since you also take checkpoint commits and the two would split or duplicate each other.
 3. **Verify each output against the rubric before folding back**, using a verifier `agent({schema})` so each task returns a validated structured verdict, e.g.:
    ```
    { task: string, passed: boolean, tdd_followed: boolean, spec_compliant: boolean,
      lint_pass: boolean, typecheck_pass: boolean, failing_criteria: string[], notes: string }
    ```
-   The verifier is a *fresh* agent that did not write the task's code.
+   The verifier is a *fresh* agent that did not write the task's code, and gets the same T3 probing block as the team path.
 4. **Apply the escalation policy** (A5) for any task whose verdict is `passed: false`.
 5. **Return** one coordinated result: the final diff (it's committed in the worktree/branch) + the array of per-task verdicts.
 
