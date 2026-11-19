@@ -86,7 +86,7 @@ Dependencies:
 Run /set-build to execute.
 ```
 
-Each task has detailed acceptance criteria, TDD steps, and a self-review checklist embedded in the plan.
+Each task has detailed acceptance criteria, acceptance workflows, and a self-review checklist embedded in the plan.
 
 ---
 
@@ -119,7 +119,7 @@ Baseline clean. Compiling build brief and fanning out builders.
 5. Runs lint, typecheck, self-review
 6. Commits and marks complete
 
-**A dedicated verifier teammate audits each completed task** against a rubric — spec compliance, TDD discipline, lint/typecheck. The team runs a verify-and-revise loop until each task meets the bar before folding it back.
+**A dedicated verifier teammate audits each completed task** against a rubric — spec compliance, acceptance tests untouched and green, independent probes, lint/typecheck. The team runs a verify-and-revise loop until each task meets the bar before folding it back.
 
 **Wrap up:**
 ```

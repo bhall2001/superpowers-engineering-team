@@ -82,3 +82,27 @@ test("update.md defers to the canonical loop instead of carrying its own copy", 
     "update.md re-inlined the loop; it should read references/tdd-loop.md instead",
   );
 });
+
+// The loop defers to the project's testing standard first, and the acceptance-test
+// contract is cited from every file that depends on it. A command that drops the citation
+// silently reverts to builder-authored tests.
+test("the TDD loop reads project testing standards first and keeps the pinned step-1 phrase", () => {
+  const loop = readFileSync(join(REF_DIR, "tdd-loop.md"), "utf8");
+  assert.match(loop, /^0\. Read the testing standards this file names/m, "step 0 (project standards first) missing");
+  assert.match(loop, /^1\. Write failing tests first \(TDD red phase\)/m);
+});
+
+test("plan, build and the builder prompt all cite the acceptance-test contract", () => {
+  for (const f of ["commands/plan.md", "commands/build.md", "references/tdd-loop.md"]) {
+    const src = readFileSync(join(REPO, "plugins/set", f), "utf8");
+    assert.match(src, /acceptance-tests\.md/, `${f} must cite references/acceptance-tests.md`);
+  }
+  const builder = readFileSync(join(REF_DIR, "enhanced-builder-prompt.md"), "utf8");
+  assert.match(builder, /NEVER (touch|edit)[^\n]*acceptance test/i, "builder prompt must forbid editing acceptance tests");
+});
+
+test("the per-task verdict schema is unchanged", () => {
+  const build = readFileSync(join(REPO, "plugins/set/commands/build.md"), "utf8");
+  const schema = "{ task: string, passed: boolean, tdd_followed: boolean, spec_compliant: boolean,\n  lint_pass: boolean, typecheck_pass: boolean, failing_criteria: string[], notes: string }";
+  assert.ok(build.includes(schema), "verdict schema in build.md changed — the guard hook and Phase C key off it");
+});

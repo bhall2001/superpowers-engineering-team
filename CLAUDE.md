@@ -41,7 +41,7 @@ The default `/set-build` path runs as a native Agent Team and REQUIRES the env v
 ## Key Design Principles
 
 - **Spec-first**: Human-approved design before any coding
-- **TDD enforced**: Every builder writes failing tests first, then a fresh verifier confirms the bar before the work is folded back
+- **Tests authored independently**: A separate agent writes each task's acceptance tests (workflow-level, red for the right reason) before any builder starts; the builder cannot edit them, and a fresh verifier probes beyond them before the work is folded back. The project's own testing standard always outranks SET's loop
 - **Self-improving**: `/set-learn` updates CLAUDE.md + agent definitions after each cycle
 - **Domain specialist routing**: Tasks matched to agents with relevant domain knowledge
 - **Parallel execution**: Plan phase decomposes tasks for maximum parallelism; `/set-build` fans them out as a native Agent Team by default (or a dynamic workflow under `--use-workflow`)

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { runHook, decisionOf, reasonOf } from "./helpers/hook-harness.mjs";
 
 const HOOK = new URL("../hooks/set-guard-agent-name.sh", import.meta.url).pathname;
@@ -113,4 +114,23 @@ test("KNOWN LIMIT: named builder whose prompt quotes the verdict schema → deny
   const prompt = `${BUILDER_PROMPT}\nThe verifier will later return { passed, tdd_followed, spec_compliant }.`;
   const r = runHook(HOOK, spawn({ description: "build", prompt, name: "builder-set" }));
   assert.equal(decisionOf(r), "deny");
+});
+
+// acceptance-tests.md ships the test-author prompt. It is spawned unnamed, but the guard
+// must also never mistake it for a verifier if someone names it: the author writes tests,
+// it does not return a verdict. Pull the fenced prompt out of the reference itself.
+test("the test-author prompt in references/acceptance-tests.md is not verifier-shaped", () => {
+  const ref = readFileSync(new URL("../references/acceptance-tests.md", import.meta.url), "utf8");
+  const prompt = ref.split("```")[1];
+  assert.match(prompt, /You write the acceptance tests/, "fenced prompt not found");
+  const r = runHook(HOOK, spawn({ description: "author", prompt, subagent_type: "general-purpose", name: "author-set" }));
+  assert.equal(decisionOf(r), null, r.stdout);
+});
+
+test("the T3 verifier template in build.md still carries the guard's markers", () => {
+  const build = readFileSync(new URL("../commands/build.md", import.meta.url), "utf8");
+  const m = build.match(/prompt: "(You verify one task\.[\s\S]*?)"\n\}\)/);
+  assert.ok(m, "T3 verifier template not found in build.md");
+  const r = runHook(HOOK, spawn({ description: "verify", prompt: m[1], name: "verifier-1" }));
+  assert.equal(decisionOf(r), "deny", "a named verifier spawn must still be denied");
 });

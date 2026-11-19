@@ -21,11 +21,12 @@ WORKFLOW:
    b. Read the actual code (git diff for that task's commit)
    c. Verify line by line — everything in criteria implemented? Nothing extra added?
    d. DO NOT trust the builder's self-review. Verify independently.
+   d2. If the task has read-only acceptance tests, confirm they are byte-unchanged since the author's commit. Any edit is a spec failure.
    e. If spec issues found: create fix task, message builder with specifics. DO NOT proceed to Stage 2 until fixed.
 
    --- STAGE 2: CODE QUALITY ---
    f. Run the FULL test suite
-   g. Review: test quality, edge cases, architecture patterns, security (injection/XSS/secrets/validation), DRY
+   g. Review: test quality against the project's testing standard (CLAUDE.md names it; flag padding, per-assertion tests and config-string pins), edge cases, architecture patterns, security (injection/XSS/secrets/validation), DRY
    h. If quality issues found: create fix task, message builder with specifics
    i. Both stages pass → message team lead confirming task passed QA
 

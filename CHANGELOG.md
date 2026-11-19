@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] — Tests authored independently, not by ritual
+
+### Changed
+- **A builder no longer writes the tests it is graded on.** Recent agentic-testing results (Dan Luu's Zstd experiment, the TDAD paper) show that telling an agent to "do TDD" does not reliably improve correctness; a builder that writes both its tests and its code carries one misreading into both. `/set-plan` now lists **Acceptance Workflows** per task (caller-observable behavior, or an honest `None`), and a new Phase B0 in `/set-build` has a separate agent write them as failing tests — red for the right reason — before any builder starts. Builders receive them read-only. See `references/acceptance-tests.md`.
+- **Verifiers probe, not just re-read.** Each verifier checks the acceptance tests are byte-unchanged, then runs up to three throwaway probe tests by explicit file path under a lock, deleting each in the same command. No worktrees are created, no source is edited, and nothing is committed. A failing probe becomes a `failing_criteria` entry.
+- **The "NEVER skip TDD / mandatory" ritual language is gone** from the builder prompt. Builders run the existing tests for files they touch, add tests only for what the acceptance tests cannot reach, and write none for scaffolding, types or config.
+- **The project's testing standard now outranks the loop.** New step 0 reads whatever testing docs `CLAUDE.md` names; test authors, builders and QA are all told to follow them over SET's defaults, including their limits on test count, shape and config-string pinning.
+
+### Notes
+- **The verdict schema is unchanged.** `tdd_followed` keeps its name (the guard hook and Phase C key off it) and now means the acceptance-test conditions above.
+- **Cost:** one extra short agent per task with workflows. Existing projects get the new loop text via `/set-update`; a project that customized its own loop section keeps it.
 ## [1.5.3] — `--autonomous` actually chains
 
 ### Fixed
